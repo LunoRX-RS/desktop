@@ -13,6 +13,8 @@ pub mod offline;
 
 pub mod library;
 
+pub mod stats;
+
 pub mod discovery;
 
 pub mod lrc;

@@ -36,6 +36,12 @@ pub fn run() {
                         .map_err(|_| core::library::LibraryError::Storage),
                 ),
             ));
+            app.manage(commands::stats::StatsState::open(
+                app.path()
+                    .app_data_dir()
+                    .map(|dir| dir.join("listening-stats.json"))
+                    .map_err(|_| core::library::LibraryError::Storage),
+            ));
             let pipe = core::playback::extract::resolver().ok();
             app.manage(commands::state::SearchState::production(pipe.clone()));
             app.manage(commands::youtube::YouTubeState::new(pipe));
@@ -120,6 +126,11 @@ pub fn run() {
             commands::sync::sync_delete_local_playlist,
             commands::sync::sync_rename_local_playlist,
             commands::sync::sync_move_local_entry,
+            commands::stats::stats_local,
+            commands::stats::stats_clear_local,
+            commands::stats::stats_set_cloud,
+            commands::stats::stats_cloud_sync,
+            commands::stats::stats_cloud_clear,
             commands::sync::sync_remove_local_entry,
             commands::sync::sync_flush_pending,
             commands::sync::sync_resolve_conflict,
@@ -135,6 +146,7 @@ pub fn run() {
             commands::player::player_stop,
             commands::player::player_skip,
             commands::player::player_set_mode,
+            commands::player::player_queue_edit,
             commands::player::player_seek,
             commands::player::player_set_volume,
             commands::player::player_observe,

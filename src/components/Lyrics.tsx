@@ -2,7 +2,7 @@
 
 import { createPortal } from "react-dom";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { FilePenLine, Info, SlidersHorizontal } from "lucide-react";
+import { FilePenLine, FileUp, Info, SlidersHorizontal } from "lucide-react";
 import { GAP_STEPS, gapRows, gapStep, useActiveLine, useLyricsClock } from "../lib/lyricsClock";
 import { usePlayback } from "../lib/playback";
 import { loadAnchors, readEstimateEnabled, readGuessEnabled, readWordsEnabled, saveAnchors, writeEstimateEnabled, writeGuessEnabled, writeWordsEnabled } from "../lib/lyricAnchors";
@@ -26,7 +26,7 @@ const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /** Where the chrome pill (counter, options) and the notes under the artist line live. Set by Now Playing; null until mounted. */
-export interface LyricsSlots { chrome: HTMLElement | null; notes: HTMLElement | null; /** Opens the Lyric Maker. Shown in the options popover when set. */ onMake?: () => void }
+export interface LyricsSlots { chrome: HTMLElement | null; notes: HTMLElement | null; /** Saves a chosen .lrc file as the track's own lyrics. Resolves the number of lines saved. */ onImport?: (file: File) => Promise<number>; /** Opens the Lyric Maker. Shown in the options popover when set. */ onMake?: () => void }
 const Slot = ({ at, children }: { at: HTMLElement | null; children: ReactNode }) => (at ? createPortal(children, at) : null);
 
 const ESTIMATE_NOTE = "This song has no timestamps. The highlight follows an estimate and can be a few seconds off.";
@@ -113,6 +113,26 @@ function OptionsMenu({ children }: { children: ReactNode }) {
 /** "Make lyrics file" row for the options popover. */
 const MakeItem = ({ onMake }: { onMake?: () => void }) => (onMake ? (
   <button type="button" onClick={onMake} className="ln-lyr-switch"><FilePenLine size={14} aria-hidden="true" />Make lyrics file</button>) : null);
+
+/** "Import .lrc file" row: reads a file from this computer in the webview and hands it to the app. */
+function ImportItem({ onImport }: { onImport?: (file: File) => Promise<number> }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [note, setNote] = useState("");
+  if (!onImport) return null;
+  return (
+    <>
+      <input ref={input} type="file" accept=".lrc,.txt,text/plain" hidden aria-label="Choose a .lrc file"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          e.target.value = "";
+          if (!file) return;
+          setNote("Importing…");
+          onImport(file).then((n) => setNote(`Imported ${n} lines`), () => setNote("Not a valid .lrc file"));
+        }} />
+      <button type="button" onClick={() => input.current?.click()} className="ln-lyr-switch"><FileUp size={14} aria-hidden="true" />{note || "Import .lrc file"}</button>
+    </>
+  );
+}
 
 /** Controls for estimated follow mode (see UntimedLyrics). */
 interface EstimateUi { onMark: (index: number, ms: number) => void; onReset: (() => void) | null; hint: boolean; toggle: ReactNode }
@@ -244,7 +264,7 @@ export function SyncedLyrics({ lines: given, offsetMs = 0, source, attribution, 
             : estimate.hint ? <p className="max-w-[190px] py-1 text-[12px] leading-4 text-secondary-text">{ESTIMATE_HINT}</p> : null)}
           {realWords && <Switch on={wordsOn} onChange={(v) => { setWordsOn(v); writeWordsEnabled(v); }}>Highlight words</Switch>}
           {!realWords && !estimate && <Switch on={guessOn} onChange={(v) => { setGuessOn(v); writeGuessEnabled(v); }}>Guess words</Switch>}
-          <MakeItem onMake={slots.onMake} />
+          <MakeItem onMake={slots.onMake} /><ImportItem onImport={slots.onImport} />
         </OptionsMenu>
       </Slot>
       <Slot at={slots.notes}>
@@ -263,7 +283,7 @@ export function PlainLyrics({ text, source, attribution, toggle, slots, layout, 
         <p className="ln-lyr-text">{text}</p>
         <div aria-hidden="true" className="ln-lyr-tail" />
       </div>
-      <Slot at={slots.chrome}>{(toggle || slots.onMake) && <OptionsMenu>{toggle}<MakeItem onMake={slots.onMake} /></OptionsMenu>}</Slot>
+      <Slot at={slots.chrome}>{(toggle || slots.onMake || slots.onImport) && <OptionsMenu>{toggle}<MakeItem onMake={slots.onMake} /><ImportItem onImport={slots.onImport} /></OptionsMenu>}</Slot>
       <Slot at={slots.notes}>
         {note && <p role="status" className="ln-np-note text-primary-text">{note}</p>}
         <MetaLine parts={[...sourceParts(source, attribution),

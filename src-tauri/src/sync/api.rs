@@ -44,6 +44,23 @@ pub enum Provider {
     YouTube,
 }
 
+/// One track's play count, the shape of `PUT /api/v1/stats/{deviceId}` and `GET /api/v1/stats`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatsRow {
+    pub provider: String,
+    pub provider_track_id: String,
+    pub title: String,
+    pub artists: Vec<String>,
+    pub plays: u32,
+    pub last_played_ms: u64,
+}
+
+#[derive(Debug, Deserialize)]
+struct StatsList {
+    tracks: Vec<StatsRow>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginResponse {
@@ -289,6 +306,39 @@ impl ApiClient {
             .get(self.url("/api/v1/auth/session"))
             .bearer_auth(token);
         decode(&self.send(req).await?)
+    }
+
+    /// Replaces this device's stats snapshot for the signed-in user.
+    pub async fn put_stats(
+        &self,
+        token: &str,
+        device_id: &str,
+        tracks: &[StatsRow],
+    ) -> Result<(), SyncError> {
+        #[derive(Serialize)]
+        struct Body<'a> {
+            tracks: &'a [StatsRow],
+        }
+        let req = self
+            .http
+            .put(self.url(&format!("/api/v1/stats/{}", path_id(device_id)?)))
+            .bearer_auth(token)
+            .json(&Body { tracks });
+        self.send(req).await.map(|_| ())
+    }
+
+    /// The user's stats summed over every device.
+    pub async fn get_stats(&self, token: &str) -> Result<Vec<StatsRow>, SyncError> {
+        let req = self.http.get(self.url("/api/v1/stats")).bearer_auth(token);
+        Ok(decode::<StatsList>(&self.send(req).await?)?.tracks)
+    }
+
+    pub async fn delete_stats(&self, token: &str) -> Result<(), SyncError> {
+        let req = self
+            .http
+            .delete(self.url("/api/v1/stats"))
+            .bearer_auth(token);
+        self.send(req).await.map(|_| ())
     }
 
     pub async fn list_playlists(&self, token: &str) -> Result<Vec<Playlist>, SyncError> {

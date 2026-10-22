@@ -1,11 +1,11 @@
 "use client";
-import { ArrowDown, ArrowUp, Download, ExternalLink, Heart, HeartOff, Link2, ListPlus, Play, Trash2, User, FolderOpen } from "lucide-react";
+import { ArrowDown, ArrowUp, Download, ListEnd, ExternalLink, Heart, HeartOff, Link2, ListPlus, Play, Trash2, User, FolderOpen } from "lucide-react";
 import type { MenuItem } from "../components/ContextMenu";
 import { playTrack } from "./playback";
 import { toggleSaved, trackKey, useLibrary } from "./library";
 import { useUi } from "./store";
 import { addToPlaylist, downloadPlaylist, listPlaylists, playPlaylist } from "./playlistActions";
-import { playerOpenExternal } from "../services/tauri/player";
+import { playerOpenExternal, playerQueueEdit } from "../services/tauri/player";
 import type { SearchHitDto } from "../services/tauri/search";
 import type { LocalPlaylistDto } from "../services/tauri/sync";
 
@@ -20,6 +20,7 @@ export function trackMenu(hit: SearchHitDto, opts: { onRemove?: () => void; onMo
     const artist = hit.artistRefs?.[0] ?? (hit.artists[0] ? { provider: hit.provider, id: null, name: hit.artists[0] } : null);
     const items: MenuItem[] = [];
     if (youtube) items.push({ label: "Play now", icon: <Play size={ICON} fill="currentColor" />, onSelect: () => void playTrack(hit, false, (opts.following ?? []).filter((t) => t.provider === "YouTube")) });
+    if (youtube) items.push({ label: "Play next", icon: <ListEnd size={ICON} />, onSelect: () => void playerQueueEdit({ op: "next", track: { provider: "YouTube", id: hit.providerTrackId, title: hit.title, artists: hit.artists, artworkUrl: hit.artworkUrl ?? null, durationMs: hit.durationMs ?? null } }).catch(() => {}) });
     items.push({ label: liked ? "Remove from Liked Songs" : "Add to Liked Songs", icon: liked ? <HeartOff size={ICON} /> : <Heart size={ICON} />, onSelect: () => void toggleSaved(hit) });
     if (artist) items.push({ label: `Go to ${artist.name}`, icon: <User size={ICON} />, onSelect: () => useUi.getState().openArtist(artist) });
     if (youtube) items.push({ label: "Open on YouTube", icon: <ExternalLink size={ICON} />, onSelect: () => void playerOpenExternal({ provider: hit.provider, providerTrackId: hit.providerTrackId, canonicalUrl: hit.canonicalUrl }).catch(() => {}) });

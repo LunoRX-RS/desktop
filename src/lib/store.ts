@@ -16,6 +16,7 @@ export type View =
   | "accounts"
   | "settings"
   | "sync"
+  | "stats"
   | "artist"
   | "album";
 

@@ -122,6 +122,52 @@ pub fn push_back(state: &Status, track: TrackReference) {
 pub fn pop_back(state: &Status) -> Option<TrackReference> {
     state.lock().ok()?.back.pop()
 }
+/// How the user changes the up-next list by hand.
+pub enum QueueEdit {
+    /// Puts the track at the head, moving it up if it was already queued.
+    Next(OfflineTrack),
+    Remove(String),
+    Move {
+        from: usize,
+        to: usize,
+    },
+}
+const QUEUE_MAX: usize = 100;
+/// Returns false when the edit does not apply (unknown id, index out of range).
+pub fn edit_queue(state: &Status, edit: QueueEdit) -> bool {
+    let Ok(mut s) = state.lock() else {
+        return false;
+    };
+    let head = s.queue.first().map(|t| t.id.clone());
+    let ok = match edit {
+        QueueEdit::Next(track) => {
+            s.queue.retain(|t| t.id != track.id);
+            s.queue.insert(0, track);
+            s.queue.truncate(QUEUE_MAX);
+            true
+        }
+        QueueEdit::Remove(id) => match s.queue.iter().position(|t| t.id == id) {
+            Some(i) => {
+                s.queue.remove(i);
+                true
+            }
+            None => false,
+        },
+        QueueEdit::Move { from, to } => {
+            if from < s.queue.len() && to < s.queue.len() {
+                let t = s.queue.remove(from);
+                s.queue.insert(to, t);
+                true
+            } else {
+                false
+            }
+        }
+    };
+    if ok && s.queue.first().map(|t| &t.id) != head.as_ref() {
+        s.next_title = None;
+    }
+    ok
+}
 /// Head of the up-next list, consumed like a manual queue selection.
 pub fn select_first(state: &Status) -> Option<TrackReference> {
     let id = state.lock().ok()?.queue.first()?.id.clone();
@@ -460,6 +506,31 @@ mod tests {
         let queue = state.lock().unwrap().queue.clone();
         assert_eq!(queue.len(), 1);
         assert_eq!(queue[0].id, "r-G2pKr2_n8");
+    }
+    #[test]
+    fn the_up_next_list_can_be_edited_by_hand() {
+        let state: Status = Default::default();
+        state.lock().unwrap().queue = vec![
+            track("aaaaaaaaaaa"),
+            track("bbbbbbbbbbb"),
+            track("ccccccccccc"),
+        ];
+        let ids = |s: &Status| {
+            s.lock()
+                .unwrap()
+                .queue
+                .iter()
+                .map(|t| t.id.clone())
+                .collect::<Vec<_>>()
+        };
+        assert!(edit_queue(&state, QueueEdit::Next(track("ccccccccccc"))));
+        assert_eq!(ids(&state), ["ccccccccccc", "aaaaaaaaaaa", "bbbbbbbbbbb"]);
+        assert!(edit_queue(&state, QueueEdit::Move { from: 2, to: 0 }));
+        assert_eq!(ids(&state), ["bbbbbbbbbbb", "ccccccccccc", "aaaaaaaaaaa"]);
+        assert!(!edit_queue(&state, QueueEdit::Move { from: 0, to: 3 }));
+        assert!(edit_queue(&state, QueueEdit::Remove("ccccccccccc".into())));
+        assert!(!edit_queue(&state, QueueEdit::Remove("zzzzzzzzzzz".into())));
+        assert_eq!(ids(&state), ["bbbbbbbbbbb", "aaaaaaaaaaa"]);
     }
     fn next() -> OfflineTrack {
         OfflineTrack {

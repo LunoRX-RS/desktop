@@ -206,6 +206,10 @@ impl PlayerState {
                 crate::platform::discord::offer(&dto);
                 let _ = app.emit_to("main", "core://player/progress", dto);
                 if let Some(track) = history_track {
+                    let counts = app.state::<crate::commands::stats::StatsState>();
+                    if let Err(kind) = counts.with(|s| s.record(track.clone())) {
+                        eprintln!("listening stats unavailable: {kind:?}");
+                    }
                     last_history_track = Some(track.provider_track_id.clone());
                     let history = app.state::<crate::commands::library::HistoryState>();
                     match history.0.with(|store| store.record_play(track)) {
@@ -867,6 +871,59 @@ pub async fn player_set_mode(
     state.reports.send_modify(|v| *v = v.wrapping_add(0));
     let dto = progress(&state).await;
     crate::platform::discord::offer(&dto);
+    let _ = app.emit_to("main", "core://player/progress", dto);
+    Ok(())
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerQueueEditArgs {
+    /// "next", "remove" or "move".
+    pub op: String,
+    /// For "next": the track to play after the current one.
+    pub track: Option<crate::core::playback::cache::OfflineTrack>,
+    /// For "remove": the queued track's video id.
+    pub id: Option<String>,
+    pub from: Option<usize>,
+    pub to: Option<usize>,
+}
+
+/// Plays a track next, removes a queued track, or moves one inside the up-next list.
+#[tauri::command]
+pub async fn player_queue_edit(
+    app: AppHandle,
+    state: State<'_, PlayerState>,
+    args: PlayerQueueEditArgs,
+) -> Result<(), PlayerError> {
+    use crate::core::playback::autoplay::{QueueEdit, edit_queue};
+    let edit = match (args.op.as_str(), args.track, args.id, args.from, args.to) {
+        ("next", Some(mut t), ..) => {
+            if t.provider != "YouTube"
+                || !crate::core::playback::extract::valid_id(&t.id)
+                || t.title.trim().is_empty()
+                || t.title.len() > 2048
+                || t.artists.len() > 30
+            {
+                return Err(invalid());
+            }
+            t.artwork_url = t
+                .artwork_url
+                .as_deref()
+                .and_then(crate::core::playback::track_info::artwork_url);
+            QueueEdit::Next(t)
+        }
+        ("remove", _, Some(id), ..) if crate::core::playback::extract::valid_id(&id) => {
+            QueueEdit::Remove(id)
+        }
+        ("move", _, _, Some(from), Some(to)) => QueueEdit::Move { from, to },
+        _ => return Err(invalid()),
+    };
+    if !edit_queue(&state.autoplay_status, edit) {
+        return Err(invalid());
+    }
+    // Wake a running autoplay session so it prepares the new head.
+    state.reports.send_modify(|v| *v = v.wrapping_add(0));
+    let dto = progress(&state).await;
     let _ = app.emit_to("main", "core://player/progress", dto);
     Ok(())
 }

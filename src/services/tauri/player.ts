@@ -194,3 +194,13 @@ export function playerAudioSettings(): Promise<AudioSettingsDto> {
 export function playerSetAudioSettings(settings: AudioSettings): Promise<AudioSettingsDto> {
   return invoke("player_set_audio_settings", { settings });
 }
+
+/** Edits the up-next list: play a track after the current one, drop a queued track, or move one. */
+export type QueueEditArgs =
+  | { op: "next"; track: { provider: "YouTube"; id: string; title: string; artists: string[]; artworkUrl: string | null; durationMs: number | null } }
+  | { op: "remove"; id: string }
+  | { op: "move"; from: number; to: number };
+
+export function playerQueueEdit(args: QueueEditArgs): Promise<void> {
+  return invoke<void>("player_queue_edit", { args });
+}

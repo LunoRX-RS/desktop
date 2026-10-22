@@ -616,6 +616,25 @@ pub(crate) async fn status(h: &mut Host<'_>) -> Result<SyncStatus, ErrorCategory
     h.step(|e| Ok(e.snapshot())).await
 }
 
+/// Uploads this device's play counts, then returns the totals across all devices.
+pub(crate) async fn stats_sync(
+    h: &mut Host<'_>,
+    device_id: &str,
+    rows: &[super::api::StatsRow],
+) -> Result<Vec<super::api::StatsRow>, ErrorCategory> {
+    let (api, token) = h.step(|e| Ok((e.api.clone(), e.token()?))).await?;
+    api.put_stats(&token, device_id, rows)
+        .await
+        .map_err(|e| category(&e))?;
+    api.get_stats(&token).await.map_err(|e| category(&e))
+}
+
+/// Deletes every stats row the signed-in user has on the server.
+pub(crate) async fn stats_clear_remote(h: &mut Host<'_>) -> Result<(), ErrorCategory> {
+    let (api, token) = h.step(|e| Ok((e.api.clone(), e.token()?))).await?;
+    api.delete_stats(&token).await.map_err(|e| category(&e))
+}
+
 /// Sends the unsent tail of a playlist, one request at a time. Returns the remote id.
 pub(crate) async fn upload(h: &mut Host<'_>, local_id: &str) -> Result<String, ErrorCategory> {
     let (api, token) = h.step(|e| Ok((e.api.clone(), e.token()?))).await?;

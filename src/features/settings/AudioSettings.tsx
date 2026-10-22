@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "../../components/ui";
 import { playerAudioSettings, playerSetAudioSettings, type AudioSettings, type AudioSettingsDto } from "../../services/tauri/player";
+import { setSleepTimer, useSleepTimer } from "../../lib/sleepTimer";
 import { FIELD, Inset, NoteRow, SettingRow } from "./rows";
 
 const LOUDNESS_HINT: Record<AudioSettings["loudness"], string> = {
@@ -29,6 +30,7 @@ export function AudioSettingsPanel() {
     try { setValue(await playerAudioSettings()); } catch { setError(true); }
     finally { setBusy(false); }
   }
+  const endsAt = useSleepTimer((t) => t.endsAt);
   const disabled = busy || !value?.available;
   const output = value?.output;
   return <Inset id="settings-audio" title="Audio quality and output">
@@ -51,6 +53,12 @@ export function AudioSettingsPanel() {
       <select id="audio-loudness" className={FIELD} disabled={disabled} value={value?.settings.loudness ?? "balanced"} onChange={e => value && update({ ...value.settings, loudness: e.target.value as AudioSettings["loudness"] })}>
         <option value="off">Off</option><option value="balanced">Balanced</option><option value="loud">Loud</option>
       </select>
+    </SettingRow>
+    <SettingRow label="Sleep timer" htmlFor="sleep-timer" hint={endsAt ? `Pauses at ${new Date(endsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. Closing the app cancels it.` : "Pauses playback once after the chosen time."}>
+      <select id="sleep-timer" className={FIELD} value="" onChange={e => setSleepTimer(Number(e.target.value) || null)}>
+        <option value="">{endsAt ? "Running…" : "Off"}</option>{[15, 30, 45, 60, 90].map(m => <option key={m} value={m}>{m} minutes</option>)}
+      </select>
+      {endsAt && <Button onClick={() => setSleepTimer(null)}>Cancel</Button>}
     </SettingRow>
     <SettingRow label="Negotiated audio output" hint="macOS uses shared CoreAudio. Device hardware format remains controlled by Audio MIDI Setup.">
       <span>{output?.format ? `${output.driver ?? "Audio"} · ${output.format} · ${output.sampleRate ?? "?"} Hz` : "No active output"}</span>

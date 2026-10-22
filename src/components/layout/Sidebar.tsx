@@ -6,6 +6,7 @@ import {
   Cable,
   CirclePlay,
   Cloud,
+  ChartColumn,
   Compass,
   Heart,
   Moon,
@@ -100,6 +101,7 @@ const NAV: NavDef[] = [
   { view: "home", label: "Listen Now", Icon: CirclePlay },
   { view: "search", label: "Search", Icon: Search },
   { view: "explore", label: "Explore", Icon: Compass },
+  { view: "stats", label: "Stats", Icon: ChartColumn },
 ];
 
 function NavRow({

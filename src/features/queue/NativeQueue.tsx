@@ -1,12 +1,16 @@
 "use client";
 
-import { ListMusic, Loader2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ListMusic, Loader2, X } from "lucide-react";
+import { playerQueueEdit } from "../../services/tauri/player";
 import { usePlayback, playTrack } from "../../lib/playback";
 import { useUi } from "../../lib/store";
 import { TrackCover } from "../../components/TrackCover";
 import { LikeButton } from "../../components/LibraryActions";
 import { formatDuration } from "../../lib/media";
-import { Button, EmptyState } from "../../components/ui";
+import { Button, EmptyState, IconButton } from "../../components/ui";
+import { useState } from "react";
+import { addToPlaylist } from "../../lib/playlistActions";
+import { syncCreateLocalPlaylist } from "../../services/tauri/sync";
 
 const NEXT_STATUS: Record<string, string> = {
   ready: "Ready to play after this song",
@@ -26,6 +30,17 @@ export default function NativeQueue() {
   const playing = s.player.state === "playing" || s.player.state === "buffering";
   const next = s.autoplay;
   const upcoming = next.queue ?? [];
+  const [saved, setSaved] = useState<"" | "saving" | "done" | "failed">("");
+  const toHit = (item: (typeof upcoming)[number]) => ({ provider: item.provider, source: "YouTube Music" as const, providerTrackId: item.id, canonicalUrl: `https://www.youtube.com/watch?v=${item.id}`, title: item.title, artists: item.artists, artworkUrl: item.artworkUrl, durationMs: item.durationMs });
+  async function saveQueue() {
+    if (!track) return;
+    setSaved("saving");
+    try {
+      const id = await syncCreateLocalPlaylist(`Queue · ${new Date().toLocaleDateString()}`, null);
+      for (const hit of [{ ...track, source: "YouTube Music" as const, artists: track.artists ?? [], artworkUrl: track.artworkUrl ?? null, durationMs: s.durationMs || null }, ...upcoming.map(toHit)]) await addToPlaylist(id, hit);
+      setSaved("done");
+    } catch { setSaved("failed"); }
+  }
 
   if (!track) {
     return (
@@ -49,6 +64,9 @@ export default function NativeQueue() {
         <p className="text-[13px] leading-[18px] text-secondary-text">
           Autoplay · {upcoming.length} songs up next. Select any song to continue from there.
         </p>
+        <Button variant="secondary" className="mt-2 self-start" disabled={saved === "saving"} onClick={() => void saveQueue()}>
+          {saved === "saving" ? "Saving…" : saved === "done" ? "Saved to Playlists" : saved === "failed" ? "Could not save. Retry" : "Save queue as playlist"}
+        </Button>
       </header>
 
       <section aria-labelledby="queue-now" className="flex flex-col gap-1">
@@ -77,7 +95,13 @@ export default function NativeQueue() {
                 <p className="truncate text-[12px] text-secondary-text">{item.artists.join(", ")} · YouTube Music</p>
                 {index === 0 && <p role="status" className="text-[11px] text-secondary-text">{NEXT_STATUS[next.state] ?? "Up next"}</p>}
               </button>
-              <div className="flex items-center gap-1"><span className="text-[11px] tabular-nums text-secondary-text">{item.durationMs != null ? formatDuration(item.durationMs / 1000) : ""}</span><LikeButton track={hit} /></div>
+              <div className="flex items-center gap-1">
+                <span className="text-[11px] tabular-nums text-secondary-text">{item.durationMs != null ? formatDuration(item.durationMs / 1000) : ""}</span>
+                <IconButton label={`Move ${item.title} up`} disabled={index === 0} onClick={() => void playerQueueEdit({ op: "move", from: index, to: index - 1 }).catch(() => {})} className="size-7"><ArrowUp size={14} /></IconButton>
+                <IconButton label={`Move ${item.title} down`} disabled={index === upcoming.length - 1} onClick={() => void playerQueueEdit({ op: "move", from: index, to: index + 1 }).catch(() => {})} className="size-7"><ArrowDown size={14} /></IconButton>
+                <IconButton label={`Remove ${item.title} from the queue`} onClick={() => void playerQueueEdit({ op: "remove", id: item.id }).catch(() => {})} className="size-7"><X size={14} /></IconButton>
+                <LikeButton track={hit} />
+              </div>
             </li>;
           })}
         </ol> : next.state !== "finding" && <p role="status" className="px-2 py-2 text-[13px] text-secondary-text">{NEXT_STATUS[next.state] ?? "Nothing after this song yet."}</p>}

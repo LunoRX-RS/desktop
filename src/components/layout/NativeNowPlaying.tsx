@@ -21,7 +21,9 @@ import { FxText } from "../FxText";
 import { useZoneStyle } from "../../lib/textStyle";
 import { useFullscreen } from "../../lib/windowFullscreen";
 import { LyricMaker } from "../LyricMaker";
-import { mineSource, useMyLrc } from "../../lib/myLrc";
+import { mineSource, useMyLrc, useMyLrcStore } from "../../lib/myLrc";
+import { parseLrc } from "../../lib/lrcParse";
+import { lrcSave } from "../../services/tauri/lrc";
 
 // Full window only: the controls and the close button fade after this long without input while playing.
 const IDLE_MS = 3000;
@@ -162,7 +164,21 @@ export function NativeNowPlaying() {
   const setLayout = (next: LyricsLayout) => { setLayoutState(next); writeLyricsLayout(next); };
   const [chrome, setChrome] = useState<HTMLElement | null>(null);
   const [notes, setNotes] = useState<HTMLElement | null>(null);
-  const slots = useMemo<LyricsSlots>(() => ({ chrome, notes, onMake: () => setMaker(true) }), [chrome, notes]);
+  const trackId = track?.providerTrackId;
+  const trackTitle = info?.title ?? track?.title ?? "";
+  const trackArtists = info?.artists ?? track?.artists ?? [];
+  const slots = useMemo<LyricsSlots>(() => ({
+    chrome, notes, onMake: () => setMaker(true),
+    onImport: async (file) => {
+      if (!trackId || file.size > 1024 * 1024) throw new Error("file");
+      const lines = parseLrc(await file.text());
+      if (lines.length === 0) throw new Error("empty");
+      const args = { providerTrackId: trackId, title: trackTitle, artists: trackArtists, durationMs: usePlayback.getState().durationMs, lines };
+      const saved = await lrcSave(args);
+      useMyLrcStore.getState().set(trackId, { exists: true, path: saved.path, lines });
+      return lines.length;
+    },
+  }), [chrome, notes, trackId, trackTitle]);
   const full = lyricsOpen && layout === "full";
   const fullscreen = useFullscreen(open);
   const hold = useCallback(() => {
