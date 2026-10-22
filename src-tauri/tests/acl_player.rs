@@ -51,8 +51,8 @@ fn every_player_handler_is_in_app_manifest_and_allowed() {
     let handlers = player_handlers(&lib);
     assert_eq!(
         handlers.len(),
-        15,
-        "expected 15 player handlers in generate_handler!, found {handlers:?}"
+        16,
+        "expected 16 player handlers in generate_handler!, found {handlers:?}"
     );
 
     let mut missing = Vec::new();

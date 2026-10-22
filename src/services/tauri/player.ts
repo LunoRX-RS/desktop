@@ -121,7 +121,7 @@ export function playerTrackInfo(providerTrackId: string): Promise<TrackInfo> {
 }
 
 export interface PlayerProgressDto {
-  autoplay: { state: string; nextTitle: string | null; queue: import("./offline").OfflineTrack[] };
+  autoplay: { state: string; nextTitle: string | null; queue: import("./offline").OfflineTrack[]; repeat?: "off" | "all" | "one"; radio?: boolean };
   player: PlayerStateDto;
   track: LoadedTrack | null;
   positionMs: number;
@@ -146,6 +146,11 @@ export function playerCommand(command: "play" | "pause" | "resume" | "stop"): Pr
 
 export function playerSkip(forward: boolean): Promise<void> {
   return invoke("player_skip", { forward });
+}
+
+/** Repeat ("off" | "all" | "one") and autoplay (related tracks after the list). Core keeps them until changed. */
+export function playerSetMode(repeat: "off" | "all" | "one", autoplay: boolean): Promise<void> {
+  return invoke("player_set_mode", { args: { repeat, autoplay } });
 }
 
 export function playerSeek(positionMs: number): Promise<PlayerStateDto> {

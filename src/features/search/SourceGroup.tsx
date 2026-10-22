@@ -9,12 +9,18 @@ import { Button, StatusNote, cx } from "../../components/ui";
 import { formatDuration } from "../../lib/demo-data";
 import { useUi } from "../../lib/store";
 import { usePlayback, playTrack } from "../../lib/playback";
+import { menuHandlers } from "../../components/ContextMenu";
+import { trackMenu } from "../../lib/menus";
 
 // Search source labels distinguish YouTube Music from ordinary YouTube.
 export const providerName = (p: string) => p;
 
+const playableAfter = (list?: SearchHitDto[]) => (list ?? []).filter((t) => t.provider === "YouTube");
+
 // Rows support search keyboard navigation; action buttons are siblings, never nested.
-export function ResultRow({ hit, large = false }: { hit: SearchHitDto; large?: boolean }) {
+/** `following` are the tracks after this one in the list the row belongs to; playing the row queues them. */
+export function ResultRow({ hit, large = false, onRemove, following }: { hit: SearchHitDto; large?: boolean; onRemove?: () => void; following?: SearchHitDto[] }) {
+  const menu = trackMenu(hit, { onRemove, following });
   const busy = usePlayback((s) => s.busy);
   const youtube = hit.provider === "YouTube";
   const artists = hit.artists.length > 0 ? hit.artists.join(", ") : "Artist not provided";
@@ -26,6 +32,7 @@ export function ResultRow({ hit, large = false }: { hit: SearchHitDto; large?: b
       tabIndex={-1}
       role="group"
       aria-label={`${hit.title} by ${artists}, ${origin}`}
+      {...menuHandlers(menu.build, menu.load)}
       className={cx(
         "lx-reveal-host flex items-center gap-3 rounded-[8px] px-2 transition-colors duration-150 hover:bg-frost-200 focus-within:bg-frost-200",
         large ? "h-24" : "h-14",
@@ -38,7 +45,7 @@ export function ResultRow({ hit, large = false }: { hit: SearchHitDto; large?: b
             data-play-track
             type="button"
             disabled={busy}
-            onClick={() => void playTrack(hit)}
+            onClick={() => void playTrack(hit, false, playableAfter(following))}
             aria-label={`Play ${hit.title} on YouTube`}
             title="Play on YouTube"
             className={cx(

@@ -13,9 +13,9 @@ export default function HomeScreen(_props: Props) {
   return <Screen id="home-title" title="Listen Now" caption="Real music from YouTube Music, your likes and listening on this device.">
     <div className="flex flex-col gap-8">
       {historyError && <StatusNote role="alert">{historyError}<Button onClick={() => void refreshHistory()}>Retry history</Button></StatusNote>}
-      {history.length > 0 && <Section id="recently-played" title="Recently played" action={<Button variant="ghost" onClick={() => void clearHistory()}>Clear history</Button>}><ul>{history.slice(0,12).map(hit => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} />)}</ul><p className="mt-2 text-[12px] text-secondary-text">Saved on this device. Recorded after playback starts.</p></Section>}
+      {history.length > 0 && <Section id="recently-played" title="Recently played" action={<Button variant="ghost" onClick={() => void clearHistory()}>Clear history</Button>}><ul>{history.slice(0,12).map((hit, i, shown) => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} following={shown.slice(i + 1)} />)}</ul><p className="mt-2 text-[12px] text-secondary-text">Saved on this device. Recorded after playback starts.</p></Section>}
       <LiveFeed kind="home" featured />
-      {likes.length > 0 && <Section id="home-liked" title="Your liked songs"><ul>{likes.slice(0,10).map(hit => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} />)}</ul></Section>}
+      {likes.length > 0 && <Section id="home-liked" title="Your liked songs"><ul>{likes.slice(0,10).map((hit, i, shown) => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} following={shown.slice(i + 1)} />)}</ul></Section>}
     </div>
   </Screen>;
 }

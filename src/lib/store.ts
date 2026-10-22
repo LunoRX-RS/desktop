@@ -28,6 +28,9 @@ interface UiState {
   selectedArtist: import("../services/tauri/search").ArtistRef | null;
   selectedAlbum: { provider: string; id: string; name: string; artworkUrl: string | null; year: number | null } | null;
   openAlbum: (album: NonNullable<UiState["selectedAlbum"]>) => void;
+  /** A playlist id the user asked to delete from a menu; the editor opens its confirmation for it. */
+  deleteRequest: string | null;
+  requestDelete: (id: string | null) => void;
   openArtist: (artist: import("../services/tauri/search").ArtistRef) => void;
   view: View;
   back: View[];
@@ -93,6 +96,8 @@ export function hydrateRecentSearches() {
 export const useUi = create<UiState>()((set, get) => ({
   selectedArtist: null,
   selectedAlbum: null,
+  deleteRequest: null,
+  requestDelete: (id) => { if (id) { set({ selectedPlaylistId: id, deleteRequest: id }); get().navigate("playlists"); } else set({ deleteRequest: null }); },
   openAlbum: (album) => { set({ selectedAlbum: album, nowPlayingOpen: false }); get().navigate("album"); },
   openArtist: (artist) => { set({ selectedArtist: artist, nowPlayingOpen: false }); get().navigate("artist"); },
   view: "home",

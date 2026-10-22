@@ -11,7 +11,7 @@ export function subscribeYouTubeConnection(callback: (status: YouTubeConnectionS
 }
 
 export interface ImportReport {
-  likedAdded: number; historyAdded: number; playlistsCreated: number; playlistsUpdated: number; playlistTracksAdded: number;
+  likedAdded: number; likedRemoved: number; historyAdded: number; playlistsCreated: number; playlistsUpdated: number; playlistTracksAdded: number;
   /** Sections that could not be read or stored: "likes", "playlists", "history". */
   failed: ("likes" | "playlists" | "history")[];
 }

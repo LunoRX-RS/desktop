@@ -304,6 +304,13 @@ impl SyncEngine {
         self.commit()
     }
 
+    pub fn delete_local(&mut self, local_id: &str) -> Result<(), ErrorCategory> {
+        self.store
+            .delete_local(local_id)
+            .map_err(|e| category(&e))?;
+        self.commit()
+    }
+
     pub fn local_playlists(&self) -> &[LocalPlaylist] {
         self.store.playlists()
     }

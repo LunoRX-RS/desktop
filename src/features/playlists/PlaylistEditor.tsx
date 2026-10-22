@@ -1,14 +1,18 @@
 "use client";
 import { OfflinePlaylist, useOffline } from "../offline/OfflinePlaylist";
 import { ResultRow } from "../search/SourceGroup";
+import { menuHandlers } from "../../components/ContextMenu";
+import { playlistMenu } from "../../lib/menus";
+import { removeFromPlaylist } from "../../lib/playlistActions";
+import { useUi } from "../../lib/store";
 import { playTrack, usePlayback } from "../../lib/playback";
 import { useImport } from "../../lib/youtubeImport";
 import { offlineKeep } from "../../services/tauri/offline";
-import { syncPlaylistEntries, type LocalEntryDto } from "../../services/tauri/sync";
+import { syncDeleteLocalPlaylist, syncPlaylistEntries, type LocalEntryDto } from "../../services/tauri/sync";
 import type { SearchHitDto } from "../../services/tauri/search";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, Cloud, Download, ListMusic, Play, Send, Upload } from "lucide-react";
+import { ArrowLeft, Cloud, Download, ListMusic, Play, Send, Trash2, Upload } from "lucide-react";
 import { Art } from "../../components/Art";
 import type { View } from "../../lib/store";
 import {
@@ -54,6 +58,7 @@ function ListRow({ p, selected, onSelect }: { p: LocalPlaylistDto; selected: boo
         data-playlist={p.id}
         aria-current={selected ? "true" : undefined}
         onClick={onSelect}
+        {...menuHandlers(playlistMenu(p, { onOpen: onSelect }))}
         className={cx(
           "flex h-14 w-full items-center gap-3 rounded-[8px] px-2 text-left transition-colors duration-150",
           selected ? "bg-frost-200" : "hover:bg-frost-100",
@@ -129,6 +134,7 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [confirmServer, setConfirmServer] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const focusNext = useRef<"heading" | string | null>(null);
@@ -150,7 +156,20 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
     focusNext.current = null;
   });
 
-  useEffect(() => setConfirmServer(false), [selectedId]);
+  useEffect(() => { setConfirmServer(false); setConfirmDelete(false); }, [selectedId]);
+  // "Delete playlist…" from a right-click menu opens the same confirmation as the button.
+  const deleteRequest = useUi((s) => s.deleteRequest);
+  useEffect(() => {
+    if (deleteRequest && selected?.id === deleteRequest) { setConfirmDelete(true); useUi.getState().requestDelete(null); }
+  }, [deleteRequest, selected?.id]);
+
+  async function deleteSelected() {
+    if (!selected) return;
+    const id = selected.id;
+    await run("detail", "Deleting…", () => "Deleted.", () => syncDeleteLocalPlaylist(id));
+    setConfirmDelete(false);
+    onSelect(null);
+  }
 
   // Runs one write, then re-reads the list and sync status so the view matches the engine.
   async function run<T>(scope: "create" | "detail", pending: string, done: (r: T) => string, action: () => Promise<T>): Promise<T | null> {
@@ -316,7 +335,7 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
         {playlistTracks === null && <p role="status" className="text-[13px] text-secondary-text">Reading tracks…</p>}
         {tracksFailed && <p role="alert" className="text-[13px] text-critical-coral">Could not read this playlist's tracks.</p>}
         {playlistTracks?.length === 0 && !tracksFailed && <p className="text-[13px] text-secondary-text">No tracks yet. Add some from Search.</p>}
-        <ul>{playlistTracks?.slice(0, shown).map((hit, i) => <ResultRow key={`${hit.providerTrackId}:${i}`} hit={hit} />)}</ul>
+        <ul>{playlistTracks?.slice(0, shown).map((hit, i) => <ResultRow key={`${hit.providerTrackId}:${i}`} hit={hit} following={playlistTracks.slice(i + 1)} onRemove={() => void run("detail", "Removing…", () => "Removed.", () => removeFromPlaylist(selected.id, i))} />)}</ul>
         {playlistTracks && playlistTracks.length > shown && <Button variant="ghost" onClick={() => setShown((n) => n + 100)}>Show more</Button>}
       </section>
 
@@ -331,11 +350,25 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
       </Group>
 
 
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Button variant="secondary" onClick={() => onNavigate("search")}>
           Add tracks in Search
         </Button>
-        <p className="text-[13px] leading-[18px] text-secondary-text">Rename, delete and reorder are not available yet.</p>
+        {confirmDelete ? (
+          <>
+            <Button variant="primary" disabled={busy} onClick={() => void deleteSelected()}>
+              <Trash2 size={14} aria-hidden="true" />Delete {selected.name.length > 24 ? `${selected.name.slice(0, 24)}…` : selected.name}
+            </Button>
+            <Button variant="ghost" disabled={busy} onClick={() => setConfirmDelete(false)}>Cancel</Button>
+          </>
+        ) : (
+          <Button variant="ghost" disabled={busy || !!selected.remoteId} title={selected.remoteId ? "An uploaded playlist cannot be deleted yet" : undefined} onClick={() => setConfirmDelete(true)}>
+            <Trash2 size={14} aria-hidden="true" />Delete playlist
+          </Button>
+        )}
+        <p className="text-[13px] leading-[18px] text-secondary-text">
+          {selected.remoteId ? "Uploaded playlists cannot be deleted yet. Rename and reorder are not available yet." : "Deleting removes this device's copy. Rename and reorder are not available yet."}
+        </p>
       </div>
     </div>
   );

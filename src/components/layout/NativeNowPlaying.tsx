@@ -1,9 +1,11 @@
 "use client";
 import { ArtistLinks, LikeButton } from "../LibraryActions";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import { AlignLeft, ChevronDown, FilePenLine, MicVocal, Maximize2, Minimize2, PanelLeft, Pause, Play } from "lucide-react";
+import { AlignLeft, ChevronDown, FilePenLine, MicVocal, Maximize2, Minimize2, PanelLeft, Pause, Play, SkipBack, SkipForward, Volume1, Volume2, VolumeX } from "lucide-react";
 import { useUi } from "../../lib/store";
-import { usePlayback, togglePlayback, seekPlayback } from "../../lib/playback";
+import { usePlayback, togglePlayback, seekPlayback, setPlaybackVolume } from "../../lib/playback";
+import { playerSkip } from "../../services/tauri/player";
+import { RepeatButton, AutoplayButton } from "../PlayModeButtons";
 import { useMotion } from "../../lib/motion";
 import { TrackCover } from "../TrackCover";
 import { IconButton, Scrubber, cx } from "../ui";
@@ -272,12 +274,22 @@ export function NativeNowPlaying() {
                     info={s.infoState === "error" ? "error" : info ? "ready" : "loading"} onPick={setPref} onEntry={(entry) => useLyricsStore.getState().setOverride(track.providerTrackId, entry)}
                     offsetApplies={!!offKey} offsetMs={offsetMs} onOffset={changeOffset} onOpenSettings={openLyricsSettings} />)}
               </div>
-              <IconButton label={playing ? "Pause YouTube" : "Play YouTube"} disabled={s.busy} onClick={() => void togglePlayback()} className="size-11">
-                {playing ? <Pause size={28} fill="currentColor" /> : <Play size={28} fill="currentColor" />}
-              </IconButton>
+              <div className="flex items-center gap-1">
+                <RepeatButton className="size-9" />
+                <IconButton label="Previous track" disabled={s.busy || !seekable} onClick={() => void playerSkip(false)} className="size-10"><SkipBack size={22} fill="currentColor" /></IconButton>
+                <IconButton label={playing ? "Pause YouTube" : "Play YouTube"} disabled={s.busy} onClick={() => void togglePlayback()} className="size-11">
+                  {playing ? <Pause size={28} fill="currentColor" /> : <Play size={28} fill="currentColor" />}
+                </IconButton>
+                <IconButton label="Next track" disabled={s.busy || !seekable} onClick={() => void playerSkip(true)} className="size-10"><SkipForward size={22} fill="currentColor" /></IconButton>
+                <AutoplayButton className="size-9" />
+              </div>
               <div className="flex items-center justify-end gap-1">
                 {lyricsOpen && <span ref={setChrome} className="inline-flex items-center gap-1" />}
                 {lyricsOpen && <LayoutToggle value={layout} onChange={setLayout} />}
+                <span className="mx-1 inline-flex items-center gap-1.5 text-secondary-text">
+                  {s.volume === 0 ? <VolumeX size={16} aria-hidden="true" /> : s.volume < 50 ? <Volume1 size={16} aria-hidden="true" /> : <Volume2 size={16} aria-hidden="true" />}
+                  <Scrubber label="Volume" max={100} value={s.volume} disabled={!seekable} onChange={(value) => void setPlaybackVolume(value)} className="w-20" />
+                </span>
                 {fullscreen.supported && (
                   <IconButton label={fullscreen.active ? "Exit full screen" : "Enter full screen"} onClick={fullscreen.toggle} className="size-9">
                     {fullscreen.active ? <Minimize2 size={18} /> : <Maximize2 size={18} />}

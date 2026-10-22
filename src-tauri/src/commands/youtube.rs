@@ -57,6 +57,9 @@ impl YouTubeState {
             operation: tokio::sync::Mutex::new(()),
         }
     }
+    pub fn connected(&self) -> bool {
+        self.status() == ConnectionStatus::Connected
+    }
     fn status(&self) -> ConnectionStatus {
         *self.status.lock().unwrap_or_else(|e| e.into_inner())
     }

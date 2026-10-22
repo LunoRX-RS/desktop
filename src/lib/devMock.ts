@@ -54,10 +54,12 @@ export function installDevMock(): void {
   let revision = 1;
   let pos = 0;
   let volume = 100;
+  let repeat = "off";
+  let radio = true;
   const DUR = 166000;
   const st = () => ({ version: 1, state, revision });
   const emit = (event: string, payload: unknown) => { const id = handlers[event]; const f = id ? (w["_" + id] as ((e: unknown) => void) | undefined) : undefined; f?.({ event, id, payload }); };
-  const prog = () => ({ player: st(), track, positionMs: pos, durationMs: track ? DUR : 0, available: !!track, volume, autoplay: { state: queue.length ? "ready" : "", nextTitle: queue[0]?.title ?? null, queue: queue.map((t) => ({ provider: "YouTube", id: t.providerTrackId, title: t.title, artists: t.artists, artworkUrl: null, durationMs: t.durationMs })) } });
+  const prog = () => ({ player: st(), track, positionMs: pos, durationMs: track ? DUR : 0, available: !!track, volume, autoplay: { state: queue.length ? "ready" : "", repeat, radio, nextTitle: queue[0]?.title ?? null, queue: queue.map((t) => ({ provider: "YouTube", id: t.providerTrackId, title: t.title, artists: t.artists, artworkUrl: null, durationMs: t.durationMs })) } });
   const set = (next: string) => { state = next; revision++; emit("core://player/state", st()); emit("core://player/progress", prog()); };
   window.setInterval(() => {
     if (state !== "playing") return;
@@ -99,7 +101,7 @@ export function installDevMock(): void {
           await new Promise((r) => setTimeout(r, 1200));
           likes = [...likes, ...HITS.slice(5, 9).filter((h) => !likes.some((l) => l.providerTrackId === h.providerTrackId))];
           playlists = [...playlists, { id: "pl" + (playlists.length + 1), name: "Imported: Road trip", remoteId: null, entryCount: 8, uploaded: 0, queuedWrites: 0, unsentEntries: 0 }];
-          const report = { likedAdded: 4, historyAdded: 3, playlistsCreated: 1, playlistsUpdated: 0, playlistTracksAdded: 8, failed: [] };
+          const report = { likedAdded: 4, likedRemoved: 0, historyAdded: 3, playlistsCreated: 1, playlistsUpdated: 0, playlistTracksAdded: 8, failed: [] };
           emit("core://youtube/import", { state: "done", report });
           return report;
         }
@@ -114,6 +116,7 @@ export function installDevMock(): void {
         case "offline_status": return { keeping, running: false, changed: false, tracks: keeping ? HITS.slice(0, 3).map((t) => ({ track: { provider: "YouTube", id: t.providerTrackId, title: t.title, artists: t.artists, artworkUrl: t.artworkUrl, durationMs: t.durationMs }, error: null, state: "ready" })) : [], usedBytes: keeping ? 18_400_000 : 0, pinnedBytes: keeping ? 18_400_000 : 0, limitBytes: 2_000_000_000 };
         case "sync_create_local_playlist": { const id = "pl" + (playlists.length + 1); playlists = [...playlists, { id, name: a.name as string, remoteId: null, entryCount: 0, uploaded: 0, queuedWrites: 0, unsentEntries: 0 }]; return id; }
         case "sync_playlist_entries": return HITS.slice(0, Math.min(8, playlists.find((p) => p.id === a.localId)?.entryCount ?? 0)).map((h) => ({ provider: "YouTube", providerTrackId: h.providerTrackId, providerUrl: h.canonicalUrl, title: h.title, artists: h.artists, artworkUrl: h.artworkUrl, durationMs: h.durationMs }));
+        case "sync_delete_local_playlist": playlists = playlists.filter((p) => p.id !== a.localId); return null;
         case "sync_add_local_entry": playlists = playlists.map((p) => p.id === a.localId ? { ...p, entryCount: p.entryCount + 1 } : p); return null;
         case "player_state": return st();
         case "player_progress": return prog();
@@ -128,6 +131,7 @@ export function installDevMock(): void {
         case "player_pause": set("paused"); return st();
         case "player_stop": track = null; queue = []; pos = 0; set("idle"); return st();
         case "player_seek": pos = Number(a.positionMs) || 0; emit("core://player/progress", prog()); return st();
+        case "player_set_mode": { const g = a.args as { repeat: string; autoplay: boolean }; repeat = g.repeat; radio = g.autoplay; emit("core://player/progress", prog()); return null; }
         case "player_set_volume": volume = Number(a.volume ?? 100); return st();
         case "player_track_info": return { providerTrackId: track?.providerTrackId ?? "", title: track?.title ?? "", artists: track?.artists ?? [], artworkUrl: null, lyrics: LYR.join("\n"), lyricsSource: "Lyrics from LyricsPlus", lyricsProvider: "LRCLIB", lyricsStatus: "available", lyricsLines: lines(true), lyricsSynced: true, lyricsSources: sources() };
         case "lyrics_source_fetch": return sources().find((x) => x.id === (a.args as { sourceId: string }).sourceId) ?? src("kugou", "Kugou", {});

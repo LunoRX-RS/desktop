@@ -60,7 +60,7 @@ export function SavedLibraryScreen({ artists = false }: { artists?: boolean }) {
   return <Screen id="saved-library" title={artists ? "Artists" : "Liked Songs"} caption={artists ? "Artists from your liked songs, grouped by their provider identity." : "Saved on this device. Provider libraries are unchanged."}>
     <LibraryNav />
     {!ready && !error && <p role="status">Loading liked songs…</p>}
-    {ready && (artists ? <ul className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">{Array.from(refs.entries()).map(([key, artist]) => <li key={key}><ArtistCard artist={artist} songs={counts.get(key) ?? 0} /></li>)}</ul> : <><ul>{tracks.slice(0, limit).map(hit => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} />)}</ul>{tracks.length > limit && <Button onClick={() => setLimit(n => n + 50)}>Show more</Button>}</>)}
+    {ready && (artists ? <ul className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">{Array.from(refs.entries()).map(([key, artist]) => <li key={key}><ArtistCard artist={artist} songs={counts.get(key) ?? 0} /></li>)}</ul> : <><ul>{tracks.slice(0, limit).map((hit, i, shown) => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} following={shown.slice(i + 1)} />)}</ul>{tracks.length > limit && <Button onClick={() => setLimit(n => n + 50)}>Show more</Button>}</>)}
     {ready && (artists ? refs.size === 0 : tracks.length === 0) && <StatusNote>Like songs from Search to build your library.<Button onClick={() => useUi.getState().navigate("search")}>Search music</Button></StatusNote>}
   </Screen>;
 }
@@ -90,7 +90,7 @@ export default function ArtistScreen() {
     {profile?.description && <p className="whitespace-pre-line text-secondary-text">{profile.description}</p>}
     </div>
     {tracks.length > 0 && <AlbumActions tracks={tracks} />}
-    <Section id="artist-songs" title={profile ? "Songs" : "Liked songs"}><ul>{tracks.map(hit => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} />)}</ul>{tracks.length === 0 && <p>No songs available.</p>}</Section>
+    <Section id="artist-songs" title={profile ? "Songs" : "Liked songs"}><ul>{tracks.map((hit, i) => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} following={tracks.slice(i + 1)} />)}</ul>{tracks.length === 0 && <p>No songs available.</p>}</Section>
     {profile && profile.albums.length > 0 && <Section id="artist-albums" title="Albums"><ul className="grid grid-cols-2 gap-4 md:grid-cols-4">{profile.albums.map(album => <li key={album.id}><button type="button" aria-label={`Open album ${album.name}`} onClick={() => useUi.getState().openAlbum({ provider: profile.provider, ...album })} className="group block w-full text-left">{album.artworkUrl && <img src={album.artworkUrl} alt="" loading="lazy" className="mb-2 aspect-square w-full rounded-lg object-cover transition-transform duration-200 group-hover:scale-[1.02]" />}<p className="text-primary-text">{album.name}</p><p className="text-[12px] text-secondary-text">{album.year} · {providerName(profile.provider)}</p></button></li>)}</ul></Section>}
   </Screen>;
 }
@@ -120,7 +120,7 @@ export function AlbumScreen() {
       {profile && profile.artists.length > 0 && <p className="pb-1 text-[15px] leading-5 text-primary-text">{profile.artists.map((a, i) => <span key={`${a.id}:${a.name}`}>{i > 0 && ", "}{a.id ? <button type="button" className="underline-offset-2 hover:text-primary-text hover:underline" onClick={() => useUi.getState().openArtist(a)}>{a.name}</button> : a.name}</span>)}</p>}
     </div>
     {profile && profile.tracks.length > 0 && <AlbumActions tracks={profile.tracks} />}
-    {profile && <Section id="album-songs" title="Songs"><ul>{profile.tracks.map(hit => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} />)}</ul>{profile.tracks.length === 0 && <p>No songs available.</p>}</Section>}
+    {profile && <Section id="album-songs" title="Songs"><ul>{profile.tracks.map((hit, i) => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} following={profile.tracks.slice(i + 1)} />)}</ul>{profile.tracks.length === 0 && <p>No songs available.</p>}</Section>}
   </Screen>;
 }
 

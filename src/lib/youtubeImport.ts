@@ -25,6 +25,7 @@ export function initYouTubeImport(): () => void {
 export function importSummary(r: ImportReport): string {
   const parts: string[] = [];
   if (r.likedAdded) parts.push(`${r.likedAdded} liked ${r.likedAdded === 1 ? "song" : "songs"}`);
+  if (r.likedRemoved) parts.push(`${r.likedRemoved} un-liked on YouTube Music`);
   if (r.playlistsCreated) parts.push(`${r.playlistsCreated} new ${r.playlistsCreated === 1 ? "playlist" : "playlists"}`);
   if (r.playlistsUpdated) parts.push(`${r.playlistsUpdated} updated ${r.playlistsUpdated === 1 ? "playlist" : "playlists"}`);
   if (r.historyAdded) parts.push(`${r.historyAdded} from history`);

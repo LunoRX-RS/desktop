@@ -24,6 +24,9 @@ import { SAMPLE_ALBUMS, type Tone } from "../../lib/demo-data";
 import { useLocalPlaylists } from "../../features/playlists/usePlaylists";
 import { syncStatus, type SyncStatusDto } from "../../services/tauri/sync";
 import { Art } from "../Art";
+import { menuHandlers } from "../ContextMenu";
+import { playlistMenu } from "../../lib/menus";
+import { playPlaylist } from "../../lib/playlistActions";
 import { ActivePill, LayoutLi } from "../Motion";
 import { IconButton, cx } from "../ui";
 
@@ -156,6 +159,8 @@ interface LibItem {
   playing: boolean;
   open: () => void;
   play: () => void;
+  /** Right-click menu for this row, when it has one. */
+  menu?: () => import("../ContextMenu").MenuItem[];
 }
 
 function Equaliser() {
@@ -195,6 +200,7 @@ function LibRow({
         aria-label={name}
         aria-current={item.active ? "page" : undefined}
         onClick={item.open}
+        {...(item.menu ? menuHandlers(item.menu) : {})}
         {...(collapsed ? bind(item.title, item.subtitle) : {})}
         onFocusCapture={() => onFocusRow(item.key)}
         className={cx(
@@ -397,8 +403,8 @@ export default function Sidebar() {
             setSelectedPlaylist(p.id);
             navigate("playlists");
           },
-          // Local playlists hold provider links; no provider can play audio in this build.
-          play: () => setNote(`${p.name} cannot be played in this build.`),
+          play: () => void playPlaylist(p.id).then((ok) => { if (!ok) setNote(`${p.name} has no YouTube tracks to play.`); }, () => setNote(`Could not play ${p.name}.`)),
+          menu: playlistMenu(p, { onOpen: () => { setSelectedPlaylist(p.id); navigate("playlists"); } }),
         });
       }
     }

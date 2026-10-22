@@ -189,6 +189,23 @@ impl LocalStore {
         Ok(id)
     }
 
+    /// Deletes a playlist that is not on the server. An uploaded one is refused: removing it from the server
+    /// is not supported yet, and forgetting only the local copy would leave a playlist this device can no longer see.
+    pub fn delete_local(&mut self, local_id: &str) -> Result<(), SyncError> {
+        let index = self
+            .playlists
+            .iter()
+            .position(|p| p.id == local_id)
+            .ok_or(SyncError::Local("playlist not found"))?;
+        if self.playlists[index].remote_id.is_some() {
+            return Err(SyncError::Local(
+                "an uploaded playlist cannot be deleted yet",
+            ));
+        }
+        self.playlists.remove(index);
+        Ok(())
+    }
+
     /// Sign-out: drops every remote binding so the next account re-creates the playlists. Content is kept.
     pub fn unbind_all_remote(&mut self) {
         // Marks hold the old account's remote ids; the next token must not re-read them.

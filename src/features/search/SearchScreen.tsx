@@ -230,7 +230,7 @@ export default function SearchScreen() {
 
         {!loading && hits.length > 0 && (
           <Section id="search-songs" title="Songs"><ul aria-label="Search results" className="lx-stagger flex flex-col">
-            {hits.map(hit => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} />)}
+            {hits.map((hit, i) => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} following={hits.slice(i + 1)} />)}
           </ul></Section>
         )}
         {!loading && noticeGroups.map(group => <SourceGroup key={group.provider} group={group} onRetry={() => void runSearch(view.text)} />)}

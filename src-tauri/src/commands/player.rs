@@ -745,7 +745,15 @@ pub(crate) async fn skip(app: &AppHandle, forward: bool) {
     use crate::core::playback::autoplay::{pop_back, select_first};
     let state = app.state::<PlayerState>();
     let (track, queue_selection) = if forward {
-        (select_first(&state.autoplay_status), true)
+        // With repeat-all and nothing left in the queue, Next starts the list again.
+        select_first(&state.autoplay_status)
+            .map(|t| (Some(t), true))
+            .unwrap_or_else(|| {
+                (
+                    crate::core::playback::autoplay::restart_context(&state.autoplay_status),
+                    true,
+                )
+            })
     } else {
         (pop_back(&state.autoplay_status), false)
     };
@@ -780,9 +788,12 @@ async fn load_track(
     if let Some(previous) = task.take() {
         previous.abort();
     }
-    if !queue_selection && let Ok(mut status) = state.autoplay_status.lock() {
-        status.reset();
-        status.queue = following;
+    if !queue_selection {
+        if let Ok(mut status) = state.autoplay_status.lock() {
+            status.reset();
+            status.queue = following.clone();
+        }
+        crate::core::playback::autoplay::set_context(&state.autoplay_status, &track, &following);
     }
     let result = finish(app, dispatch(state, PlaybackCommand::Load(track)).await);
     if result.is_ok() {
@@ -825,6 +836,35 @@ async fn load_track(
         }
     }
     result
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayerModeArgs {
+    /// "off", "all" or "one".
+    pub repeat: String,
+    pub autoplay: bool,
+}
+
+/// Repeat and autoplay choices. They apply to the current track's ending and to every later track.
+#[tauri::command]
+pub async fn player_set_mode(
+    app: AppHandle,
+    state: State<'_, PlayerState>,
+    args: PlayerModeArgs,
+) -> Result<(), PlayerError> {
+    if !crate::core::playback::autoplay::set_mode(
+        &state.autoplay_status,
+        &args.repeat,
+        args.autoplay,
+    ) {
+        return Err(invalid());
+    }
+    // Wake a running autoplay session so it plans the current track's ending again.
+    state.reports.send_modify(|v| *v = v.wrapping_add(0));
+    let dto = progress(&state).await;
+    let _ = app.emit_to("main", "core://player/progress", dto);
+    Ok(())
 }
 
 #[tauri::command]

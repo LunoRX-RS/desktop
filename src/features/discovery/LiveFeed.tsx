@@ -17,6 +17,6 @@ export default function LiveFeed({ kind, topic = "charts", limit = 10, featured 
     </section>}
     {feed.loading && !feed.sections.length && <div role="status" aria-label="Loading real music" className="flex flex-col gap-2">{Array.from({length:5},(_,i)=><Skeleton key={i} className="h-14" />)}</div>}
     {feed.error && <StatusNote role="alert">{feed.error}<Button onClick={() => void loadFeed(kind, topic, true)}>Retry</Button></StatusNote>}
-    {feed.sections.map((section, i) => <Section key={`${topic}:${section.title}`} id={`feed-${kind}-${i}`} title={section.title} action={i===0 ? <Button variant="ghost" disabled={feed.loading} onClick={() => void loadFeed(kind, topic, true)}><RefreshCw size={14} />Refresh</Button> : undefined}><ul>{section.tracks.slice(0, limit).map(hit => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} />)}</ul></Section>)}
+    {feed.sections.map((section, i) => <Section key={`${topic}:${section.title}`} id={`feed-${kind}-${i}`} title={section.title} action={i===0 ? <Button variant="ghost" disabled={feed.loading} onClick={() => void loadFeed(kind, topic, true)}><RefreshCw size={14} />Refresh</Button> : undefined}><ul>{section.tracks.slice(0, limit).map((hit, i, shown) => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} following={shown.slice(i + 1)} />)}</ul></Section>)}
   </div>;
 }

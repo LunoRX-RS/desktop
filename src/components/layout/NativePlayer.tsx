@@ -4,6 +4,7 @@ import { ArtistLinks, LikeButton } from "../LibraryActions";
 import { useEffect } from "react";
 import { ListMusic, Pause, Play, Square, SkipBack, SkipForward, Volume2, MicVocal, Maximize2 } from "lucide-react";
 import type { UnlistenFn } from "@tauri-apps/api/event";
+import { RepeatButton, AutoplayButton } from "../PlayModeButtons";
 import { playerProgress, playerSkip, playerTrackInfo, subscribePlayerProgress, subscribePlayerState } from "../../services/tauri/player";
 import { TrackCover } from "../TrackCover";
 import { useUi } from "../../lib/store";
@@ -70,11 +71,13 @@ export function NativePlayerBar() {
       </div>
       <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
         <div className="flex items-center gap-2">
+          <RepeatButton />
           <IconButton label="Previous track" disabled={s.busy || !live || !controllable} onClick={() => void playerSkip(false)}><SkipBack size={20} fill="currentColor" /></IconButton>
           <IconButton label={restoring ? `Resume ${title} from ${resumeAt}` : playing ? "Pause YouTube" : "Play YouTube"} disabled={s.busy || !track} onClick={() => void (restoring ? resumeLast() : togglePlayback())}>
             {playing ? <Pause size={24} /> : <Play size={24} />}
           </IconButton>
           <IconButton label="Next track" disabled={s.busy || !live || !controllable} onClick={() => void playerSkip(true)}><SkipForward size={20} fill="currentColor" /></IconButton>
+          <AutoplayButton />
           <IconButton label={restoring ? "Forget the last track" : "Stop YouTube"} disabled={s.busy} onClick={() => void (restoring ? clearResume() : stopPlayback())}><Square size={15} /></IconButton>
         </div>
         <div className="flex w-full max-w-[560px] items-center gap-2 text-[11px] tabular-nums text-secondary-text">

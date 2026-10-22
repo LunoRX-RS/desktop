@@ -11,26 +11,99 @@ use crate::core::domain::{ProviderId, TrackReference};
 use std::{collections::VecDeque, sync::Arc, time::Duration};
 use tokio::sync::{Mutex, watch};
 
-#[derive(Clone, Default, serde::Serialize)]
+/// How the end of the current track is handled. `repeat` is "off", "all" (play the list again once it is used up)
+/// or "one" (play this track again). `radio` adds related tracks when the list runs out.
+#[derive(Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AutoplayStatus {
     pub state: &'static str,
     pub next_title: Option<String>,
     pub queue: Vec<OfflineTrack>,
+    pub repeat: &'static str,
+    pub radio: bool,
     #[serde(skip)]
     history: VecDeque<String>,
     /// Tracks already left, newest last; backs the Previous command.
     #[serde(skip)]
     back: Vec<TrackReference>,
+    /// The list that was started (first track, then the tracks queued behind it); repeat-all plays it again.
+    #[serde(skip)]
+    context: Vec<OfflineTrack>,
+    /// True when that list came from a playlist or album, so related tracks wait until it is used up.
+    #[serde(skip)]
+    list: bool,
+}
+impl Default for AutoplayStatus {
+    fn default() -> Self {
+        Self {
+            state: "",
+            next_title: None,
+            queue: Vec::new(),
+            repeat: "off",
+            radio: true,
+            history: VecDeque::new(),
+            back: Vec::new(),
+            context: Vec::new(),
+            list: false,
+        }
+    }
 }
 impl AutoplayStatus {
-    /// Like `Default`, but keeps the Previous stack across a manual load.
+    /// Like `Default`, but keeps the Previous stack and the user's repeat and autoplay choices across a manual load.
     pub fn reset(&mut self) {
         *self = Self {
             back: std::mem::take(&mut self.back),
+            repeat: self.repeat,
+            radio: self.radio,
             ..Default::default()
         };
     }
+}
+/// Sets repeat ("off" | "all" | "one") and autoplay. Anything else is refused.
+pub fn set_mode(state: &Status, repeat: &str, radio: bool) -> bool {
+    let repeat: &'static str = match repeat {
+        "off" => "off",
+        "all" => "all",
+        "one" => "one",
+        _ => return false,
+    };
+    if let Ok(mut s) = state.lock() {
+        s.repeat = repeat;
+        s.radio = radio;
+        return true;
+    }
+    false
+}
+fn offline_of(t: &TrackReference) -> OfflineTrack {
+    OfflineTrack {
+        provider: "YouTube".into(),
+        id: t.provider_track_id.clone(),
+        title: t.title.clone(),
+        artists: t.artists.clone(),
+        artwork_url: t.artwork_url.clone(),
+        duration_ms: t.duration_ms.and_then(|d| i64::try_from(d).ok()),
+    }
+}
+/// Remembers the list a manual load started, for repeat-all.
+pub fn set_context(state: &Status, first: &TrackReference, following: &[OfflineTrack]) {
+    if let Ok(mut s) = state.lock() {
+        let mut list = vec![offline_of(first)];
+        list.extend(following.iter().cloned());
+        s.context = list;
+        s.list = !following.is_empty();
+    }
+}
+/// Next with nothing queued and repeat-all on: starts the remembered list again.
+pub fn restart_context(state: &Status) -> Option<TrackReference> {
+    let mut s = state.lock().ok()?;
+    if s.repeat != "all" || s.context.is_empty() {
+        return None;
+    }
+    let first = reference(&s.context[0]).ok()?;
+    s.queue = s.context.iter().skip(1).cloned().collect();
+    s.next_title = None;
+    s.state = "finding";
+    Some(first)
 }
 pub fn push_back(state: &Status, track: TrackReference) {
     if let Ok(mut s) = state.lock() {
@@ -80,9 +153,16 @@ async fn session(
     state: Status,
 ) {
     let mut history = state.lock().map(|s| s.history.clone()).unwrap_or_default();
-    loop {
+    let mode = |state: &Status| {
+        state
+            .lock()
+            .map(|s| (s.repeat, s.radio))
+            .unwrap_or(("off", true))
+    };
+    'outer: loop {
         let current = engine.lock().await.active_track().cloned();
         let Some(current) = current else { return };
+        let (repeat, radio) = mode(&state);
         let seed = current.provider_track_id.clone();
         remember(&mut history, seed.clone());
         if let Ok(mut status) = state.lock() {
@@ -90,10 +170,24 @@ async fn session(
         }
         status(&state, "finding", None);
         let mut queue = state.lock().map(|s| s.queue.clone()).unwrap_or_default();
-        if queue.len() < 10 {
+        let (list, context) = state
+            .lock()
+            .map(|s| (s.list, s.context.clone()))
+            .unwrap_or_default();
+        // A playlist or album plays through first; related tracks come in only once it is used up.
+        if radio && repeat != "one" && (queue.is_empty() || (!list && queue.len() < 10)) {
             queue = related(&pipe, &seed, &history, queue).await;
         }
+        if queue.is_empty() && repeat == "all" && !context.is_empty() {
+            queue = context.iter().skip(1).cloned().collect();
+            queue.insert(0, context[0].clone());
+        }
         publish_queue(&state, &queue);
+        let repeat_one = repeat == "one";
+        if repeat_one {
+            // The same track again: it is already cached, so this only keeps the file alive until Load takes it.
+            queue = vec![offline_of(&current)];
+        }
         let mut next = None;
         for _ in 0..3 {
             let Some(track) = queue.first().cloned() else {
@@ -119,11 +213,17 @@ async fn session(
         super::track_info::prefetch_lyrics(&next.id, &next.title, &next.artists, next.duration_ms);
         loop {
             reports.borrow_and_update();
+            // The user changed repeat or autoplay while this track plays: plan the ending again.
+            if mode(&state) != (repeat, radio) {
+                continue 'outer;
+            }
             let mut player = engine.lock().await;
             match advance(&mut player, &seed, &next).await {
                 Ok(true) => {
                     push_back(&state, current.clone());
-                    queue.remove(0);
+                    if !repeat_one {
+                        queue.remove(0);
+                    }
                     publish_queue(&state, &queue);
                     break;
                 }
@@ -283,7 +383,9 @@ pub async fn run(
     state: Status,
 ) {
     session(engine, pipe, cache, audio, reports, state.clone()).await;
-    status(&state, "unavailable", None);
+    let radio = state.lock().map(|s| s.radio).unwrap_or(true);
+    // With autoplay off, running out of tracks is the normal end, not a failure.
+    status(&state, if radio { "unavailable" } else { "idle" }, None);
 }
 #[cfg(test)]
 mod tests {
@@ -326,6 +428,38 @@ mod tests {
             )]),
             Duration::from_secs(1),
         )
+    }
+    fn track(id: &str) -> OfflineTrack {
+        OfflineTrack {
+            provider: "YouTube".into(),
+            id: id.into(),
+            title: id.into(),
+            artists: vec![],
+            artwork_url: None,
+            duration_ms: None,
+        }
+    }
+    #[test]
+    fn mode_is_validated_and_survives_a_manual_load() {
+        let state: Status = Default::default();
+        assert!(!set_mode(&state, "forever", true));
+        assert!(set_mode(&state, "all", false));
+        state.lock().unwrap().reset();
+        let s = state.lock().unwrap();
+        assert_eq!((s.repeat, s.radio), ("all", false));
+    }
+    #[test]
+    fn repeat_all_restarts_the_remembered_list_only_when_asked() {
+        let state: Status = Default::default();
+        let first = reference(&track("aqz-KE-bpKQ")).unwrap();
+        set_context(&state, &first, &[track("r-G2pKr2_n8")]);
+        assert!(restart_context(&state).is_none(), "repeat is off");
+        assert!(set_mode(&state, "all", true));
+        let again = restart_context(&state).unwrap();
+        assert_eq!(again.provider_track_id, "aqz-KE-bpKQ");
+        let queue = state.lock().unwrap().queue.clone();
+        assert_eq!(queue.len(), 1);
+        assert_eq!(queue[0].id, "r-G2pKr2_n8");
     }
     fn next() -> OfflineTrack {
         OfflineTrack {

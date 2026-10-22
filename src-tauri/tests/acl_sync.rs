@@ -52,8 +52,8 @@ fn every_sync_handler_is_in_app_manifest_and_allowed() {
     let handlers = sync_handlers(&lib);
     assert_eq!(
         handlers.len(),
-        12,
-        "expected 12 sync handlers in generate_handler!, found {handlers:?}"
+        13,
+        "expected 13 sync handlers in generate_handler!, found {handlers:?}"
     );
 
     let mut missing = Vec::new();

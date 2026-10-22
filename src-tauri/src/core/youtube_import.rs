@@ -2,7 +2,7 @@
 //! Read-only: nothing is written back to YouTube. Each section fails on its own, so a partial import still lands.
 use super::library::{LibraryError, SavedTrack, saved_track};
 use rustypipe::client::RustyPipe;
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 const LIKED_MAX: usize = 1000;
 const HISTORY_MAX: usize = 50;
@@ -21,6 +21,10 @@ pub struct Import {
     pub liked: Vec<SavedTrack>,
     pub history: Vec<SavedTrack>,
     pub playlists: Vec<ImportedPlaylist>,
+    /// True when every liked song was read (the list ended before the cap), so a missing one was really unliked.
+    pub liked_complete: bool,
+    /// Track counts of every saved playlist seen, for the next quick pass.
+    pub counts: HashMap<String, u64>,
     /// Sections that could not be read, by name.
     pub failed: Vec<&'static str>,
 }
@@ -34,16 +38,19 @@ async fn step<T>(
         .map_err(|_| LibraryError::Unavailable)
 }
 
-async fn liked(pipe: &RustyPipe) -> Result<Vec<SavedTrack>, LibraryError> {
+async fn liked(pipe: &RustyPipe) -> Result<(Vec<SavedTrack>, bool), LibraryError> {
     let query = pipe.query();
     let mut page = step(query.music_saved_tracks()).await?;
     step(page.extend_limit(&query, LIKED_MAX)).await?;
-    Ok(page
-        .items
-        .into_iter()
-        .take(LIKED_MAX)
-        .filter_map(|t| saved_track(t, None))
-        .collect())
+    let complete = page.items.len() < LIKED_MAX;
+    Ok((
+        page.items
+            .into_iter()
+            .take(LIKED_MAX)
+            .filter_map(|t| saved_track(t, None))
+            .collect(),
+        complete,
+    ))
 }
 
 async fn history(pipe: &RustyPipe) -> Result<Vec<SavedTrack>, LibraryError> {
@@ -57,7 +64,11 @@ async fn history(pipe: &RustyPipe) -> Result<Vec<SavedTrack>, LibraryError> {
         .collect())
 }
 
-async fn playlists(pipe: &RustyPipe) -> Result<Vec<ImportedPlaylist>, LibraryError> {
+async fn playlists(
+    pipe: &RustyPipe,
+    known: &HashMap<String, u64>,
+    counts: &mut HashMap<String, u64>,
+) -> Result<Vec<ImportedPlaylist>, LibraryError> {
     let query = pipe.query();
     let mut saved = step(query.music_saved_playlists()).await?;
     step(saved.extend_limit(&query, PLAYLISTS_MAX)).await?;
@@ -68,6 +79,13 @@ async fn playlists(pipe: &RustyPipe) -> Result<Vec<ImportedPlaylist>, LibraryErr
         .filter(|p| !p.is_podcast)
         .take(PLAYLISTS_MAX)
     {
+        if let Some(n) = item.track_count {
+            counts.insert(item.id.clone(), n);
+            // A quick pass reads only playlists whose size changed since the last pass.
+            if known.get(&item.id) == Some(&n) {
+                continue;
+            }
+        }
         // One unreadable playlist must not drop the others.
         let Ok(mut playlist) = step(query.music_playlist(&item.id)).await else {
             continue;
@@ -96,13 +114,20 @@ async fn playlists(pipe: &RustyPipe) -> Result<Vec<ImportedPlaylist>, LibraryErr
     Ok(out)
 }
 
-pub async fn fetch(pipe: &RustyPipe) -> Import {
+/// `known` holds playlist sizes from the last pass; pass an empty map to read every playlist.
+pub async fn fetch(pipe: &RustyPipe, known: &HashMap<String, u64>) -> Import {
     let mut import = Import::default();
     match liked(pipe).await {
-        Ok(v) => import.liked = v,
+        Ok((v, complete)) => {
+            import.liked = v;
+            import.liked_complete = complete;
+        }
         Err(_) => import.failed.push("likes"),
     }
-    match playlists(pipe).await {
+    let mut counts = HashMap::new();
+    let result = playlists(pipe, known, &mut counts).await;
+    import.counts = counts;
+    match result {
         Ok(v) => import.playlists = v,
         Err(_) => import.failed.push("playlists"),
     }

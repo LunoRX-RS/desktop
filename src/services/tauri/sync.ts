@@ -105,6 +105,11 @@ export function syncPlaylistEntries(localId: string): Promise<LocalEntryDto[]> {
   return invoke<LocalEntryDto[]>("sync_playlist_entries", { localId });
 }
 
+/** Deletes a playlist that is not on the server. Rejects with "validation" for an uploaded one. */
+export function syncDeleteLocalPlaylist(localId: string): Promise<void> {
+  return invoke<void>("sync_delete_local_playlist", { localId });
+}
+
 export function syncAddLocalEntry(localId: string, entry: LocalEntryDto): Promise<void> {
   return invoke<void>("sync_add_local_entry", { localId, entry });
 }

@@ -183,6 +183,20 @@ impl SavedLibrary {
         }
         Ok(added)
     }
+    /// Removes the YouTube tracks with these ids. Returns how many were removed.
+    pub fn remove_youtube_ids(
+        &self,
+        ids: &std::collections::HashSet<String>,
+    ) -> Result<usize, LibraryError> {
+        let mut tracks = self.tracks.lock().map_err(|_| LibraryError::Storage)?;
+        let mut next = tracks.clone();
+        next.retain(|t| t.provider != ProviderId::YouTube || !ids.contains(&t.provider_track_id));
+        let removed = tracks.len() - next.len();
+        if removed > 0 {
+            self.commit(&mut tracks, next)?;
+        }
+        Ok(removed)
+    }
     pub fn record_play(&self, mut track: SavedTrack) -> Result<Vec<SavedTrack>, LibraryError> {
         track.validate()?;
         let mut tracks = self.tracks.lock().map_err(|_| LibraryError::Storage)?;
