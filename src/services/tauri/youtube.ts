@@ -13,7 +13,7 @@ export function subscribeYouTubeConnection(callback: (status: YouTubeConnectionS
 export interface ImportReport {
   likedAdded: number; likedRemoved: number; historyAdded: number; playlistsCreated: number; playlistsUpdated: number; playlistTracksAdded: number;
   /** Sections that could not be read or stored: "likes", "playlists", "history". */
-  failed: ("likes" | "playlists" | "history")[];
+  failed: ("likes" | "playlists" | "history" | "ytLikes" | "ytPlaylists" | "ytHistory")[];
 }
 export type ImportEvent = { state: "running" } | { state: "done"; report: ImportReport } | { state: "failed" };
 /** Imports the YouTube Music collection now (read-only toward YouTube). Rejects with "inUse" while another run is going. */

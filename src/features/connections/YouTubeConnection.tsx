@@ -75,10 +75,10 @@ export function YouTubeConnection() {
       {status === "connected" && (
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="secondary" disabled={imp.state === "running"} onClick={() => void importNow()}>
-            {imp.state === "running" ? "Importing…" : "Import from YouTube Music"}
+            {imp.state === "running" ? "Importing…" : "Import from YouTube and YouTube Music"}
           </Button>
           <p role="status" className="text-secondary-text">
-            {imp.state === "running" ? "Reading your liked songs, playlists and history." : imp.state === "failed" ? "The last import did not finish." : imp.report ? importSummary(imp.report) : "Liked songs, saved playlists and recent history are imported when you sign in and every few hours after."}
+            {imp.state === "running" ? "Reading your liked songs and videos, playlists, Watch later and history." : imp.state === "failed" ? "The last import did not finish." : imp.report ? importSummary(imp.report) : "Liked songs and videos, saved playlists, Watch later and recent history are imported when you sign in and every few hours after."}
           </p>
         </div>
       )}

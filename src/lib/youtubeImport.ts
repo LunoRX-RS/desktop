@@ -30,6 +30,6 @@ export function importSummary(r: ImportReport): string {
   if (r.playlistsUpdated) parts.push(`${r.playlistsUpdated} updated ${r.playlistsUpdated === 1 ? "playlist" : "playlists"}`);
   if (r.historyAdded) parts.push(`${r.historyAdded} from history`);
   const base = parts.length ? `Imported ${parts.join(", ")}.` : "Already up to date.";
-  const names = { likes: "liked songs", playlists: "playlists", history: "history" } as const;
+  const names = { likes: "liked songs", playlists: "playlists", history: "history", ytLikes: "YouTube liked videos", ytPlaylists: "YouTube playlists", ytHistory: "YouTube history" } as const;
   return r.failed.length ? `${base} Could not read: ${r.failed.map((f) => names[f]).join(", ")}.` : base;
 }

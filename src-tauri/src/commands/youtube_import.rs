@@ -10,7 +10,7 @@ use crate::{
     },
     core::{
         library::{LibraryError, SavedTrack},
-        youtube_import::{Import, fetch},
+        youtube_import::{Import, Origin, fetch},
     },
     sync::{api::Provider, local_store::LocalEntry},
 };
@@ -42,7 +42,7 @@ pub struct ImportReport {
     pub playlists_created: usize,
     pub playlists_updated: usize,
     pub playlist_tracks_added: usize,
-    /// Sections that could not be read or stored: "likes", "playlists", "history".
+    /// Sections that could not be read or stored: "likes", "playlists", "history" and the YouTube ones "ytLikes", "ytPlaylists", "ytHistory".
     pub failed: Vec<&'static str>,
 }
 impl ImportReport {
@@ -97,14 +97,21 @@ fn save_memory(app: &AppHandle, memory: &Memory) {
     }
 }
 
-const MARKER_PREFIX: &str = "Imported from YouTube Music [";
-fn marker(id: &str) -> String {
-    format!("{MARKER_PREFIX}{id}]")
+const MUSIC_MARKER: &str = "Imported from YouTube Music [";
+const YOUTUBE_MARKER: &str = "Imported from YouTube [";
+fn marker(origin: Origin, id: &str) -> String {
+    let prefix = if origin == Origin::Music {
+        MUSIC_MARKER
+    } else {
+        YOUTUBE_MARKER
+    };
+    format!("{prefix}{id}]")
 }
-/// The YouTube playlist id inside an import marker, if the description is one.
+/// The playlist id inside an import marker, if the description is one.
 pub fn marker_id(description: &str) -> Option<&str> {
     description
-        .strip_prefix(MARKER_PREFIX)
+        .strip_prefix(MUSIC_MARKER)
+        .or_else(|| description.strip_prefix(YOUTUBE_MARKER))
         .and_then(|rest| rest.strip_suffix(']'))
 }
 /// Called when the user deletes a local playlist: an imported one must not come back on the next pass.
@@ -147,7 +154,7 @@ async fn apply_playlists(
     };
     let engine = checkout.engine();
     for playlist in import.playlists.iter().filter(|p| !skipped.contains(&p.id)) {
-        let note = marker(&playlist.id);
+        let note = marker(playlist.origin, &playlist.id);
         let existing = engine
             .local_playlists()
             .iter()
@@ -242,7 +249,7 @@ async fn run_inner(app: &AppHandle, mode: Mode) -> Result<ImportReport, LibraryE
         ..Default::default()
     };
 
-    if !import.failed.contains(&"likes") {
+    if !(import.failed.contains(&"likes") && import.failed.contains(&"ytLikes")) {
         let incoming: BTreeSet<String> = import
             .liked
             .iter()
@@ -368,7 +375,8 @@ mod tests {
     use super::*;
     #[test]
     fn marker_round_trips_and_rejects_other_descriptions() {
-        assert_eq!(marker_id(&marker("PL123")), Some("PL123"));
+        assert_eq!(marker_id(&marker(Origin::Music, "PL123")), Some("PL123"));
+        assert_eq!(marker_id(&marker(Origin::YouTube, "WL")), Some("WL"));
         assert_eq!(marker_id("My own playlist"), None);
         assert_eq!(marker_id("Imported from YouTube Music [PL1"), None);
     }
