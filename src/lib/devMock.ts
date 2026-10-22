@@ -82,7 +82,8 @@ export function installDevMock(): void {
         case "library_clear_history": return [];
         case "library_artist": return profile(a.id as string);
         case "library_album": return { provider: "YouTube", id: a.id, name: "ธาตุทองซาวด์", kind: "Album", year: 2023, artists: [ART(4)], artworkUrl: cover("album1"), tracks: HITS.slice(0, 7).map((t) => ({ ...t, artworkUrl: cover("album1") })) };
-        case "discovery_feed": return [{ title: "Thai hits", tracks: HITS.slice(0, 8) }, { title: "Because you liked P6ICK", tracks: HITS.slice(4, 12) }];
+        case "discovery_genres": return [{ id: "g1", name: "Chill", mood: true }, { id: "g2", name: "Workout", mood: true }, { id: "g3", name: "Pop", mood: false }, { id: "g4", name: "Hip-hop & Rap", mood: false }, { id: "g5", name: "Thai pop", mood: false }];
+        case "discovery_feed": if (String(a.topic).startsWith("genre:")) return [{ title: "Featured playlist", tracks: HITS.slice(3, 11) }]; return [{ title: "Thai hits", tracks: HITS.slice(0, 8) }, { title: "New albums and singles", tracks: [], albums: [0, 1, 2, 3, 4, 5].map((n) => ({ id: `MPREb_new${n}`, name: ["ไฟกลางคืน", "ธาตุทองซาวด์", "BANGKOK LEGACY", "แค่เสร็จ", "Proud", "BU"][n], year: 2026, artists: [ART(n).name], artworkUrl: cover("new" + n) })) }, { title: "New music videos", tracks: HITS.slice(4, 12) }];
         case "search_suggestions": return ["ซ่อนกลิ่น", "P6ICK", "YOUNGOHM"];
         case "search_query": return { query: (a.args as { query: string }).query, groups: [{ kind: "ok", provider: "YouTube", hits: HITS }], hits: HITS };
         case "search_cancel": return null;

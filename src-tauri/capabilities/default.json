@@ -70,6 +70,7 @@
     "allow-library-history",
     "allow-library-clear-history",
     "allow-discovery-feed",
+    "allow-discovery-genres",
     "allow-search-suggestions",
     "allow-lrc-load",
     "allow-lrc-save",

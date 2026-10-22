@@ -12,6 +12,42 @@ use std::time::Duration;
 pub struct FeedSection {
     pub title: String,
     pub tracks: Vec<SavedTrack>,
+    /// Albums shown as covers (New albums). Empty for track sections.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub albums: Vec<FeedAlbum>,
+}
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedAlbum {
+    pub id: String,
+    pub name: String,
+    pub year: Option<u16>,
+    pub artists: Vec<String>,
+    pub artwork_url: Option<String>,
+}
+/// A mood or genre from YouTube Music's Explore page.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Genre {
+    pub id: String,
+    pub name: String,
+    pub mood: bool,
+}
+fn section(title: &str, tracks: Vec<SavedTrack>) -> FeedSection {
+    FeedSection {
+        title: title.into(),
+        tracks,
+        albums: Vec::new(),
+    }
+}
+/// A genre id as YouTube Music gives it: url-safe characters only, bounded.
+fn genre_id(topic: &str) -> Option<&str> {
+    topic.strip_prefix("genre:").filter(|id| {
+        (1..=96).contains(&id.len())
+            && id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    })
 }
 fn tracks(items: Vec<TrackItem>) -> Vec<SavedTrack> {
     let mut seen = std::collections::HashSet::new();
@@ -72,38 +108,111 @@ pub async fn feed(
     topic: &str,
     seed: Option<&str>,
 ) -> Result<Vec<FeedSection>, LibraryError> {
-    if !["home", "explore"].contains(&kind) || (topic != "charts" && topic_query(topic).is_none()) {
+    if !["home", "explore"].contains(&kind)
+        || (topic != "charts" && topic_query(topic).is_none() && genre_id(topic).is_none())
+    {
         return Err(LibraryError::Validation);
     }
     let client = pipe.query();
-    if let Some(title) = personalized_title(kind)
-        && let Some(seed) = seed.filter(|id| super::playback::extract::valid_id(id))
-        && let Ok(Ok(radio)) =
-            tokio::time::timeout(Duration::from_secs(12), client.music_radio_track(seed)).await
-    {
+    let step = Duration::from_secs(12);
+    // "Picked for you": YouTube Music's radio from the last song you played or liked.
+    let personal = || async {
+        let title = personalized_title(kind)?;
+        let seed = seed.filter(|id| super::playback::extract::valid_id(id))?;
+        let radio = tokio::time::timeout(step, client.music_radio_track(seed))
+            .await
+            .ok()?
+            .ok()?;
         let list = tracks(radio.items.into_iter().filter(|t| t.id != seed).collect());
-        if !list.is_empty() {
-            return Ok(vec![FeedSection {
-                title: title.into(),
-                tracks: list,
-            }]);
-        }
-    }
-    if topic == "charts"
-        && let Ok(Ok(charts)) =
-            tokio::time::timeout(Duration::from_secs(12), client.music_charts(None)).await
+        (!list.is_empty()).then(|| section(title, list))
+    };
+    // Home: the radio wins when there is one.
+    if kind == "home"
+        && let Some(radio) = personal().await
     {
-        let sections: Vec<_> = [
-            ("Top music videos", tracks(charts.top_tracks)),
-            ("Trending on YouTube Music", tracks(charts.trending_tracks)),
-        ]
-        .into_iter()
-        .filter(|(_, t)| !t.is_empty())
-        .map(|(title, tracks)| FeedSection {
-            title: title.into(),
-            tracks,
-        })
-        .collect();
+        return Ok(vec![radio]);
+    }
+    if let Some(id) = genre_id(topic) {
+        // A genre or mood: the first playlist of its first few sections, as track lists.
+        let genre = tokio::time::timeout(step, client.music_genre(id))
+            .await
+            .map_err(|_| LibraryError::Unavailable)?
+            .map_err(|_| LibraryError::Unavailable)?;
+        let mut out = Vec::new();
+        for part in genre
+            .sections
+            .into_iter()
+            .filter(|p| !p.playlists.is_empty())
+            .take(3)
+        {
+            let Some(first) = part.playlists.first() else {
+                continue;
+            };
+            let Ok(Ok(playlist)) =
+                tokio::time::timeout(step, client.music_playlist(&first.id)).await
+            else {
+                continue;
+            };
+            let list = tracks(playlist.tracks.items);
+            if !list.is_empty() {
+                out.push(section(&part.name, list));
+            }
+        }
+        return if out.is_empty() {
+            Err(LibraryError::Unavailable)
+        } else {
+            Ok(out)
+        };
+    }
+    if topic == "charts" {
+        let (charts, albums, videos, radio) = tokio::join!(
+            tokio::time::timeout(step, client.music_charts(None)),
+            tokio::time::timeout(step, client.music_new_albums()),
+            tokio::time::timeout(step, client.music_new_videos()),
+            personal(),
+        );
+        let mut sections: Vec<FeedSection> = radio.into_iter().collect();
+        if let Ok(Ok(charts)) = charts {
+            for (title, list) in [
+                ("Top music videos", tracks(charts.top_tracks)),
+                ("Trending on YouTube Music", tracks(charts.trending_tracks)),
+            ] {
+                if !list.is_empty() {
+                    sections.push(section(title, list));
+                }
+            }
+        }
+        if let Ok(Ok(albums)) = albums {
+            let albums: Vec<FeedAlbum> = albums
+                .into_iter()
+                .filter(|a| super::library::album_id(&ProviderId::YouTube, &a.id))
+                .take(12)
+                .map(|a| FeedAlbum {
+                    id: a.id,
+                    name: a.name,
+                    year: a.year,
+                    artists: a.artists.into_iter().map(|x| x.name).collect(),
+                    artwork_url: a
+                        .cover
+                        .into_iter()
+                        .max_by_key(|c| c.width)
+                        .and_then(|c| super::playback::track_info::artwork_url(&c.url)),
+                })
+                .collect();
+            if !albums.is_empty() {
+                sections.push(FeedSection {
+                    title: "New albums and singles".into(),
+                    tracks: Vec::new(),
+                    albums,
+                });
+            }
+        }
+        if let Ok(Ok(videos)) = videos {
+            let list = tracks(videos);
+            if !list.is_empty() {
+                sections.push(section("New music videos", list));
+            }
+        }
         if !sections.is_empty() {
             return Ok(sections);
         }
@@ -121,10 +230,24 @@ pub async fn feed(
     if list.is_empty() {
         return Err(LibraryError::Unavailable);
     }
-    Ok(vec![FeedSection {
-        title: title.into(),
-        tracks: list,
-    }])
+    Ok(vec![section(title, list)])
+}
+/// The moods and genres on YouTube Music's Explore page.
+pub async fn genres(pipe: &RustyPipe) -> Result<Vec<Genre>, LibraryError> {
+    let list = tokio::time::timeout(Duration::from_secs(12), pipe.query().music_genres())
+        .await
+        .map_err(|_| LibraryError::Unavailable)?
+        .map_err(|_| LibraryError::Unavailable)?;
+    Ok(list
+        .into_iter()
+        .filter(|g| genre_id(&format!("genre:{}", g.id)).is_some() && !g.name.trim().is_empty())
+        .take(60)
+        .map(|g| Genre {
+            id: g.id,
+            name: g.name,
+            mood: g.is_mood,
+        })
+        .collect())
 }
 pub async fn suggestions(pipe: &RustyPipe, query: &str) -> Result<Vec<String>, LibraryError> {
     let query = query.trim();

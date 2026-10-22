@@ -53,6 +53,19 @@ pub async fn discovery_feed(
     )
     .await
 }
+/// The moods and genres on YouTube Music's Explore page.
+#[tauri::command]
+pub async fn discovery_genres(
+    window: WebviewWindow,
+    youtube: State<'_, YouTubeState>,
+) -> Result<Vec<crate::core::discovery::Genre>, LibraryError> {
+    main(&window)?;
+    static REQUESTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
+    let _permit = REQUESTS
+        .try_acquire()
+        .map_err(|_| LibraryError::Unavailable)?;
+    crate::core::discovery::genres(youtube.pipe.as_ref().ok_or(LibraryError::Unavailable)?).await
+}
 #[tauri::command]
 pub async fn search_suggestions(
     window: WebviewWindow,

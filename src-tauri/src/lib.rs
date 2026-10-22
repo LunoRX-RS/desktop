@@ -87,6 +87,7 @@ pub fn run() {
             commands::library::library_history,
             commands::library::library_clear_history,
             commands::discovery::discovery_feed,
+            commands::discovery::discovery_genres,
             commands::discovery::search_suggestions,
             commands::library::library_likes,
             commands::library::library_set_like,

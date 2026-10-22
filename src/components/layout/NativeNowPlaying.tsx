@@ -266,14 +266,12 @@ export function NativeNowPlaying() {
               <Scrubber label="Seek YouTube" max={Math.max(1, s.durationMs / 1000)} value={s.positionMs / 1000}
                 disabled={!seekable} onCommit={(value) => void seekPlayback(value)} className="flex-1" />
               <span>{formatDuration(s.durationMs / 1000)}</span>
+              <span className="ml-2 inline-flex items-center gap-1.5">
+                {s.volume === 0 ? <VolumeX size={16} aria-hidden="true" /> : s.volume < 50 ? <Volume1 size={16} aria-hidden="true" /> : <Volume2 size={16} aria-hidden="true" />}
+                <Scrubber label="Volume" max={100} value={s.volume} disabled={!seekable} onChange={(value) => void setPlaybackVolume(value)} className="w-24" />
+              </span>
             </div>
-            <div className="ln-np-pill-row">
-              <div className="flex min-w-0 items-center justify-start">
-                {lyricsOpen && (
-                  <LyricsSourceControl track={{ providerTrackId: track.providerTrackId, title, artists, durationMs: s.durationMs }} sources={sources} pref={pref} choice={choice}
-                    info={s.infoState === "error" ? "error" : info ? "ready" : "loading"} onPick={setPref} onEntry={(entry) => useLyricsStore.getState().setOverride(track.providerTrackId, entry)}
-                    offsetApplies={!!offKey} offsetMs={offsetMs} onOffset={changeOffset} onOpenSettings={openLyricsSettings} />)}
-              </div>
+            <div className="flex items-center justify-center">
               <div className="flex items-center gap-1">
                 <RepeatButton className="size-9" />
                 <IconButton label="Previous track" disabled={s.busy || !seekable} onClick={() => void playerSkip(false)} className="size-10"><SkipBack size={22} fill="currentColor" /></IconButton>
@@ -283,13 +281,17 @@ export function NativeNowPlaying() {
                 <IconButton label="Next track" disabled={s.busy || !seekable} onClick={() => void playerSkip(true)} className="size-10"><SkipForward size={22} fill="currentColor" /></IconButton>
                 <AutoplayButton className="size-9" />
               </div>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center justify-start">
+                {lyricsOpen && (
+                  <LyricsSourceControl track={{ providerTrackId: track.providerTrackId, title, artists, durationMs: s.durationMs }} sources={sources} pref={pref} choice={choice}
+                    info={s.infoState === "error" ? "error" : info ? "ready" : "loading"} onPick={setPref} onEntry={(entry) => useLyricsStore.getState().setOverride(track.providerTrackId, entry)}
+                    offsetApplies={!!offKey} offsetMs={offsetMs} onOffset={changeOffset} onOpenSettings={openLyricsSettings} />)}
+              </div>
               <div className="flex items-center justify-end gap-1">
                 {lyricsOpen && <span ref={setChrome} className="inline-flex items-center gap-1" />}
                 {lyricsOpen && <LayoutToggle value={layout} onChange={setLayout} />}
-                <span className="mx-1 inline-flex items-center gap-1.5 text-secondary-text">
-                  {s.volume === 0 ? <VolumeX size={16} aria-hidden="true" /> : s.volume < 50 ? <Volume1 size={16} aria-hidden="true" /> : <Volume2 size={16} aria-hidden="true" />}
-                  <Scrubber label="Volume" max={100} value={s.volume} disabled={!seekable} onChange={(value) => void setPlaybackVolume(value)} className="w-20" />
-                </span>
                 {fullscreen.supported && (
                   <IconButton label={fullscreen.active ? "Exit full screen" : "Enter full screen"} onClick={fullscreen.toggle} className="size-9">
                     {fullscreen.active ? <Minimize2 size={18} /> : <Maximize2 size={18} />}

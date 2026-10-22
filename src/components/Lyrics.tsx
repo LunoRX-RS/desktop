@@ -238,9 +238,6 @@ export function SyncedLyrics({ lines: given, offsetMs = 0, source, attribution, 
       </div>
       {followPaused && offscreen && <button type="button" onClick={follow} className="ln-lyr-back">Back to current line</button>}
       <Slot at={slots.chrome}>
-        <span className="whitespace-nowrap px-1 text-[13px] tabular-nums text-secondary-text">
-          {index < 0 ? "Intro" : <>Line {index + 1} of {lines.length}{estimate && <span className="sr-only"> (estimated)</span>}</>}
-        </span>
         <OptionsMenu>
           {estimate?.toggle}
           {estimate && (estimate.onReset ? <button type="button" onClick={estimate.onReset} className="ln-lyr-reset mt-1">Reset corrections</button>

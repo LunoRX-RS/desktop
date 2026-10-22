@@ -17,6 +17,7 @@ fn main() {
             "library_history",
             "library_clear_history",
             "discovery_feed",
+            "discovery_genres",
             "search_suggestions",
             "library_likes",
             "library_set_like",
