@@ -23,7 +23,7 @@ A desktop music player for YouTube Music. A Rust core handles search, playback, 
 >
 > **Third-party services.** The app talks to YouTube Music directly and, for lyrics, to several unofficial endpoints. These services have their own terms and may change, restrict or stop working without notice. You are responsible for using the app in a way that complies with the terms that apply to you. [Security model](#security-model) and [Lyrics](#lyrics) describe exactly what is sent where.
 >
-> **Limitation of liability.** The software is provided "AS IS", without warranty of any kind, and you use it at your own risk. In no event shall the authors or contributors be liable for any claim, damages or other liability, including any legal consequences, whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software or the use of or other dealings in it. You are responsible for any outcome of using this software. The [MIT licence](LICENSE) covers the code in this repository.
+> **Limitation of liability.** The software is provided "AS IS", without warranty of any kind, and you use it at your own risk. In no event shall the authors or contributors be liable for any claim, damages or other liability, including any legal consequences, whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software or the use of or other dealings in it. You are responsible for any outcome of using this software. The [GPL-3.0 licence](LICENSE) covers this repository.
 
 ## Contents
 
@@ -114,7 +114,7 @@ Three rules shape the code:
 | macOS bundle | Bundling has been run locally, on a debug build only. |
 | Windows and Linux | Targets. Not verified on real machines. Linux sign-in needs a Secret Service (GNOME Keyring or KWallet). |
 | Release signing | macOS apps are ad-hoc signed unless signing secrets are set. Windows installers are unsigned. |
-| Licences | `rustypipe` is GPL-3.0 and `libmpv` is LGPL. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists every component and licence. The GPL-3.0 question for the combined work is **not resolved**, so do not publish a public release before it is. |
+| Licences | This repository is GPL-3.0, because it links `rustypipe` (GPL-3.0). `libmpv` is LGPL. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists every component and licence. |
 
 ## Quick start
 
@@ -352,9 +352,7 @@ A release is a version tag. Pushing the tag builds the installers and publishes 
 - The unofficial lyric endpoints may change or disappear at any time.
 - The first request to LyricsPlus can be slow and may need one retry.
 - SimpMusic is not supported, because its server answers only its own client.
-- The Library's albums and songs tabs include sample data, labelled in the UI.
 - Playlist track lists cannot be read back from the local store yet. The editor shows counts and status.
-- The GPL-3.0 licence of `rustypipe` conflicts with the MIT licence declared for this repository. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Project documents
 
@@ -369,7 +367,7 @@ A release is a version tag. Pushing the tag builds the installers and publishes 
 | [SECURITY.md](SECURITY.md) | How to report a vulnerability (privately, through GitHub) |
 | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) | Components, licences and what needs attention |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community rules |
-| [LICENSE](LICENSE) | MIT, covering this repository's own code only |
+| [LICENSE](LICENSE) | GPL-3.0, covering this repository |
 
 ## Star History
 

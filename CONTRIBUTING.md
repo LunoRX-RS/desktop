@@ -51,6 +51,7 @@ Each line should show `G` in the second column.
 - Keep changes small and focused on one concern.
 - State which quality gates you ran and their results.
 - Do not change `LICENSE` without a maintainer decision.
+- The project is GPL-3.0. By contributing you agree your changes are released under it.
 
 ## Conduct
 

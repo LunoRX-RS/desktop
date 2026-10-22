@@ -1,6 +1,6 @@
 # Third-party notices
 
-LunoRX Desktop is built from its own code (MIT, see [LICENSE](LICENSE)) and from the open-source components below.
+LunoRX Desktop is released under GPL-3.0 (see [LICENSE](LICENSE)) and is built from its own code and from the open-source components below.
 This file is generated from `Cargo.lock` (Rust, macOS target) and lists each crate with the licence it declares.
 It is an inventory, not legal advice.
 
@@ -8,7 +8,7 @@ It is an inventory, not legal advice.
 
 | Component | Licence | Why it matters |
 |---|---|---|
-| `rustypipe` 0.11.4 | GPL-3.0 | Linked into the application, with one local patch (`src-tauri/vendor/rustypipe/PATCHES.md`). Distributing a program that includes GPL-3.0 code generally means offering the corresponding source of the whole program under GPL-3.0 terms, which does not match the MIT licence this repository declares. The owner has to decide between releasing the combined work under GPL-3.0, replacing `rustypipe`, or getting legal advice. This is unresolved. |
+| `rustypipe` 0.11.4 | GPL-3.0 | Linked into the application, with one local patch (`src-tauri/vendor/rustypipe/PATCHES.md`). This is why the whole program is released under GPL-3.0: anyone who receives a build can get the corresponding source from this repository. Keep the source of every released build available. |
 | `libmpv` (the mpv library) | LGPL-2.1 or later, or GPL-2.0 or later, depending on how a given build was configured | Loaded as a shared library and bundled with the macOS and Windows installers. Redistribution needs this notice, the licence text and a way to get the corresponding source: https://github.com/mpv-player/mpv. Check the licence of the exact build that is bundled (the Homebrew build on macOS, the community build on Windows), and of the libraries that build pulls in. |
 | `libmpv2`, `libmpv2-sys` | LGPL-2.1 | Rust bindings to libmpv. |
 | Five crates under MPL-2.0 | MPL-2.0 | File-level copyleft: keep their licence files and publish modifications to those files. None is modified here. |
