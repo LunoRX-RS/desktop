@@ -750,7 +750,13 @@ pub(crate) async fn skip(app: &AppHandle, forward: bool) {
         (pop_back(&state.autoplay_status), false)
     };
     if let Some(track) = track {
-        let _ = load_track(app, &state, track, queue_selection, forward, Vec::new()).await;
+        // Skipping starts the track: a paused or ended player must not leave the new track sitting at 0:00.
+        if load_track(app, &state, track, queue_selection, forward, Vec::new())
+            .await
+            .is_ok()
+        {
+            let _ = finish(app, dispatch(&state, PlaybackCommand::Play).await);
+        }
     }
 }
 
@@ -864,6 +870,10 @@ pub async fn player_skip(
     let now = progress(&state).await;
     if !forward && now.position_ms > 3_000 {
         let _ = run_seek(&state, 0).await;
+        // Restarting from a paused or ended player resumes it, like Next and Previous do.
+        if now.player.state != PlaybackStateDto::Playing {
+            let _ = finish(&app, dispatch(&state, PlaybackCommand::Play).await);
+        }
     } else {
         skip(&app, forward).await;
     }
