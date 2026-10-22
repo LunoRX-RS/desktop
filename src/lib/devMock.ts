@@ -94,6 +94,15 @@ export function installDevMock(): void {
         case "sync_remove_local_entry": return null;
         case "youtube_connect": ytStatus = "connecting"; return ytStatus;
         case "youtube_connect_finish": ytStatus = "connected"; return ytStatus;
+        case "youtube_import": {
+          emit("core://youtube/import", { state: "running" });
+          await new Promise((r) => setTimeout(r, 1200));
+          likes = [...likes, ...HITS.slice(5, 9).filter((h) => !likes.some((l) => l.providerTrackId === h.providerTrackId))];
+          playlists = [...playlists, { id: "pl" + (playlists.length + 1), name: "Imported: Road trip", remoteId: null, entryCount: 8, uploaded: 0, queuedWrites: 0, unsentEntries: 0 }];
+          const report = { likedAdded: 4, historyAdded: 3, playlistsCreated: 1, playlistsUpdated: 0, playlistTracksAdded: 8, failed: [] };
+          emit("core://youtube/import", { state: "done", report });
+          return report;
+        }
         case "youtube_disconnect": ytStatus = "disconnected"; return ytStatus;
         case "lrc_save": { const g = a.args as { providerTrackId: string; title: string; artists: string[]; lines: { startMs: number; text: string }[] }; const i = lrcs.findIndex((x) => x.providerTrackId === g.providerTrackId); const rec = { ...g, modifiedMs: Date.now() }; if (i >= 0) lrcs[i] = rec; else lrcs.push(rec); return { path: `~/Documents/LUNOR-X Lyrics/${g.artists[0] ?? "Artist"} - ${g.title} [${g.providerTrackId}].lrc`, count: g.lines.length, bytes: g.lines.length * 32 }; }
         case "lrc_delete": { const i = lrcs.findIndex((x) => x.providerTrackId === (a.args as { providerTrackId: string }).providerTrackId); if (i >= 0) lrcs.splice(i, 1); return { deleted: i >= 0 }; }

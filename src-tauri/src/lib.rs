@@ -101,6 +101,7 @@ pub fn run() {
             commands::youtube::youtube_connect,
             commands::youtube::youtube_connect_finish,
             commands::youtube::youtube_connection_status,
+            commands::youtube::youtube_import,
             commands::youtube::youtube_disconnect,
             commands::sync::sync_sign_in,
             commands::sync::sync_sign_out,

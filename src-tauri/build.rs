@@ -31,6 +31,7 @@ fn main() {
             "youtube_connect",
             "youtube_connect_finish",
             "youtube_connection_status",
+            "youtube_import",
             "youtube_disconnect",
             "sync_sign_in",
             "sync_sign_out",

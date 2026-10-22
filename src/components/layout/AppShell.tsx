@@ -33,6 +33,7 @@ import { usePlayback, togglePlayback } from "../../lib/playback";
 import { DUR, tween } from "../../lib/motion";
 import { installDevMock } from "../../lib/devMock";
 import { loadFeed } from "../../lib/discovery";
+import { initYouTubeImport } from "../../lib/youtubeImport";
 
 if (process.env.NODE_ENV === "development") installDevMock();
 
@@ -104,10 +105,12 @@ export default function AppShell() {
     setMounted(true);
     hydrateRecentSearches();
     void refreshLikes();
+    const stopImport = initYouTubeImport();
     // Warm the first screens while the window is still settling: both feeds, and Explore's first topic.
     const warm = () => { void loadFeed("home"); void loadFeed("explore", "charts"); };
     const idle = (window as { requestIdleCallback?: (f: () => void) => number }).requestIdleCallback;
     if (idle) idle(warm); else window.setTimeout(warm, 300);
+    return stopImport;
   }, []);
   const mainRef = useRef<HTMLElement>(null);
   const libraryError = useLibrary(s => s.error);

@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { Button } from "../../components/ui";
 import { usePlayback } from "../../lib/playback";
-import { youtubeConnect, youtubeConnectFinish, youtubeConnectionStatus, youtubeDisconnect,
+import { importSummary, useImport } from "../../lib/youtubeImport";
+import { youtubeConnect, youtubeConnectFinish, youtubeConnectionStatus, youtubeDisconnect, youtubeImport,
   subscribeYouTubeConnection, type YouTubeConnectionStatus } from "../../services/tauri/youtube";
 
 const LABELS: Record<YouTubeConnectionStatus, string> = {
@@ -28,6 +29,12 @@ export function YouTubeConnection() {
   const [status, setStatus] = useState<YouTubeConnectionStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const imp = useImport();
+  async function importNow() {
+    setError("");
+    try { await youtubeImport(); }
+    catch (e) { if (e !== "inUse") setError("Could not import from YouTube Music. Check your connection and try again."); }
+  }
   useEffect(() => {
     let active = true;
     let stop: UnlistenFn | undefined;
@@ -65,6 +72,16 @@ export function YouTubeConnection() {
           <Button variant="ghost" disabled={busy} onClick={() => void run(disconnect)}>{status === "connecting" ? "Cancel" : "Disconnect"}</Button>
         )}
       </div>
+      {status === "connected" && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="secondary" disabled={imp.state === "running"} onClick={() => void importNow()}>
+            {imp.state === "running" ? "Importing…" : "Import from YouTube Music"}
+          </Button>
+          <p role="status" className="text-secondary-text">
+            {imp.state === "running" ? "Reading your liked songs, playlists and history." : imp.state === "failed" ? "The last import did not finish." : imp.report ? importSummary(imp.report) : "Liked songs, saved playlists and recent history are imported when you sign in and every few hours after."}
+          </p>
+        </div>
+      )}
       <p className="text-secondary-text">Sign in on Google’s own page. YouTube session cookies stay in this device’s OS key store and are never sent to the LUNOR-X server.</p>
       {error && <p role="alert" className="text-critical-coral">{error}</p>}
     </div>

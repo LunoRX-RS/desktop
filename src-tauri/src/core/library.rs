@@ -154,6 +154,35 @@ impl SavedLibrary {
         }
         self.commit(&mut tracks, next)
     }
+    /// Adds tracks that are not in the list yet, after the ones already there, up to `cap` entries in total.
+    /// Invalid tracks are skipped. Returns how many were added.
+    pub fn merge_append(
+        &self,
+        incoming: Vec<SavedTrack>,
+        cap: usize,
+    ) -> Result<usize, LibraryError> {
+        let mut tracks = self.tracks.lock().map_err(|_| LibraryError::Storage)?;
+        let mut next = tracks.clone();
+        let mut added = 0;
+        for mut track in incoming {
+            if next.len() >= cap.min(5000) {
+                break;
+            }
+            if track.validate().is_err()
+                || next.iter().any(|t| {
+                    t.provider == track.provider && t.provider_track_id == track.provider_track_id
+                })
+            {
+                continue;
+            }
+            next.push(track);
+            added += 1;
+        }
+        if added > 0 {
+            self.commit(&mut tracks, next)?;
+        }
+        Ok(added)
+    }
     pub fn record_play(&self, mut track: SavedTrack) -> Result<Vec<SavedTrack>, LibraryError> {
         track.validate()?;
         let mut tracks = self.tracks.lock().map_err(|_| LibraryError::Storage)?;
@@ -229,7 +258,10 @@ pub struct ArtistAlbum {
     pub artwork_url: Option<String>,
 }
 /// A YouTube Music track item as a saved-track record. `fallback_cover` fills in when the item has no cover (album pages).
-fn saved_track(t: rustypipe::model::TrackItem, fallback_cover: Option<&str>) -> Option<SavedTrack> {
+pub(crate) fn saved_track(
+    t: rustypipe::model::TrackItem,
+    fallback_cover: Option<&str>,
+) -> Option<SavedTrack> {
     if !extract::valid_id(&t.id) {
         return None;
     }
@@ -405,6 +437,26 @@ mod tests {
         assert!(!album_id(&yt, "MPREb_bad id"));
         assert!(!album_id(&yt, &format!("MPREb_{}", "a".repeat(40))));
         assert!(!album_id(&ProviderId::Spotify, "MPREb_O2gXCdCVGsZ"));
+    }
+    #[test]
+    fn merge_append_adds_new_tracks_after_existing_and_skips_duplicates_and_invalid() {
+        let lib = SavedLibrary::open(path()).unwrap();
+        lib.set_like(track(), true).unwrap();
+        let mut second = track();
+        second.provider_track_id = "aqz-KE-bpKQ".into();
+        second.canonical_url = "https://www.youtube.com/watch?v=aqz-KE-bpKQ".into();
+        let mut invalid = track();
+        invalid.provider_track_id = "bad id".into();
+        let added = lib
+            .merge_append(vec![track(), second, invalid], 5000)
+            .unwrap();
+        assert_eq!(added, 1);
+        let list = lib.list().unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].provider_track_id, "r-G2pKr2_n8");
+        assert_eq!(list[1].provider_track_id, "aqz-KE-bpKQ");
+        assert_eq!(lib.merge_append(list.clone(), 5000).unwrap(), 0);
+        assert_eq!(lib.merge_append(vec![track()], 1).unwrap(), 0);
     }
     fn path() -> PathBuf {
         std::env::temp_dir()

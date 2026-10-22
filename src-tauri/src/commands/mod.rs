@@ -7,6 +7,7 @@ pub mod state;
 pub mod sync;
 pub mod validate;
 pub mod youtube;
+pub mod youtube_import;
 
 pub mod offline;
 

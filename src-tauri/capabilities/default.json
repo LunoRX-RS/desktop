@@ -23,6 +23,7 @@
     "allow-youtube-connect",
     "allow-youtube-connect-finish",
     "allow-youtube-connection-status",
+    "allow-youtube-import",
     "allow-youtube-disconnect",
     "allow-sync-sign-in",
     "allow-sync-sign-out",

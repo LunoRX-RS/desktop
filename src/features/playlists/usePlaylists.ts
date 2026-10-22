@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useImport } from "../../lib/youtubeImport";
 import { CATEGORY_MESSAGES } from "../sync/SyncPanel";
 import {
   syncListLocalPlaylists,
@@ -22,6 +23,8 @@ export function errorText(e: unknown): string {
 // Loads local playlists. `active` guards against setting state after unmount or a newer reload.
 export function useLocalPlaylists() {
   const [version, setVersion] = useState(0);
+  // A finished YouTube import adds playlists, so the list reads again.
+  const imported = useImport((s) => s.finished);
   const [loading, setLoading] = useState(true);
   const [playlists, setPlaylists] = useState<LocalPlaylistDto[]>([]);
   const [error, setError] = useState<ErrorCategory | null>(null);
@@ -45,7 +48,7 @@ export function useLocalPlaylists() {
     return () => {
       active = false;
     };
-  }, [version]);
+  }, [version, imported]);
 
   const reload = useCallback(() => {
     setLoading(true);

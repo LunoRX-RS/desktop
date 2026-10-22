@@ -8,6 +8,7 @@ pub mod registry;
 pub mod search;
 
 pub mod library;
+pub mod youtube_import;
 
 pub mod discovery;
 

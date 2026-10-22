@@ -9,3 +9,15 @@ export function youtubeDisconnect(): Promise<YouTubeConnectionStatus> { return i
 export function subscribeYouTubeConnection(callback: (status: YouTubeConnectionStatus) => void): Promise<UnlistenFn> {
   return listen<YouTubeConnectionStatus>("core://youtube/connection", (event) => callback(event.payload));
 }
+
+export interface ImportReport {
+  likedAdded: number; historyAdded: number; playlistsCreated: number; playlistsUpdated: number; playlistTracksAdded: number;
+  /** Sections that could not be read or stored: "likes", "playlists", "history". */
+  failed: ("likes" | "playlists" | "history")[];
+}
+export type ImportEvent = { state: "running" } | { state: "done"; report: ImportReport } | { state: "failed" };
+/** Imports the YouTube Music collection now (read-only toward YouTube). Rejects with "inUse" while another run is going. */
+export function youtubeImport(): Promise<ImportReport> { return invoke("youtube_import"); }
+export function subscribeYouTubeImport(callback: (event: ImportEvent) => void): Promise<UnlistenFn> {
+  return listen<ImportEvent>("core://youtube/import", (event) => callback(event.payload));
+}
