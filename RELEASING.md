@@ -42,5 +42,6 @@ Windows installers are not code-signed.
 
 ## Before a public release
 
-- `rustypipe` is GPL-3.0 and `libmpv` is LGPL. Distributing the bundled libmpv needs the third-party notices and source offer. This is not done yet, and the `LICENSE` file covers only this repository's own code.
+- `rustypipe` is GPL-3.0 and `libmpv` is LGPL. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists the components and what needs attention. The notices exist, but the GPL-3.0 question for the combined work is **not resolved**: decide it before any public release. The `LICENSE` file covers only this repository's own code.
+- The notices file ships with the source. Copy it into the installers too once the licence question is settled.
 - Run the app from each installer on a clean machine. Only the macOS bundling step has been run locally, on a debug build.

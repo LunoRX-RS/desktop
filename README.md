@@ -32,7 +32,7 @@ A desktop music player for YouTube Music. A Rust core handles search, playback, 
 - [Features](#features)
 - [Status](#status)
 - [Quick start](#quick-start)
-- [Develop in a plain browser](#develop-in-a-plain-browser)
+- [Develop the interface](#develop-the-interface)
 - [Architecture](#architecture)
 - [Repository layout](#repository-layout)
 - [The IPC surface](#the-ipc-surface)
@@ -114,7 +114,7 @@ Three rules shape the code:
 | macOS bundle | Bundling has been run locally, on a debug build only. |
 | Windows and Linux | Targets. Not verified on real machines. Linux sign-in needs a Secret Service (GNOME Keyring or KWallet). |
 | Release signing | macOS apps are ad-hoc signed unless signing secrets are set. Windows installers are unsigned. |
-| Licences | `rustypipe` is GPL-3.0 and `libmpv` is LGPL. The third-party notices and the source offer for the bundled libmpv are not written yet, so do not publish a public release before they are. |
+| Licences | `rustypipe` is GPL-3.0 and `libmpv` is LGPL. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists every component and licence. The GPL-3.0 question for the combined work is **not resolved**, so do not publish a public release before it is. |
 
 ## Quick start
 
@@ -150,19 +150,13 @@ bun run tauri build    # bundles for the current OS
 
 `out/` has to exist before any Rust build of the crate, because `tauri::generate_context!` embeds it (`frontendDist: ../out`). Without it the Rust build fails.
 
-## Develop in a plain browser
-
-You can work on the interface without the native app.
+## Develop the interface
 
 ```sh
-bun run dev            # http://localhost:1420
+bun run tauri dev      # the interface inside the native app, with hot reload
 ```
 
-In development, outside Tauri, `src/lib/devMock.ts` installs a fake IPC layer so every screen has data: generated cover art, a library with liked songs, artists and albums, playlists you can create and fill, a simulated playback clock with a queue and timed lyrics (word-timed and line-timed), Sync sign-in and upload, Lyric Maker saves, offline status and audio settings.
-
-- It installs only when `NODE_ENV` is `development` and the page is not running inside Tauri. Production builds do not include it.
-- Nothing actually plays. State resets on reload, except what the app stores in `localStorage`.
-- An unmocked command logs `[devMock] unmocked command <name>` and returns `null`. When you add a command, add a `case` for it in `devMock.ts`.
+The interface talks to the Rust core through Tauri IPC, so run it inside the app. `bun run dev` alone serves the pages in a browser, but there is no core behind them: every command fails, and the screens show their error states.
 
 ## Architecture
 
@@ -209,7 +203,7 @@ desktop/
 │  ├─ features/              one folder per screen: home, explore, search,
 │  │                         library, artists, playlists, queue, player,
 │  │                         settings, sync, accounts, connections, offline…
-│  ├─ lib/                   stores (Zustand), playback, lyrics, prefetch, devMock
+│  ├─ lib/                   stores (Zustand), playback, lyrics, prefetch, app style
 │  └─ services/tauri/        one typed wrapper per IPC command group
 ├─ src-tauri/
 │  ├─ src/core/              domain, search, playback/, lyrics, library, discovery
@@ -360,7 +354,7 @@ A release is a version tag. Pushing the tag builds the installers and publishes 
 - SimpMusic is not supported, because its server answers only its own client.
 - The Library's albums and songs tabs include sample data, labelled in the UI.
 - Playlist track lists cannot be read back from the local store yet. The editor shows counts and status.
-- The GPL and LGPL notices for bundled dependencies are not written yet.
+- The GPL-3.0 licence of `rustypipe` conflicts with the MIT licence declared for this repository. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Project documents
 
@@ -372,7 +366,8 @@ A release is a version tag. Pushing the tag builds the installers and publishes 
 | [DESIGN.md](DESIGN.md) | Tokens, components, motion and accessibility rules |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branching and quality gates |
 | [RELEASING.md](RELEASING.md) | Tags, installers, signing |
-| [SECURITY.md](SECURITY.md) | How to report a vulnerability |
+| [SECURITY.md](SECURITY.md) | How to report a vulnerability (privately, through GitHub) |
+| [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) | Components, licences and what needs attention |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community rules |
 | [LICENSE](LICENSE) | MIT, covering this repository's own code only |
 
