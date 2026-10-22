@@ -169,8 +169,14 @@ fn rows(tracks: &[PlayCount]) -> Vec<StatsRow> {
         .map(|t| StatsRow {
             provider: t.provider.clone(),
             provider_track_id: t.provider_track_id.clone(),
-            title: t.title.clone(),
-            artists: t.artists.clone(),
+            // The server accepts shorter text than the local file does.
+            title: t.title.chars().take(512).collect(),
+            artists: t
+                .artists
+                .iter()
+                .take(30)
+                .map(|a| a.chars().take(256).collect())
+                .collect(),
             plays: t.plays,
             last_played_ms: t.last_played_ms,
         })

@@ -711,6 +711,20 @@ async fn observe(state: &PlayerState, revision: u64, event: PlayerEvent) -> Repl
 // so the webview treats each command's return value as authoritative.
 pub(crate) fn finish(app: &AppHandle, reply: Reply) -> Result<PlayerStateDto, PlayerError> {
     crate::platform::poke();
+    if let Err(e) = &reply.result {
+        use PlayerErrorCategory as C;
+        // Caller mistakes and races are not product errors; the rest are counted by type only.
+        if !matches!(
+            e.category,
+            C::Validation | C::InvalidTransition | C::StaleOutcome
+        ) {
+            app.state::<crate::commands::telemetry::TelemetryState>()
+                .record(&format!(
+                    "error.playback.{}",
+                    format!("{:?}", e.category).to_lowercase()
+                ));
+        }
+    }
     if let Some(dto) = reply.emit {
         if matches!(dto.state, PlaybackStateDto::Ready | PlaybackStateDto::Idle) {
             let _ = app.emit_to("main", "core://offline/changed", ());
