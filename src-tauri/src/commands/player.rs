@@ -263,7 +263,8 @@ pub struct PlayerProgressDto {
     autoplay: crate::core::playback::autoplay::AutoplayStatus,
 }
 
-#[cfg(test)]
+// Only the macOS media tests build one of these; elsewhere it would be dead code.
+#[cfg(all(test, target_os = "macos"))]
 impl PlayerProgressDto {
     pub(crate) fn for_test(
         player: PlayerStateDto,

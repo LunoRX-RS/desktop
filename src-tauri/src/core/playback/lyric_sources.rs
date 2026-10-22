@@ -244,11 +244,7 @@ impl Http {
         path: &str,
         params: &[(&str, &str)],
     ) -> Result<Vec<u8>, (Fail, u16)> {
-        if self
-            .budget
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
-            .is_err()
-        {
+        if !take_one(&self.budget) {
             return Err((Fail::Failed, 0));
         }
         let mut request = self
@@ -861,6 +857,18 @@ pub fn entry_for(id: &'static str, label: &str, outcome: &Outcome) -> LyricsSour
         }),
         status,
     }
+}
+
+/// Takes one unit from the request budget. Not `fetch_update`: newer toolchains deprecate it for `try_update`.
+fn take_one(budget: &std::sync::atomic::AtomicUsize) -> bool {
+    let mut n = budget.load(Ordering::SeqCst);
+    while n > 0 {
+        match budget.compare_exchange_weak(n, n - 1, Ordering::SeqCst, Ordering::SeqCst) {
+            Ok(_) => return true,
+            Err(now) => n = now,
+        }
+    }
+    false
 }
 
 #[cfg(test)]
