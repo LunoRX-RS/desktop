@@ -40,8 +40,8 @@
       "icons/icon.ico"
     ],
     "category": "Music",
-    "shortDescription": "Unified music player for Spotify and YouTube Music",
-    "longDescription": "LunoRX plays your Spotify and YouTube Music libraries in one desktop app with mixed-provider playlists.",
+    "shortDescription": "Desktop music player for YouTube Music",
+    "longDescription": "LunoRX is a desktop music player for YouTube Music with synced lyrics, local-first playlists and an optional sync backend.",
     "copyright": "Copyright (c) 2026 EvarinthoSec & LUNOR-X contributors",
     "license": "MIT",
     "licenseFile": "../LICENSE",
