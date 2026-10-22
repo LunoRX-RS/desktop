@@ -1,0 +1,56 @@
+[package]
+name = "lunorx"
+version = "1.0.0-rc.0"
+description = "A Tauri App"
+authors = ["you"]
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "lunorx_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+chrono-tz = "0.10"
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+rustypipe = { version = "0.11", default-features = false, features = ["rustls-tls-webpki-roots"] }
+libmpv2 = "4"
+rand = "0.9"
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["rt", "sync", "time", "macros", "net", "io-util", "fs"] }
+tauri-plugin-single-instance = "=2.5.4"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["NSApplication", "NSImage"] }
+objc2-core-foundation = { version = "0.3", default-features = false }
+objc2-foundation = "0.3"
+objc2-media-player = "0.3"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
+
+
+# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+# unwind, not abort: a panicking provider adapter must become a Failed search group, not kill the app (blueprint 8.6).
+panic = "unwind"
+strip = true

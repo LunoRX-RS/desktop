@@ -1,0 +1,19 @@
+pub mod clock;
+pub mod dto;
+pub mod player;
+pub mod providers;
+pub mod search;
+pub mod state;
+pub mod sync;
+pub mod validate;
+pub mod youtube;
+
+pub mod offline;
+
+pub mod library;
+
+pub mod discovery;
+
+pub mod lrc;
+
+pub mod lyric_sources;

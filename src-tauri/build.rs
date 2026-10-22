@@ -1,0 +1,80 @@
+fn main() {
+    println!("cargo:rerun-if-env-changed=MPV_LIB_DIR");
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        let directory = std::env::var("MPV_LIB_DIR").ok().or_else(|| {
+            ["/opt/homebrew/opt/mpv/lib", "/usr/local/opt/mpv/lib"]
+                .into_iter()
+                .find(|dir| std::path::Path::new(dir).join("libmpv.dylib").is_file())
+                .map(str::to_owned)
+        });
+        if let Some(directory) = directory {
+            println!("cargo:rustc-link-search=native={directory}");
+            println!("cargo:rustc-link-arg=-Wl,-rpath,{directory}");
+        }
+    }
+    tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
+        tauri_build::AppManifest::new().commands(&[
+            "library_history",
+            "library_clear_history",
+            "discovery_feed",
+            "search_suggestions",
+            "library_likes",
+            "library_set_like",
+            "library_artist",
+            "library_album",
+            "search_query",
+            "search_cancel",
+            "providers_list",
+            "provider_credential_set",
+            "provider_credential_status",
+            "provider_credential_clear",
+            "youtube_connect",
+            "youtube_connect_finish",
+            "youtube_connection_status",
+            "youtube_disconnect",
+            "sync_sign_in",
+            "sync_sign_out",
+            "sync_discard_pending",
+            "sync_status",
+            "sync_create_local_playlist",
+            "sync_add_local_entry",
+            "sync_upload_playlist",
+            "sync_list_local_playlists",
+            "sync_remove_local_entry",
+            "sync_flush_pending",
+            "sync_resolve_conflict",
+            "player_audio_settings",
+            "player_set_audio_settings",
+            "player_state",
+            "player_progress",
+            "player_track_info",
+            "player_load",
+            "player_play",
+            "player_pause",
+            "player_resume",
+            "player_stop",
+            "player_skip",
+            "player_seek",
+            "player_set_volume",
+            "player_observe",
+            "player_open_external",
+            "offline_status",
+            "offline_keep",
+            "offline_cancel",
+            "offline_remove",
+            "offline_set_limit",
+            "lrc_load",
+            "lrc_save",
+            "lrc_delete",
+            "lrc_reveal",
+            "lrc_list",
+            "lyrics_source_fetch",
+            "lyrics_source_search",
+            "lyrics_source_bind",
+            "lyrics_source_unbind",
+            "lyrics_settings_get",
+            "lyrics_settings_set",
+        ]),
+    ))
+    .unwrap()
+}
