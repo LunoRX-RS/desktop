@@ -222,7 +222,7 @@ desktop/
 ├─ tests/                    frontend tests (bun:test)
 ├─ scripts/release/          release helpers
 ├─ .github/workflows/        release workflow
-├─ AGENT.md  CLAUDE.md       rules for coding agents working here
+├─ AGENTS.md  CLAUDE.md       rules for coding agents working here
 ├─ PRODUCT.md  DESIGN.md     product context and the visual system
 └─ RELEASING.md              how a release is made
 ```
@@ -291,7 +291,7 @@ Sources are tried in the order you set. The default order is your own file, then
 - **Credentials.** YouTube session cookies and the sync token live in the OS key store (Keychain, Credential Manager, Secret Service). The app does not write them to disk, log them, send them to the backend or show them in the UI. Where no secure store exists (Linux without a Secret Service), the feature fails closed. There is no in-memory or plaintext fallback.
 - **Secrets in the binary.** None are shipped.
 - **Ownership.** The server decides who owns what. The client never asserts a user id.
-- **The YouTube exception.** Provider guidelines normally forbid stream extraction and cookie use. For YouTube, the project owner chose native extraction and Google-session sign-in instead of OAuth2, and `AGENT.md` records that decision. It is a decision by the project, and the provider has not approved it. Spotify has no such exception and is unsupported.
+- **The YouTube exception.** Provider guidelines normally forbid stream extraction and cookie use. For YouTube, the project owner chose native extraction and Google-session sign-in instead of OAuth2, and `AGENTS.md` records that decision. It is a decision by the project, and the provider has not approved it. Spotify has no such exception and is unsupported.
 - To report a vulnerability, read [SECURITY.md](SECURITY.md). Please do not open a public issue.
 
 ## Design system
@@ -366,7 +366,7 @@ A release is a version tag. Pushing the tag builds the installers and publishes 
 
 | File | Purpose |
 |---|---|
-| [AGENT.md](AGENT.md) | Working rules: architecture, hard rules, commands, definition of done |
+| [AGENTS.md](AGENTS.md) | Working rules: architecture, hard rules, commands, definition of done |
 | [CLAUDE.md](CLAUDE.md) | Notes for Claude Code sessions |
 | [PRODUCT.md](PRODUCT.md) | Who the app is for and what it must not become |
 | [DESIGN.md](DESIGN.md) | Tokens, components, motion and accessibility rules |

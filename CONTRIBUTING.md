@@ -31,7 +31,7 @@ The live backend test (`src-tauri/tests/backend_sync_live.rs`) runs only when `L
 ## Rules that apply to every change
 
 - **Architecture boundaries.** UI → Tauri IPC → Core. Commands stay thin. The frontend does not own search aggregation, queue or playback state.
-- **Provider compliance.** Do not add search or playback for a provider until its compliance review is recorded. Do not use Lavalink or unofficial stream extraction, except the YouTube exception documented in `AGENT.md`.
+- **Provider compliance.** Do not add search or playback for a provider until its compliance review is recorded. Do not use Lavalink or unofficial stream extraction, except the YouTube exception documented in `AGENTS.md`.
 - **Approval for playback work.** Playback implementation needs an approved plan first.
 - **IPC.** Validate every argument. Do not rename commands or DTO fields to satisfy a lint.
 - **No secrets.** Do not commit credentials, real `.env` values, or provider tokens.
