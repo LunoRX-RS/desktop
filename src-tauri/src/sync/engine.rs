@@ -304,6 +304,25 @@ impl SyncEngine {
         self.commit()
     }
 
+    pub fn rename_local(&mut self, local_id: &str, name: &str) -> Result<(), ErrorCategory> {
+        self.store
+            .rename_local(local_id, name)
+            .map_err(|e| category(&e))?;
+        self.commit()
+    }
+
+    pub fn move_entry(
+        &mut self,
+        local_id: &str,
+        from: usize,
+        to: usize,
+    ) -> Result<(), ErrorCategory> {
+        self.store
+            .move_entry(local_id, from, to)
+            .map_err(|e| category(&e))?;
+        self.commit()
+    }
+
     pub fn delete_local(&mut self, local_id: &str) -> Result<(), ErrorCategory> {
         self.store
             .delete_local(local_id)

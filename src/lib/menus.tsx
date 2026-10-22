@@ -1,5 +1,5 @@
 "use client";
-import { Download, ExternalLink, Heart, HeartOff, Link2, ListPlus, Play, Trash2, User, FolderOpen } from "lucide-react";
+import { ArrowDown, ArrowUp, Download, ExternalLink, Heart, HeartOff, Link2, ListPlus, Play, Trash2, User, FolderOpen } from "lucide-react";
 import type { MenuItem } from "../components/ContextMenu";
 import { playTrack } from "./playback";
 import { toggleSaved, trackKey, useLibrary } from "./library";
@@ -13,7 +13,7 @@ const ICON = 14;
 const copy = (text: string) => { try { void navigator.clipboard?.writeText(text); } catch { /* clipboard blocked: nothing to do */ } };
 
 /** Right-click menu for a track row. `onRemove` adds "Remove from this playlist" when the row sits in one. */
-export function trackMenu(hit: SearchHitDto, opts: { onRemove?: () => void; following?: SearchHitDto[] } = {}) {
+export function trackMenu(hit: SearchHitDto, opts: { onRemove?: () => void; onMoveUp?: () => void; onMoveDown?: () => void; following?: SearchHitDto[] } = {}) {
   const youtube = hit.provider === "YouTube";
   const build = (): MenuItem[] => {
     const liked = useLibrary.getState().tracks.some((t) => trackKey(t) === trackKey(hit));
@@ -24,6 +24,7 @@ export function trackMenu(hit: SearchHitDto, opts: { onRemove?: () => void; foll
     if (artist) items.push({ label: `Go to ${artist.name}`, icon: <User size={ICON} />, onSelect: () => useUi.getState().openArtist(artist) });
     if (youtube) items.push({ label: "Open on YouTube", icon: <ExternalLink size={ICON} />, onSelect: () => void playerOpenExternal({ provider: hit.provider, providerTrackId: hit.providerTrackId, canonicalUrl: hit.canonicalUrl }).catch(() => {}) });
     items.push({ label: "Copy link", icon: <Link2 size={ICON} />, onSelect: () => copy(hit.canonicalUrl) });
+    if (opts.onMoveUp || opts.onMoveDown) items.push({ kind: "separator" }, { label: "Move up", icon: <ArrowUp size={ICON} />, disabled: !opts.onMoveUp, onSelect: () => opts.onMoveUp?.() }, { label: "Move down", icon: <ArrowDown size={ICON} />, disabled: !opts.onMoveDown, onSelect: () => opts.onMoveDown?.() });
     if (opts.onRemove) items.push({ kind: "separator" }, { label: "Remove from this playlist", icon: <Trash2 size={ICON} />, danger: true, onSelect: opts.onRemove });
     return items;
   };

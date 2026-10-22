@@ -47,6 +47,8 @@ fn main() {
             "sync_list_local_playlists",
             "sync_playlist_entries",
             "sync_delete_local_playlist",
+            "sync_rename_local_playlist",
+            "sync_move_local_entry",
             "sync_remove_local_entry",
             "sync_flush_pending",
             "sync_resolve_conflict",

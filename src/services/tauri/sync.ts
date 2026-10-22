@@ -110,6 +110,16 @@ export function syncDeleteLocalPlaylist(localId: string): Promise<void> {
   return invoke<void>("sync_delete_local_playlist", { localId });
 }
 
+/** Renames a playlist that is not on the server. Rejects with "validation" for an uploaded one or a bad name. */
+export function syncRenameLocalPlaylist(localId: string, name: string): Promise<void> {
+  return invoke<void>("sync_rename_local_playlist", { localId, name });
+}
+
+/** Moves a track within a playlist that is not on the server so it ends at index `to`. */
+export function syncMoveLocalEntry(localId: string, from: number, to: number): Promise<void> {
+  return invoke<void>("sync_move_local_entry", { localId, from, to });
+}
+
 export function syncAddLocalEntry(localId: string, entry: LocalEntryDto): Promise<void> {
   return invoke<void>("sync_add_local_entry", { localId, entry });
 }

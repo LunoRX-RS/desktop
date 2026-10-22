@@ -3,16 +3,16 @@ import { OfflinePlaylist, useOffline } from "../offline/OfflinePlaylist";
 import { ResultRow } from "../search/SourceGroup";
 import { menuHandlers } from "../../components/ContextMenu";
 import { playlistMenu } from "../../lib/menus";
-import { removeFromPlaylist } from "../../lib/playlistActions";
+import { moveInPlaylist, removeFromPlaylist } from "../../lib/playlistActions";
 import { useUi } from "../../lib/store";
 import { playTrack, usePlayback } from "../../lib/playback";
 import { useImport } from "../../lib/youtubeImport";
 import { offlineKeep } from "../../services/tauri/offline";
-import { syncDeleteLocalPlaylist, syncPlaylistEntries, type LocalEntryDto } from "../../services/tauri/sync";
+import { syncDeleteLocalPlaylist, syncPlaylistEntries, syncRenameLocalPlaylist, type LocalEntryDto } from "../../services/tauri/sync";
 import type { SearchHitDto } from "../../services/tauri/search";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, Cloud, Download, ListMusic, Play, Send, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Check, Cloud, Pencil, Download, ListMusic, Play, Send, Trash2, Upload } from "lucide-react";
 import { Art } from "../../components/Art";
 import type { View } from "../../lib/store";
 import {
@@ -135,6 +135,7 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [confirmServer, setConfirmServer] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [renaming, setRenaming] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const focusNext = useRef<"heading" | string | null>(null);
@@ -156,7 +157,15 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
     focusNext.current = null;
   });
 
-  useEffect(() => { setConfirmServer(false); setConfirmDelete(false); }, [selectedId]);
+  useEffect(() => { setConfirmServer(false); setConfirmDelete(false); setRenaming(null); }, [selectedId]);
+
+  async function saveRename() {
+    if (!selected || renaming === null) return;
+    const name = renaming.trim();
+    if (name === "" || name === selected.name) { setRenaming(null); return; }
+    const done = await run("detail", "Renaming…", () => "Renamed.", () => syncRenameLocalPlaylist(selected.id, name));
+    if (done !== null) setRenaming(null);
+  }
   // "Delete playlist…" from a right-click menu opens the same confirmation as the button.
   const deleteRequest = useUi((s) => s.deleteRequest);
   useEffect(() => {
@@ -246,15 +255,37 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
       <section aria-labelledby="editor-detail" className="flex items-end gap-5">
         <Art seed={selected.id} tone="ink" rounded="rounded-[10px]" className="size-[152px] shrink-0 shadow-[0_2px_10px_rgba(0,0,0,0.4)]" />
         <div className="flex min-w-0 flex-col gap-1 pb-1">
-          <h2
-            id="editor-detail"
-            ref={headingRef}
-            tabIndex={-1}
-            title={selected.name}
-            className="line-clamp-2 font-display text-[22px] leading-7 font-semibold tracking-[-0.015em] [overflow-wrap:anywhere] outline-none"
-          >
-            {selected.name}
-          </h2>
+          {renaming !== null ? (
+            <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); void saveRename(); }}>
+              <input
+                autoFocus
+                value={renaming}
+                maxLength={120}
+                aria-label="Playlist name"
+                onChange={(e) => setRenaming(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Escape") setRenaming(null); }}
+                className="min-w-0 flex-1 rounded-md bg-white/[0.06] px-2 py-1 font-display text-[18px] font-semibold outline-none"
+              />
+              <Button variant="ghost" type="submit" disabled={busy} aria-label="Save name" className="px-2"><Check size={14} aria-hidden="true" /></Button>
+            </form>
+          ) : (
+            <div className="flex min-w-0 items-start gap-2">
+            <h2
+              id="editor-detail"
+              ref={headingRef}
+              tabIndex={-1}
+              title={selected.name}
+              className="line-clamp-2 font-display text-[22px] leading-7 font-semibold tracking-[-0.015em] [overflow-wrap:anywhere] outline-none"
+            >
+              {selected.name}
+            </h2>
+              {!selected.remoteId && (
+                <Button variant="ghost" aria-label="Rename playlist" className="shrink-0 px-2" onClick={() => setRenaming(selected.name)}>
+                  <Pencil size={14} aria-hidden="true" />
+                </Button>
+              )}
+            </div>
+          )}
           <p className="truncate text-[13px] leading-[18px] text-secondary-text">
             {entriesLabel(selected.entryCount)} · {describeUpload(selected)}
           </p>
@@ -335,7 +366,7 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
         {playlistTracks === null && <p role="status" className="text-[13px] text-secondary-text">Reading tracks…</p>}
         {tracksFailed && <p role="alert" className="text-[13px] text-critical-coral">Could not read this playlist's tracks.</p>}
         {playlistTracks?.length === 0 && !tracksFailed && <p className="text-[13px] text-secondary-text">No tracks yet. Add some from Search.</p>}
-        <ul>{playlistTracks?.slice(0, shown).map((hit, i) => <ResultRow key={`${hit.providerTrackId}:${i}`} hit={hit} following={playlistTracks.slice(i + 1)} onRemove={() => void run("detail", "Removing…", () => "Removed.", () => removeFromPlaylist(selected.id, i))} />)}</ul>
+        <ul>{playlistTracks?.slice(0, shown).map((hit, i) => <ResultRow key={`${hit.providerTrackId}:${i}`} hit={hit} following={playlistTracks.slice(i + 1)} onMoveUp={!selected.remoteId && i > 0 ? () => void run("detail", "Moving…", () => "Moved.", () => moveInPlaylist(selected.id, i, i - 1)) : undefined} onMoveDown={!selected.remoteId && i < playlistTracks.length - 1 ? () => void run("detail", "Moving…", () => "Moved.", () => moveInPlaylist(selected.id, i, i + 1)) : undefined} onRemove={() => void run("detail", "Removing…", () => "Removed.", () => removeFromPlaylist(selected.id, i))} />)}</ul>
         {playlistTracks && playlistTracks.length > shown && <Button variant="ghost" onClick={() => setShown((n) => n + 100)}>Show more</Button>}
       </section>
 
@@ -367,7 +398,7 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
           </Button>
         )}
         <p className="text-[13px] leading-[18px] text-secondary-text">
-          {selected.remoteId ? "Uploaded playlists cannot be deleted yet. Rename and reorder are not available yet." : "Deleting removes this device's copy. Rename and reorder are not available yet."}
+          {selected.remoteId ? "Uploaded playlists cannot be deleted, renamed or reordered yet." : "Deleting removes this device's copy."}
         </p>
       </div>
     </div>

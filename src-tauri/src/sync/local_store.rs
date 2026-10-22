@@ -333,6 +333,40 @@ impl LocalStore {
         }
     }
 
+    /// Renames a playlist that is not on the server. An uploaded one is refused: the server has no rename yet, and the
+    /// two names would drift apart.
+    pub fn rename_local(&mut self, local_id: &str, name: &str) -> Result<(), SyncError> {
+        let name = name.trim();
+        if !(1..=NAME_MAX).contains(&name.chars().count()) {
+            return Err(SyncError::Local("name must be 1 to 200 characters"));
+        }
+        let pl = self.find_mut(local_id)?;
+        if pl.remote_id.is_some() {
+            return Err(SyncError::Local(
+                "an uploaded playlist cannot be renamed yet",
+            ));
+        }
+        pl.name = name.to_string();
+        Ok(())
+    }
+
+    /// Moves entries[from] so it ends up at `to`. Only for a playlist that is not on the server, since the server
+    /// keeps its own order.
+    pub fn move_entry(&mut self, local_id: &str, from: usize, to: usize) -> Result<(), SyncError> {
+        let pl = self.find_mut(local_id)?;
+        if pl.remote_id.is_some() {
+            return Err(SyncError::Local(
+                "an uploaded playlist cannot be reordered yet",
+            ));
+        }
+        if from >= pl.entries.len() || to >= pl.entries.len() {
+            return Err(SyncError::Local("entry index is out of range"));
+        }
+        let entry = pl.entries.remove(from);
+        pl.entries.insert(to, entry);
+        Ok(())
+    }
+
     /// Drops entries[index]. Removing a server-held entry also moves the uploaded count and projected version.
     pub fn remove_entry_at(&mut self, local_id: &str, index: usize) -> Result<(), SyncError> {
         let pl = self.find_mut(local_id)?;
@@ -615,6 +649,31 @@ mod tests {
     }
 
     /// Spotify entry carrying ids only (the only shape the backend accepts for Spotify).
+    #[test]
+    fn a_local_playlist_can_be_renamed_and_reordered_but_an_uploaded_one_cannot() {
+        let mut store = LocalStore::default();
+        let id = store.create_local("Old", None).unwrap();
+        for t in ["a", "b", "c"] {
+            store.add_local_entry(&id, spotify(t)).unwrap();
+        }
+        store.rename_local(&id, "  New name ").unwrap();
+        assert_eq!(store.playlists()[0].name, "New name");
+        assert!(store.rename_local(&id, "   ").is_err());
+        store.move_entry(&id, 0, 2).unwrap();
+        let order: Vec<_> = store.playlists()[0]
+            .entries
+            .iter()
+            .map(|e| e.provider_track_id.clone())
+            .collect();
+        assert_eq!(order, ["b", "c", "a"]);
+        assert!(store.move_entry(&id, 3, 0).is_err());
+        assert!(store.move_entry(&id, 0, 3).is_err());
+        store.playlists[0].remote_id = Some("remote".into());
+        assert!(store.rename_local(&id, "X").is_err());
+        assert!(store.move_entry(&id, 0, 1).is_err());
+        assert_eq!(store.playlists()[0].name, "New name");
+    }
+
     fn spotify(track: &str) -> LocalEntry {
         LocalEntry {
             provider: Provider::Spotify,

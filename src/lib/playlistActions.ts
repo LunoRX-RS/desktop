@@ -1,6 +1,6 @@
 "use client";
 import { offlineKeep } from "../services/tauri/offline";
-import { syncListLocalPlaylists, syncPlaylistEntries, syncAddLocalEntry, syncRemoveLocalEntry, type LocalEntryDto, type LocalPlaylistDto, type Provider } from "../services/tauri/sync";
+import { syncListLocalPlaylists, syncMoveLocalEntry, syncPlaylistEntries, syncAddLocalEntry, syncRemoveLocalEntry, type LocalEntryDto, type LocalPlaylistDto, type Provider } from "../services/tauri/sync";
 import type { SearchHitDto } from "../services/tauri/search";
 import { playTrack } from "./playback";
 
@@ -30,4 +30,5 @@ export async function playPlaylist(id: string): Promise<boolean> {
 export const downloadPlaylist = (id: string) => offlineKeep(id);
 export const listPlaylists = (): Promise<LocalPlaylistDto[]> => syncListLocalPlaylists();
 export const addToPlaylist = (playlistId: string, hit: SearchHitDto) => syncAddLocalEntry(playlistId, hitToEntry(hit));
+export const moveInPlaylist = (playlistId: string, from: number, to: number) => syncMoveLocalEntry(playlistId, from, to);
 export const removeFromPlaylist = (playlistId: string, index: number) => syncRemoveLocalEntry(playlistId, index);

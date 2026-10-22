@@ -118,6 +118,8 @@ pub fn run() {
             commands::sync::sync_list_local_playlists,
             commands::sync::sync_playlist_entries,
             commands::sync::sync_delete_local_playlist,
+            commands::sync::sync_rename_local_playlist,
+            commands::sync::sync_move_local_entry,
             commands::sync::sync_remove_local_entry,
             commands::sync::sync_flush_pending,
             commands::sync::sync_resolve_conflict,

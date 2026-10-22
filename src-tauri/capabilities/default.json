@@ -35,6 +35,8 @@
     "allow-sync-list-local-playlists",
     "allow-sync-playlist-entries",
     "allow-sync-delete-local-playlist",
+    "allow-sync-rename-local-playlist",
+    "allow-sync-move-local-entry",
     "allow-sync-remove-local-entry",
     "allow-sync-flush-pending",
     "allow-sync-resolve-conflict",

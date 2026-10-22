@@ -19,8 +19,8 @@ const playableAfter = (list?: SearchHitDto[]) => (list ?? []).filter((t) => t.pr
 
 // Rows support search keyboard navigation; action buttons are siblings, never nested.
 /** `following` are the tracks after this one in the list the row belongs to; playing the row queues them. */
-export function ResultRow({ hit, large = false, onRemove, following }: { hit: SearchHitDto; large?: boolean; onRemove?: () => void; following?: SearchHitDto[] }) {
-  const menu = trackMenu(hit, { onRemove, following });
+export function ResultRow({ hit, large = false, onRemove, onMoveUp, onMoveDown, following }: { hit: SearchHitDto; large?: boolean; onRemove?: () => void; onMoveUp?: () => void; onMoveDown?: () => void; following?: SearchHitDto[] }) {
+  const menu = trackMenu(hit, { onRemove, onMoveUp, onMoveDown, following });
   const busy = usePlayback((s) => s.busy);
   const youtube = hit.provider === "YouTube";
   const artists = hit.artists.length > 0 ? hit.artists.join(", ") : "Artist not provided";

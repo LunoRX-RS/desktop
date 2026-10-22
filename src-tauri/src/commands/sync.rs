@@ -276,6 +276,25 @@ pub async fn run_delete_local_playlist(
     Ok(())
 }
 
+pub async fn run_rename_local_playlist(
+    state: &SyncEngineState,
+    local_id: &str,
+    name: &str,
+) -> Result<(), ErrorCategory> {
+    let mut co = state.checkout().await?;
+    co.engine().rename_local(local_id, name)
+}
+
+pub async fn run_move_local_entry(
+    state: &SyncEngineState,
+    local_id: &str,
+    from: usize,
+    to: usize,
+) -> Result<(), ErrorCategory> {
+    let mut co = state.checkout().await?;
+    co.engine().move_entry(local_id, from, to)
+}
+
 pub async fn run_remove_local_entry(
     state: &SyncEngineState,
     local_id: &str,
@@ -412,6 +431,25 @@ pub async fn sync_delete_local_playlist(
     local_id: String,
 ) -> Result<(), ErrorCategory> {
     run_delete_local_playlist(&app, &state, &local_id).await
+}
+
+#[tauri::command]
+pub async fn sync_rename_local_playlist(
+    state: State<'_, SyncEngineState>,
+    local_id: String,
+    name: String,
+) -> Result<(), ErrorCategory> {
+    run_rename_local_playlist(&state, &local_id, &name).await
+}
+
+#[tauri::command]
+pub async fn sync_move_local_entry(
+    state: State<'_, SyncEngineState>,
+    local_id: String,
+    from: usize,
+    to: usize,
+) -> Result<(), ErrorCategory> {
+    run_move_local_entry(&state, &local_id, from, to).await
 }
 
 #[tauri::command]
