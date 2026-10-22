@@ -4,6 +4,7 @@ import { loadCustomFonts } from "../../lib/textStyle";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
 import { initHistory } from "../../lib/history";
+import { initTelemetry, track } from "../../lib/telemetry";
 import { hydrateRecentSearches } from "../../lib/store";
 import { useUi } from "../../lib/store";
 import ArtistScreen, { AlbumScreen, SavedLibraryScreen } from "../../features/artists/ArtistsScreen";
@@ -129,6 +130,8 @@ export default function AppShell() {
   const setSelectedPlaylist = useUi((s) => s.setSelectedPlaylist);
   useGlobalKeys();
   useEffect(() => initHistory(), []);
+  useEffect(() => initTelemetry(), []);
+  useEffect(() => { track(`feature.view.${view}`); }, [view]);
 
   // Demo playback clock. Only advances while the simulated state is "playing".
   useEffect(() => {

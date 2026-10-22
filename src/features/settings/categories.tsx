@@ -13,6 +13,7 @@ import { ProviderKeys } from "./ProviderKeys";
 import { LyricsOrder } from "./LyricsOrder";
 import { TextStyleSettings } from "./TextStyleSettings";
 import { DiscordSettings } from "./DiscordSettings";
+import { TelemetrySettings } from "./TelemetrySettings";
 import { Inset, NoteRow, SettingRow, SkeletonRows, StatusRow, syncSummary } from "./rows";
 
 export type CategoryKey = "general" | "playback" | "accounts" | "sync" | "shortcuts" | "about";
@@ -46,6 +47,7 @@ export const SEARCH_INDEX: { cat: CategoryKey; group: string; label: string }[] 
   { cat: "general", group: "settings-text-title", label: "Song title font" },
   { cat: "general", group: "settings-text-title", label: "Song title motion" },
   { cat: "general", group: "settings-fonts", label: "Imported fonts" },
+  { cat: "general", group: "settings-usage", label: "Usage data" },
   { cat: "general", group: "settings-discord", label: "Discord Rich Presence" },
   { cat: "general", group: "settings-discord", label: "Discord Application ID" },
   { cat: "general", group: "settings-startup", label: "Restore last track" },
@@ -122,6 +124,7 @@ function General() {
       </Inset>
       <TextStyleSettings />
       <DiscordSettings />
+      <TelemetrySettings />
       <Inset id="settings-startup" title="Startup">
         <SettingRow label="Restore last track" hint="Read-only. A restored track waits for you to press Play.">Resumes paused</SettingRow>
       </Inset>

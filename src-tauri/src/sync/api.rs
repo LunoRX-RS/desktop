@@ -44,6 +44,23 @@ pub enum Provider {
     YouTube,
 }
 
+/// One upload of anonymous usage counters: `POST /api/v1/telemetry`.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TelemetryBatch<'a> {
+    pub install_id: &'a str,
+    pub app_version: &'a str,
+    pub os: &'a str,
+    pub arch: &'a str,
+    pub counters: Vec<TelemetryCounter<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TelemetryCounter<'a> {
+    pub name: &'a str,
+    pub count: u32,
+}
+
 /// One track's play count, the shape of `PUT /api/v1/stats/{deviceId}` and `GET /api/v1/stats`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -306,6 +323,19 @@ impl ApiClient {
             .get(self.url("/api/v1/auth/session"))
             .bearer_auth(token);
         decode(&self.send(req).await?)
+    }
+
+    /// No session token: telemetry is anonymous.
+    pub async fn post_telemetry(&self, batch: &TelemetryBatch<'_>) -> Result<(), SyncError> {
+        let req = self.http.post(self.url("/api/v1/telemetry")).json(batch);
+        self.send(req).await.map(|_| ())
+    }
+
+    pub async fn delete_telemetry(&self, install_id: &str) -> Result<(), SyncError> {
+        let req = self
+            .http
+            .delete(self.url(&format!("/api/v1/telemetry/{}", path_id(install_id)?)));
+        self.send(req).await.map(|_| ())
     }
 
     /// Replaces this device's stats snapshot for the signed-in user.

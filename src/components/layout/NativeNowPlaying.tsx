@@ -22,6 +22,7 @@ import { useZoneStyle } from "../../lib/textStyle";
 import { useFullscreen } from "../../lib/windowFullscreen";
 import { LyricMaker } from "../LyricMaker";
 import { mineSource, useMyLrc, useMyLrcStore } from "../../lib/myLrc";
+import { track as trackUse } from "../../lib/telemetry";
 import { parseLrc } from "../../lib/lrcParse";
 import { lrcSave } from "../../services/tauri/lrc";
 
@@ -176,6 +177,7 @@ export function NativeNowPlaying() {
       const args = { providerTrackId: trackId, title: trackTitle, artists: trackArtists, durationMs: usePlayback.getState().durationMs, lines };
       const saved = await lrcSave(args);
       useMyLrcStore.getState().set(trackId, { exists: true, path: saved.path, lines });
+      trackUse("feature.lrc-import");
       return lines.length;
     },
   }), [chrome, notes, trackId, trackTitle]);

@@ -15,6 +15,8 @@ pub mod library;
 
 pub mod stats;
 
+pub mod telemetry;
+
 pub mod discovery;
 
 pub mod lrc;

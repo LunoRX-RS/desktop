@@ -161,6 +161,9 @@ impl PlayerState {
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
             let mut last_history_track = None;
+            // The play being timed: its id and when listening time was last added.
+            let mut listening: Option<(String, std::time::Instant)> = None;
+            let mut last_flush = std::time::Instant::now();
             while let Some(report) = receiver.recv().await {
                 let state = app.state::<PlayerState>();
                 let mut engine = state.engine.lock().await;
@@ -201,11 +204,31 @@ impl PlayerState {
                 } else {
                     None
                 };
+                let playing_id = (engine.state() == PlaybackState::Playing)
+                    .then(|| engine.active_track().map(|t| t.provider_track_id.clone()))
+                    .flatten();
                 drop(engine);
                 let dto = progress(&state).await;
                 crate::platform::discord::offer(&dto);
                 let _ = app.emit_to("main", "core://player/progress", dto);
                 if let Some(track) = history_track {
+                    let log = app.state::<crate::commands::stats::AnalyticsState>();
+                    let now_ms = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_or(0, |d| d.as_millis() as u64);
+                    log.with(|l| {
+                        l.begin(
+                            format!("{:?}", track.provider),
+                            track.provider_track_id.clone(),
+                            now_ms,
+                            track.duration_ms.unwrap_or(0),
+                        );
+                        Ok(())
+                    })
+                    .ok();
+                    listening = Some((track.provider_track_id.clone(), std::time::Instant::now()));
+                    app.state::<crate::commands::telemetry::TelemetryState>()
+                        .record("feature.play");
                     let counts = app.state::<crate::commands::stats::StatsState>();
                     if let Err(kind) = counts.with(|s| s.record(track.clone())) {
                         eprintln!("listening stats unavailable: {kind:?}");
@@ -221,6 +244,25 @@ impl PlayerState {
                             let _ = app.emit_to("main", "core://history/error", ());
                         }
                     }
+                }
+                // Listening time only grows while the track is actually playing; a pause or seek gap is never added.
+                if let Some((id, last)) = &mut listening {
+                    let now = std::time::Instant::now();
+                    if playing_id.as_deref() == Some(id.as_str()) {
+                        let ms = now.duration_since(*last).as_millis().min(5_000) as u64;
+                        let log = app.state::<crate::commands::stats::AnalyticsState>();
+                        log.with(|l| {
+                            l.add_listened(id, ms);
+                            Ok(())
+                        })
+                        .ok();
+                    }
+                    *last = now;
+                }
+                if last_flush.elapsed() >= Duration::from_secs(20) {
+                    last_flush = std::time::Instant::now();
+                    let log = app.state::<crate::commands::stats::AnalyticsState>();
+                    let _ = log.with(|l| l.flush());
                 }
                 crate::platform::poke();
             }

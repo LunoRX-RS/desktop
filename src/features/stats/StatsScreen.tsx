@@ -5,6 +5,7 @@ import { Cloud, Play, Trash2 } from "lucide-react";
 import { playTrack } from "../../lib/playback";
 import { useUi } from "../../lib/store";
 import { TrackCover } from "../../components/TrackCover";
+import Analytics from "./Analytics";
 import { Button, EmptyState, Screen, Segmented, StatusNote } from "../../components/ui";
 import { statsClearLocal, statsCloudClear, statsCloudSync, statsLocal, statsSetCloud, type PlayCountDto, type StatsViewDto } from "../../services/tauri/stats";
 
@@ -74,7 +75,7 @@ export default function StatsScreen() {
     <Screen id="stats-title" title="Stats" caption={caption}
       actions={local?.cloud ? <Segmented label="Stats scope" value={scope} options={[{ key: "device", label: "This device" }, { key: "cloud", label: "All devices" }]} onChange={(s) => { setScope(s); if (s === "cloud" && !cloud) void syncCloud(); }} /> : undefined}>
       {note && <StatusNote role={note.tone === "bad" ? "alert" : "status"} tone={note.tone === "bad" ? "amber" : undefined}>{note.text}</StatusNote>}
-      {local && tracks.length === 0 ? (
+      {scope === "device" ? <Analytics key={local?.tracks.length ?? 0} /> : local && tracks.length === 0 ? (
         <EmptyState icon={<Play size={24} />} title="No plays counted yet" action={<Button variant="secondary" onClick={() => navigate("search")}>Find songs</Button>}>
           Songs you play are counted here from now on.
         </EmptyState>

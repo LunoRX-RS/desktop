@@ -36,6 +36,20 @@ pub fn run() {
                         .map_err(|_| core::library::LibraryError::Storage),
                 ),
             ));
+            let telemetry = commands::telemetry::TelemetryState::open(
+                app.path()
+                    .app_data_dir()
+                    .map(|dir| dir.join("telemetry.json"))
+                    .map_err(|_| core::library::LibraryError::Storage),
+            );
+            telemetry.record("app.start");
+            app.manage(telemetry);
+            app.manage(commands::stats::AnalyticsState::open(
+                app.path()
+                    .app_data_dir()
+                    .map(|dir| dir.join("listening-log.json"))
+                    .map_err(|_| core::library::LibraryError::Storage),
+            ));
             app.manage(commands::stats::StatsState::open(
                 app.path()
                     .app_data_dir()
@@ -126,7 +140,13 @@ pub fn run() {
             commands::sync::sync_delete_local_playlist,
             commands::sync::sync_rename_local_playlist,
             commands::sync::sync_move_local_entry,
+            commands::telemetry::telemetry_get,
+            commands::telemetry::telemetry_set,
+            commands::telemetry::telemetry_record,
+            commands::telemetry::telemetry_flush,
+            commands::telemetry::telemetry_delete,
             commands::stats::stats_local,
+            commands::stats::stats_report,
             commands::stats::stats_clear_local,
             commands::stats::stats_set_cloud,
             commands::stats::stats_cloud_sync,
