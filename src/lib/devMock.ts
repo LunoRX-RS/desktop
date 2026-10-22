@@ -113,6 +113,7 @@ export function installDevMock(): void {
         case "sync_list_local_playlists": return playlists;
         case "offline_status": return { keeping, running: false, changed: false, tracks: keeping ? HITS.slice(0, 3).map((t) => ({ track: { provider: "YouTube", id: t.providerTrackId, title: t.title, artists: t.artists, artworkUrl: t.artworkUrl, durationMs: t.durationMs }, error: null, state: "ready" })) : [], usedBytes: keeping ? 18_400_000 : 0, pinnedBytes: keeping ? 18_400_000 : 0, limitBytes: 2_000_000_000 };
         case "sync_create_local_playlist": { const id = "pl" + (playlists.length + 1); playlists = [...playlists, { id, name: a.name as string, remoteId: null, entryCount: 0, uploaded: 0, queuedWrites: 0, unsentEntries: 0 }]; return id; }
+        case "sync_playlist_entries": return HITS.slice(0, Math.min(8, playlists.find((p) => p.id === a.localId)?.entryCount ?? 0)).map((h) => ({ provider: "YouTube", providerTrackId: h.providerTrackId, providerUrl: h.canonicalUrl, title: h.title, artists: h.artists, artworkUrl: h.artworkUrl, durationMs: h.durationMs }));
         case "sync_add_local_entry": playlists = playlists.map((p) => p.id === a.localId ? { ...p, entryCount: p.entryCount + 1 } : p); return null;
         case "player_state": return st();
         case "player_progress": return prog();

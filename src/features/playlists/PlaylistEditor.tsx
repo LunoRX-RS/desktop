@@ -1,8 +1,14 @@
 "use client";
-import { OfflinePlaylist } from "../offline/OfflinePlaylist";
+import { OfflinePlaylist, useOffline } from "../offline/OfflinePlaylist";
+import { ResultRow } from "../search/SourceGroup";
+import { playTrack, usePlayback } from "../../lib/playback";
+import { useImport } from "../../lib/youtubeImport";
+import { offlineKeep } from "../../services/tauri/offline";
+import { syncPlaylistEntries, type LocalEntryDto } from "../../services/tauri/sync";
+import type { SearchHitDto } from "../../services/tauri/search";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, ListMusic, Send, Upload } from "lucide-react";
+import { ArrowLeft, Cloud, Download, ListMusic, Play, Send, Upload } from "lucide-react";
 import { Art } from "../../components/Art";
 import type { View } from "../../lib/store";
 import {
@@ -67,6 +73,55 @@ function ListRow({ p, selected, onSelect }: { p: LocalPlaylistDto; selected: boo
   );
 }
 
+const toHit = (e: LocalEntryDto): SearchHitDto => ({
+  provider: e.provider, providerTrackId: e.providerTrackId, canonicalUrl: e.providerUrl, title: e.title ?? e.providerTrackId,
+  artists: e.artists ?? [], artworkUrl: e.artworkUrl, durationMs: e.durationMs,
+});
+
+/** The playlist's tracks, read from this device. Only YouTube entries can play; Spotify entries keep ids only. */
+function usePlaylistTracks(id: string, count: number) {
+  const [tracks, setTracks] = useState<SearchHitDto[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  const imported = useImport((s) => s.finished);
+  useEffect(() => {
+    let live = true;
+    setFailed(false);
+    syncPlaylistEntries(id).then((list) => { if (live) setTracks(list.map(toHit)); }, () => { if (live) { setTracks([]); setFailed(true); } });
+    return () => { live = false; };
+  }, [id, count, imported]);
+  return { tracks, failed };
+}
+
+function PlaylistActions({ playlist, tracks, busy, conflict, onUpload }: {
+  playlist: LocalPlaylistDto;
+  tracks: SearchHitDto[] | null; busy: boolean; conflict: boolean; onUpload: () => void;
+}) {
+  const playing = usePlayback((s) => s.busy);
+  const { status, busy: offlineBusy, error, act } = useOffline(playlist.id, 0, null);
+  const playable = (tracks ?? []).filter((t) => t.provider === "YouTube");
+  const kept = status?.keeping ?? false;
+  const downloading = status?.running ?? false;
+  const ready = status?.tracks.filter((t) => t.state === "ready").length ?? 0;
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="primary" disabled={playing || playable.length === 0} onClick={() => void playTrack(playable[0], false, playable.slice(1))}>
+          <Play size={14} fill="currentColor" aria-hidden="true" />Play now
+        </Button>
+        <Button variant="secondary" disabled={busy || conflict || !needsUpload(playlist)} onClick={onUpload}>
+          {needsUpload(playlist) ? <Upload size={14} aria-hidden="true" /> : <Cloud size={14} aria-hidden="true" />}
+          {!needsUpload(playlist) ? "On the cloud" : playlist.remoteId ? "Resume upload" : "Upload to cloud"}
+        </Button>
+        <Button variant="secondary" disabled={offlineBusy || !status || downloading || playlist.entryCount === 0} onClick={() => void act(async () => { await offlineKeep(playlist.id); })}>
+          <Download size={14} aria-hidden="true" />
+          {downloading ? "Downloading…" : kept ? `Saved on device (${ready})` : "Download to local"}
+        </Button>
+      </div>
+      {error && <p role="alert" className="text-[13px] text-critical-coral">{error}</p>}
+    </div>
+  );
+}
+
 export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Props) {
   const { loading, playlists, error, reload } = useLocalPlaylists();
   const { status, reload: reloadStatus } = useSyncStatus();
@@ -79,6 +134,9 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
   const focusNext = useRef<"heading" | string | null>(null);
 
   const selected = playlists.find((p) => p.id === selectedId) ?? null;
+  const { tracks: playlistTracks, failed: tracksFailed } = usePlaylistTracks(selected?.id ?? "", selected?.entryCount ?? 0);
+  const [shown, setShown] = useState(100);
+  useEffect(() => setShown(100), [selectedId]);
   const conflict = selected !== null && (status?.conflicts.includes(selected.id) ?? false);
   const syncState = status?.state.state;
 
@@ -184,6 +242,14 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
         </div>
       </section>
 
+      <PlaylistActions
+        playlist={selected}
+        tracks={playlistTracks}
+        busy={busy}
+        conflict={conflict}
+        onUpload={() => void run("detail", "Uploading…", () => "Uploaded.", () => syncUploadPlaylist(selected.id))}
+      />
+
       <OfflinePlaylist key={selected.id} playlist={selected} />
 
       {conflict && (
@@ -228,16 +294,6 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
 
       <div className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          {needsUpload(selected) && (
-            <Button
-              variant="primary"
-              disabled={busy || conflict}
-              onClick={() => run("detail", "Uploading…", () => "Uploaded.", () => syncUploadPlaylist(selected.id))}
-            >
-              <Upload size={14} aria-hidden="true" />
-              {selected.remoteId ? "Resume upload" : "Upload playlist"}
-            </Button>
-          )}
           {selected.remoteId && selected.queuedWrites > 0 && (
             <Button
               variant="secondary"
@@ -255,6 +311,15 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
         <FeedbackLine feedback={feedback} scope="detail" />
       </div>
 
+      <section aria-label="Tracks" className="flex flex-col gap-2">
+        <h3 className="px-1 text-[13px] leading-[18px] font-semibold text-secondary-text">Tracks</h3>
+        {playlistTracks === null && <p role="status" className="text-[13px] text-secondary-text">Reading tracks…</p>}
+        {tracksFailed && <p role="alert" className="text-[13px] text-critical-coral">Could not read this playlist's tracks.</p>}
+        {playlistTracks?.length === 0 && !tracksFailed && <p className="text-[13px] text-secondary-text">No tracks yet. Add some from Search.</p>}
+        <ul>{playlistTracks?.slice(0, shown).map((hit, i) => <ResultRow key={`${hit.providerTrackId}:${i}`} hit={hit} />)}</ul>
+        {playlistTracks && playlistTracks.length > shown && <Button variant="ghost" onClick={() => setShown((n) => n + 100)}>Show more</Button>}
+      </section>
+
       <Group id="editor-facts" title="Details">
         <GroupRow label="Entries">{entriesLabel(selected.entryCount)}</GroupRow>
         <GroupRow label="Server">{describeUpload(selected)}</GroupRow>
@@ -263,8 +328,8 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
             {selected.uploaded} of {selected.entryCount}
           </GroupRow>
         )}
-        <GroupRow label="Track list">Not available yet</GroupRow>
       </Group>
+
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <Button variant="secondary" onClick={() => onNavigate("search")}>

@@ -121,7 +121,7 @@ pub struct SyncStatusDto {
     pub conflicts: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LocalEntryDto {
     pub provider: Provider,
@@ -228,6 +228,33 @@ pub async fn run_add_local_entry(
     };
     let mut co = state.checkout().await?;
     co.engine().add_local_entry(local_id, entry)
+}
+
+/// The playlist's entries in order, as the local copy holds them.
+pub async fn run_playlist_entries(
+    state: &SyncEngineState,
+    local_id: &str,
+) -> Result<Vec<LocalEntryDto>, ErrorCategory> {
+    let mut co = state.checkout().await?;
+    let engine = co.engine();
+    let playlist = engine
+        .local_playlists()
+        .iter()
+        .find(|p| p.id == local_id)
+        .ok_or(ErrorCategory::Validation)?;
+    Ok(playlist
+        .entries
+        .iter()
+        .map(|e| LocalEntryDto {
+            provider: e.provider,
+            provider_track_id: e.provider_track_id.clone(),
+            provider_url: e.provider_url.clone(),
+            title: e.title.clone(),
+            artists: e.artists.clone(),
+            artwork_url: e.artwork_url.clone(),
+            duration_ms: e.duration_ms,
+        })
+        .collect())
 }
 
 pub async fn run_remove_local_entry(
@@ -349,6 +376,14 @@ pub async fn sync_list_local_playlists(
     state: State<'_, SyncEngineState>,
 ) -> Result<Vec<LocalPlaylistDto>, ErrorCategory> {
     run_list_local_playlists(&state).await
+}
+
+#[tauri::command]
+pub async fn sync_playlist_entries(
+    state: State<'_, SyncEngineState>,
+    local_id: String,
+) -> Result<Vec<LocalEntryDto>, ErrorCategory> {
+    run_playlist_entries(&state, &local_id).await
 }
 
 #[tauri::command]

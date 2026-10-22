@@ -41,6 +41,7 @@ fn main() {
             "sync_add_local_entry",
             "sync_upload_playlist",
             "sync_list_local_playlists",
+            "sync_playlist_entries",
             "sync_remove_local_entry",
             "sync_flush_pending",
             "sync_resolve_conflict",

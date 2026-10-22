@@ -111,6 +111,7 @@ pub fn run() {
             commands::sync::sync_add_local_entry,
             commands::sync::sync_upload_playlist,
             commands::sync::sync_list_local_playlists,
+            commands::sync::sync_playlist_entries,
             commands::sync::sync_remove_local_entry,
             commands::sync::sync_flush_pending,
             commands::sync::sync_resolve_conflict,

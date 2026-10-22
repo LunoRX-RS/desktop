@@ -100,6 +100,11 @@ export function syncCreateLocalPlaylist(name: string, description: string | null
   return invoke<string>("sync_create_local_playlist", { name, description });
 }
 
+/** The playlist's entries in order, as this device holds them. */
+export function syncPlaylistEntries(localId: string): Promise<LocalEntryDto[]> {
+  return invoke<LocalEntryDto[]>("sync_playlist_entries", { localId });
+}
+
 export function syncAddLocalEntry(localId: string, entry: LocalEntryDto): Promise<void> {
   return invoke<void>("sync_add_local_entry", { localId, entry });
 }
