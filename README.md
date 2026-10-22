@@ -4,10 +4,7 @@
 
 # LunoRX
 
-**One desktop player. One library. Every provider you listen to.**
-
-A Tauri 2 desktop music player with a Rust core that owns search, playback, queue and sync,
-and a dark glass interface that only ever shows what the core can actually do.
+A desktop music player for YouTube Music. A Rust core handles search, playback, the queue and sync, and the interface only shows what the core can actually do.
 
 `Tauri 2` · `Rust (edition 2024)` · `Next.js 16 static export` · `React 19` · `libmpv` · `macOS first, Windows and Linux supported`
 
@@ -15,27 +12,27 @@ and a dark glass interface that only ever shows what the core can actually do.
 
 ---
 
-> **Status: pre-release (`1.0.0-rc.0`).** It plays real YouTube audio on a developer machine. Spotify playback and search are not supported. No installer has been verified on a clean machine yet. [What works, what does not](#status-the-honest-version) is spelled out below, because a README that overstates is worse than none.
+> **Pre-release (`1.0.0-rc.0`).** It plays real YouTube audio on a developer machine. Spotify search and playback are not supported, and no installer has been tested on a clean machine yet. The [Status](#status) table lists what works and what does not.
 
 > [!IMPORTANT]
-> ### ⚠️ Disclaimer
+> ### Disclaimer
 >
-> **No affiliation.** LunoRX and its contributors are not affiliated with, authorized by, endorsed by, or in any way officially connected with Google LLC, YouTube, YouTube Music, Spotify AB, or any of their subsidiaries or affiliates, nor with the lyric services it can query (LRCLIB, LyricsPlus, Netease Cloud Music, QQ Music, Kugou, Boidu). This is an independent, unofficial, open-source project.
+> **No affiliation.** LunoRX and its contributors are not affiliated with, authorized by, endorsed by, or in any way officially connected with Google LLC, YouTube, YouTube Music, Spotify AB, or any of their subsidiaries or affiliates. The same goes for the lyric services the app can query (LRCLIB, LyricsPlus, Netease Cloud Music, QQ Music, Kugou, Boidu). This is an independent, unofficial, open-source project.
 >
 > **Trademarks.** "Google", "YouTube", "YouTube Music", "Spotify" and all related names, marks, emblems and images are registered trademarks of their respective owners. They are used here only for identification and reference and do not imply any association with, or endorsement by, the trademark holders. There is no intention to infringe on these trademarks or to harm their owners.
 >
-> **Third-party services.** The app reaches YouTube Music directly and, for lyrics, several unofficial endpoints. These services have their own terms, and they may change, restrict or stop working at any time without notice. You are responsible for using the app in a way that complies with the terms that apply to you. See [Security model](#security-model) and [Lyrics](#lyrics) for exactly what is sent where.
+> **Third-party services.** The app talks to YouTube Music directly and, for lyrics, to several unofficial endpoints. These services have their own terms and may change, restrict or stop working without notice. You are responsible for using the app in a way that complies with the terms that apply to you. [Security model](#security-model) and [Lyrics](#lyrics) describe exactly what is sent where.
 >
-> **Limitation of liability.** The software is provided **"AS IS"**, without warranty of any kind, and you use it at your own risk. In no event shall the authors or contributors be liable for any claim, damages or other liability, including any legal consequences, whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software or the use of or other dealings in it. The responsibility for any outcome of using this software rests entirely with the user. The [MIT licence](LICENSE) governs the code in this repository.
+> **Limitation of liability.** The software is provided "AS IS", without warranty of any kind, and you use it at your own risk. In no event shall the authors or contributors be liable for any claim, damages or other liability, including any legal consequences, whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software or the use of or other dealings in it. You are responsible for any outcome of using this software. The [MIT licence](LICENSE) covers the code in this repository.
 
 ## Contents
 
-- [What it is](#what-it-is)
 - [Screenshots](#screenshots)
+- [What it is](#what-it-is)
 - [Features](#features)
-- [Status, the honest version](#status-the-honest-version)
+- [Status](#status)
 - [Quick start](#quick-start)
-- [Develop in a plain browser (dev mock)](#develop-in-a-plain-browser-dev-mock)
+- [Develop in a plain browser](#develop-in-a-plain-browser)
 - [Architecture](#architecture)
 - [Repository layout](#repository-layout)
 - [The IPC surface](#the-ipc-surface)
@@ -53,91 +50,87 @@ and a dark glass interface that only ever shows what the core can actually do.
 
 <table>
   <tr>
-    <td width="50%"><img src="assets/web/listen-now.jpg" alt="Listen Now: recently played, library sidebar and the player bar"><br><sub><b>Listen Now.</b> History, your library in the sidebar, the player bar with the real up-next queue.</sub></td>
-    <td width="50%"><img src="assets/web/playlist-editor.jpg" alt="Playlist Editor: local playlists, offline listening and upload"><br><sub><b>Playlist Editor.</b> Playlists live on this device first; keep offline, upload when you choose.</sub></td>
+    <td width="50%"><img src="assets/web/listen-now.jpg" alt="Listen Now: recently played, library sidebar and the player bar"><br><sub>Listen Now: history, the library in the sidebar, and a player bar showing the real up-next queue.</sub></td>
+    <td width="50%"><img src="assets/web/playlist-editor.jpg" alt="Playlist Editor: local playlists, offline listening and upload"><br><sub>Playlist Editor: playlists live on this device first, and you choose when to keep them offline or upload them.</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="assets/web/lyrics-fullwindow.jpg" alt="Full-window synced lyrics with word-by-word highlight"><br><sub><b>Full-window lyrics.</b> Word-by-word highlight from LyricsPlus, source picker and line counter.</sub></td>
-    <td width="50%"><img src="assets/web/lyrics-split.jpg" alt="Split lyrics view with cover art on the left"><br><sub><b>Split lyrics.</b> Cover and track details beside the lyrics.</sub></td>
+    <td width="50%"><img src="assets/web/lyrics-fullwindow.jpg" alt="Full-window synced lyrics with word-by-word highlight"><br><sub>Full-window lyrics with word-by-word highlighting from LyricsPlus, a source picker and a line counter.</sub></td>
+    <td width="50%"><img src="assets/web/lyrics-split.jpg" alt="Split lyrics view with cover art on the left"><br><sub>Split lyrics view, with the cover and track details beside the text.</sub></td>
   </tr>
 </table>
 
-Full-size originals are in [`assets/`](assets/). The images show the app running on macOS with real YouTube Music data.
+Full-size originals are in [`assets/`](assets/). All four were taken on macOS with real YouTube Music data.
 
 ## What it is
 
-LunoRX is a desktop-first unified music player. The idea is simple and strict:
+LunoRX is a desktop-first music player built around one library that can hold tracks from more than one provider. Each playlist entry records which provider it came from. Your data lives on your machine first. An optional backend that you can host yourself syncs playlists between devices, and the app works without it.
 
-> **One Application. One Library. Multiple Providers. Full User Control.**
+Three rules shape the code:
 
-Playlists mix tracks from different providers in one place, and every entry always says where it comes from. Your data lives on your machine first. An optional, self-hostable backend syncs playlists between devices; the app works fully without it.
-
-Three rules shape every decision in this codebase:
-
-1. **Honest capabilities.** A capability is "supported" only when it was verified. Unknown means unsupported. A track is `PLAYING` only after the player confirms it, never because a Play command was sent.
-2. **The core is the source of truth.** Search, playback state, the queue and sync live in Rust. The React UI renders state and sends intent. It never keeps a second copy of the queue or invents a playback state.
-3. **Two separate auth worlds.** App sign-in (the sync backend) and provider sign-in (YouTube) never mix. Provider credentials stay in the OS key store on this machine and are never sent anywhere else.
+1. A capability counts as supported only after someone verified it. Unknown means unsupported. A track is `PLAYING` once the player confirms it, not when a Play command is sent.
+2. The core owns the state. Search, playback, the queue and sync live in Rust. The React UI draws that state and sends commands, and it keeps no second copy of the queue.
+3. App sign-in (the sync backend) and provider sign-in (YouTube) are separate. Provider credentials stay in the OS key store on this machine.
 
 ## Features
 
-**Listen**
-- Native audio through **libmpv**: seek, volume, stop, resume where you left off, loudness and stream-quality settings, PCM format and sample rate.
-- **Autoplay radio**: when a track ends, the core prepares the next related track ahead of time and plays it. The up-next list is real, selectable, and feeds the Previous button.
-- **Play an album or an artist's songs in order**: Play, Shuffle and Save to playlist from any album or artist page. The core queues the rest as Up next.
-- **macOS integration**: Now Playing widget, media keys, and a Playback menu in the menu bar.
-- **Offline**: keep a playlist on this device; a disk cache with a size limit manages the rest.
+**Listening**
+- Native audio through libmpv: seek, volume, resume where you left off, stream quality, loudness, PCM format and sample rate.
+- Autoplay radio. When a track ends, the core has already prepared the next related track and starts it. The up-next list is real, you can pick from it, and Previous uses it.
+- Play, Shuffle and Save to playlist on every album and artist page. The core queues the remaining tracks as Up next.
+- On macOS: the Now Playing widget, media keys and a Playback menu in the menu bar.
+- Offline: keep a playlist on the device. A disk cache with a size limit handles everything else.
 
-**Find**
-- **Home** (history and recommendations), **Explore** (Discover, Thai music, Pop, Hip-hop, Focus, Chill, Acoustic), **Search** with live suggestions and cancellation of obsolete searches.
-- **Library**: liked songs, artists (with profile photos), albums, and local playlists.
-- **Artist and album pages** with real profiles, discography and track lists.
-- A **command palette** (`⌘K` / `Ctrl+K`) for search and navigation.
+**Finding music**
+- Home (history and recommendations), Explore (Discover, Thai music, Pop, Hip-hop, Focus, Chill, Acoustic), and Search with live suggestions. A newer search cancels the one before it.
+- Library with liked songs, artists (with profile photos), albums and local playlists.
+- Artist and album pages with real profiles, discographies and track lists.
+- A command palette on `⌘K` / `Ctrl+K`.
 
 **Lyrics**
-- Time-synced lyrics with a full-window layout, an active line, intro and instrumental gaps, and click-to-seek.
-- **Eight lyric sources** with an Auto order you control: LyricsPlus, LRCLIB, YouTube Music, Netease, QQ Music, Kugou, Boidu, plus your own files. Real **word-by-word** timing where a source provides it; a clearly labelled *guessed* mode where it does not.
-- **Source picker**, per-source **timing offset**, and **Wrong song? Search by title** with a manual bind.
-- **Lyric Maker**: play a song and type or tap along to write a `.lrc` file with timestamps, with a calibration pass to measure your input delay. Files are plain text in `~/Documents/LUNOR-X Lyrics/`.
+- Time-synced lyrics in a full-window layout, with an active line, gaps for intros and instrumentals, and click to seek.
+- Eight sources in an order you set: LyricsPlus, LRCLIB, YouTube Music, Netease, QQ Music, Kugou, Boidu and your own files. Word-by-word timing appears where a source provides it. Where it does not, a labelled "guessed" mode is available.
+- A source picker, a timing offset per source, and "Wrong song? Search by title" with a manual bind.
+- Lyric Maker: play a song and type or tap along to write a `.lrc` file. A calibration pass measures your input delay. Files are plain text in `~/Documents/LUNOR-X Lyrics/`.
 
-**Own your data**
-- Local-first playlists with an **offline queue**, **optimistic concurrency** (version numbers) and **explicit conflict resolution**: keep mine or keep the server's. Nothing is overwritten silently.
-- Optional sync with a LUNOR-X backend you can host yourself.
+**Your data**
+- Local-first playlists with an offline queue and version numbers for optimistic concurrency. When a conflict comes up, you choose to keep yours or the server's, and nothing is overwritten silently.
+- Optional sync with a LUNOR-X backend.
 
-**Feels like one app**
-- Dark glass-and-blur UI, one accent colour that only ever means *live*, motion that respects `prefers-reduced-motion` and transparency that respects `prefers-reduced-transparency`. WCAG 2.2 AA is the target.
-- Image and feed **prefetching**, persisted feeds (Home and Explore draw instantly, then refresh behind), and a persistent artist-photo cache.
+**Interface**
+- A dark glass-and-blur theme with one accent colour, which means "live". Motion follows `prefers-reduced-motion`, and transparency follows `prefers-reduced-transparency`. The target is WCAG 2.2 AA.
+- Covers are prefetched. Home and Explore feeds persist, so they draw immediately and refresh behind the rows. Artist photos are cached on disk.
 
-## Status, the honest version
+## Status
 
 | Area | State |
 |---|---|
-| YouTube Music search | Works (direct, no API key). |
-| YouTube audio playback | Works through libmpv on a developer machine. Needs libmpv installed. |
-| YouTube sign-in | Google session cookies, stored in the OS key store. **User-approved exception**, see [Security model](#security-model). Not provider approval. |
-| Spotify | **Not supported.** No search, no playback. Reported as unsupported, never faked. |
-| Lyrics | Five unofficial endpoints are used with user acceptance; each can be turned off. See [Lyrics](#lyrics). |
+| YouTube Music search | Works. Direct, no API key. |
+| YouTube audio playback | Works through libmpv on a developer machine. libmpv must be installed. |
+| YouTube sign-in | Google session cookies in the OS key store. This is a project-owner exception, described under [Security model](#security-model). It is not approval from the provider. |
+| Spotify | Not supported. No search and no playback. The app reports it as unsupported. |
+| Lyrics | Five unofficial endpoints, used with the owner's acceptance. Each one can be turned off. See [Lyrics](#lyrics). |
 | Sync with the backend | Works against a running backend (sign in, create, add, upload). Not production-hardened. |
-| Library: albums and songs tabs | Parts are **sample data** and are labelled as a demo in the UI. Playlists and likes are real. |
-| macOS bundle | Bundling was run locally on a debug build only. |
-| Windows and Linux | Targets, **not verified on real machines**. Linux needs a Secret Service (GNOME Keyring or KWallet) for sign-in. |
-| Release signing | macOS ad-hoc unless secrets are provided. Windows installers are unsigned. |
-| Licences | `rustypipe` is GPL-3.0 and `libmpv` is LGPL. Third-party notices and the source offer for the bundled libmpv are **not done yet**. Do not publish publicly before that. |
+| Library: albums and songs tabs | Partly sample data, labelled as a demo in the UI. Playlists and likes are real. |
+| macOS bundle | Bundling has been run locally, on a debug build only. |
+| Windows and Linux | Targets. Not verified on real machines. Linux sign-in needs a Secret Service (GNOME Keyring or KWallet). |
+| Release signing | macOS apps are ad-hoc signed unless signing secrets are set. Windows installers are unsigned. |
+| Licences | `rustypipe` is GPL-3.0 and `libmpv` is LGPL. The third-party notices and the source offer for the bundled libmpv are not written yet, so do not publish a public release before they are. |
 
 ## Quick start
 
 ### Requirements
 
-| Tool | Why |
+| Tool | Used for |
 |---|---|
-| Rust stable with **edition 2024** (`cargo`, `rustfmt`, `clippy`) | The core and the Tauri shell |
-| **Bun** (or Node 22 + npm) | The frontend. `tauri.conf.json` calls `bun run dev` and `bun run build`, so Bun must be on the `PATH` for `tauri dev` and `tauri build` as configured |
+| Rust stable with edition 2024 (`cargo`, `rustfmt`, `clippy`) | The core and the Tauri shell |
+| Bun, or Node 22 with npm | The frontend. `tauri.conf.json` calls `bun run dev` and `bun run build`, so Bun has to be on the `PATH` for `tauri dev` and `tauri build` as configured |
 | Tauri 2 platform prerequisites | See the Tauri docs for your OS |
-| **libmpv** | Native playback. macOS: `brew install mpv` |
-| A Secret Service (Linux only) | GNOME Keyring or KWallet, for sign-in token storage |
+| libmpv | Native playback. On macOS: `brew install mpv` |
+| A Secret Service (Linux only) | GNOME Keyring or KWallet, to store the sign-in token |
 
 On Linux the build also needs `build-essential pkg-config libssl-dev libdbus-1-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev`.
 
-No secrets are needed to build, run or test.
+Building, running and testing need no secrets.
 
 ### Run it
 
@@ -146,7 +139,7 @@ bun install            # or: npm ci
 bun run tauri dev      # starts next dev on :1420, then the native app
 ```
 
-The app starts without a backend. Sync actions report a category error until a backend answers at `http://127.0.0.1:8080` (the default base URL in `src-tauri/src/sync/settings.rs`).
+The app starts without a backend. Sync actions report an error category until a backend answers at `http://127.0.0.1:8080`, the default base URL in `src-tauri/src/sync/settings.rs`.
 
 ### Build it
 
@@ -155,21 +148,21 @@ bun run build          # next build, static export to out/
 bun run tauri build    # bundles for the current OS
 ```
 
-`out/` must exist before any Rust build of the crate, because `tauri::generate_context!` embeds it (`frontendDist: ../out`). A missing `out/` fails the Rust build.
+`out/` has to exist before any Rust build of the crate, because `tauri::generate_context!` embeds it (`frontendDist: ../out`). Without it the Rust build fails.
 
-## Develop in a plain browser (dev mock)
+## Develop in a plain browser
 
-You do not need the native app to work on the interface.
+You can work on the interface without the native app.
 
 ```sh
 bun run dev            # http://localhost:1420
 ```
 
-Outside Tauri in development, `src/lib/devMock.ts` installs a fake IPC layer so **every screen has data**: generated cover art, a library with liked songs, artists and albums, playlists you can create and fill, a fake playback clock with queue and timed lyrics (word-timed and line-timed sources), Sync sign-in and upload, Lyric Maker saves, offline status and audio settings.
+In development, outside Tauri, `src/lib/devMock.ts` installs a fake IPC layer so every screen has data: generated cover art, a library with liked songs, artists and albums, playlists you can create and fill, a simulated playback clock with a queue and timed lyrics (word-timed and line-timed), Sync sign-in and upload, Lyric Maker saves, offline status and audio settings.
 
-- It is installed only when `NODE_ENV` is `development` **and** the page is not inside Tauri. It is not part of a production build.
-- Nothing plays; the audio is simulated. State resets on reload except what the app itself stores in `localStorage`.
-- Unmocked commands log `[devMock] unmocked command <name>` and return `null`. Add a `case` in `devMock.ts` when you add a command.
+- It installs only when `NODE_ENV` is `development` and the page is not running inside Tauri. Production builds do not include it.
+- Nothing actually plays. State resets on reload, except what the app stores in `localStorage`.
+- An unmocked command logs `[devMock] unmocked command <name>` and returns `null`. When you add a command, add a `case` for it in `devMock.ts`.
 
 ## Architecture
 
@@ -198,13 +191,13 @@ Outside Tauri in development, `src/lib/devMock.ts` installs a fake IPC layer so 
         LUNOR-X backend   accounts + playlists only
 ```
 
-Dependency rules, enforced in review:
+The dependency rules are checked in review:
 
-- UI → IPC → Core. The desktop talks to the backend only through `sync/`.
-- The core never depends on UI frameworks or Tauri-specific APIs in domain logic, so core logic is testable without a window.
-- Commands stay thin. Business logic belongs in the core.
-- Search and playback orchestration are not re-implemented in the frontend.
-- Provider details never leak into the generic playlist and queue models. An id from one provider is never substituted for another's, and results are never merged by title alone.
+- The UI calls the core through IPC. The desktop reaches the backend only through `sync/`.
+- Domain logic in the core uses no UI framework and no Tauri-specific API, so it can be tested without a window.
+- Commands stay thin. Business logic goes in the core.
+- The frontend does not re-implement search or playback orchestration.
+- Provider details stay out of the generic playlist and queue models. An id from one provider is never used for another, and results are never merged by title alone.
 
 ## Repository layout
 
@@ -236,14 +229,14 @@ desktop/
 
 ## The IPC surface
 
-Every command is explicit. Adding one means touching **four** places, and a test fails if you forget:
+A new command has to be registered in four places, and a test fails if one is missing:
 
 1. the handler in `src-tauri/src/commands/*.rs`
 2. `generate_handler!` in `src-tauri/src/lib.rs`
 3. the command name in `src-tauri/build.rs` (`AppManifest::commands`)
 4. `allow-<command-name>` in `src-tauri/capabilities/default.json`
 
-The `tests/acl_*.rs` files read those files and assert that every handler of a group is declared **and** allowed. Arguments are validated at the boundary (sizes, id shapes, ranges); errors cross IPC as fixed categories, never as raw messages or stack traces.
+The `tests/acl_*.rs` files read those files and check that every handler in a group is both declared and allowed. Arguments are validated at the boundary (sizes, id shapes, ranges). Errors cross IPC as fixed categories, without raw messages or stack traces.
 
 | Group | Commands |
 |---|---|
@@ -255,7 +248,7 @@ The `tests/acl_*.rs` files read those files and assert that every handler of a g
 | Providers | `youtube_connect` `youtube_connect_finish` `youtube_disconnect` `youtube_connection_status` `provider_credential_set` `provider_credential_status` `provider_credential_clear` |
 | Offline | `offline_status` `offline_keep` `offline_cancel` `offline_remove` `offline_set_limit` |
 
-Events flow back the same typed way (`core://player/state`, `core://player/progress`, `core://library/changed`, `core://history/changed`, `core://history/error`, `core://offline/changed`, `core://youtube/connection`). Every subscription is cleaned up on unmount.
+Events come back through the same typed channel: `core://player/state`, `core://player/progress`, `core://library/changed`, `core://history/changed`, `core://history/error`, `core://offline/changed` and `core://youtube/connection`. Each subscription is removed when its component unmounts.
 
 ## Playback pipeline
 
@@ -265,50 +258,50 @@ UI intent ─► player_load ─► core state machine ─► native host (libmp
                                   └── confirmed events ──┘
 ```
 
-- The state machine rejects stale events by **revision number**. The UI renders only what the core has confirmed.
-- YouTube audio is resolved by RustyPipe, fetched through a bounded-range loopback proxy, and rendered by libmpv. This follows the user-approved exception documented in the project's YouTube notes.
-- **Autoplay** is one bounded radio session: the host's confirmed end-of-file is the only trigger that advances. The next track is prepared (and its lyrics prefetched) before it is needed, with a timeout and a bounded retry.
-- **Volume and seek are latest-wins**: dragging never queues a pile of stale commands.
-- **Offline cache**: a size-limited disk cache; kept playlists are pinned and never evicted.
+- The state machine rejects stale events by revision number, and the UI draws only what the core has confirmed.
+- RustyPipe resolves YouTube audio, a bounded-range loopback proxy fetches it, and libmpv plays it. This path relies on the project-owner exception described under [Security model](#security-model).
+- Autoplay is a single bounded radio session, and the host's confirmed end-of-file is the only thing that advances it. The next track is prepared, and its lyrics prefetched, before it is needed. Preparation has a timeout and a bounded retry.
+- Volume and seek commands are latest-wins, so dragging a slider does not queue stale commands.
+- The offline cache is a disk cache with a size limit. Playlists you keep offline are pinned and never evicted.
 
 ## Lyrics
 
-Sources, tried in your Auto order (default: your own file, then word-timed, then line-timed, then plain text):
+Sources are tried in the order you set. The default order is your own file, then word-timed sources, then line-timed ones, then plain text.
 
-| Source | Gives | Notes |
+| Source | Provides | Notes |
 |---|---|---|
-| My LRC | Line timing | Files you made with Lyric Maker |
-| LyricsPlus | Word timing | Cold requests can take several seconds; "Try again" in the sheet |
-| Netease | Word timing, line timing | Search by title supported |
-| LRCLIB | Line timing, plain | Fuzzy matching with duration checks |
-| QQ Music | Line timing | Search by title supported |
-| Kugou | Line timing | Search by title supported |
+| My LRC | Line timing | Files made with Lyric Maker |
+| LyricsPlus | Word timing | A cold request can take several seconds. Use "Try again" in the source sheet |
+| Netease | Word and line timing | Supports search by title |
+| LRCLIB | Line timing, plain text | Fuzzy matching with duration checks |
+| QQ Music | Line timing | Supports search by title |
+| Kugou | Line timing | Supports search by title |
 | Boidu | Word timing | Answers only for tracks it has cached |
 | YouTube Music | Plain text | No timestamps |
 
-- Only **public track metadata** (title, artists, length) is sent to these services. **Never** a cookie, token or any account data.
-- Most of these endpoints are **unofficial** and could change or disappear. Each source can be turned off in **Settings → Playback & audio**, and results are cached (misses for 24 hours) so a quiet network does not hammer anyone.
-- A line without a real timestamp is never presented as timed. Estimated and guessed timing is labelled as such ("estimated timing", "words guessed"), and real word timing is highlighted only when a source supplies it.
-- Details: the lyric-source contract is documented in the core under `src-tauri/src/core/playback/lyric_sources/`.
+- Only public track metadata (title, artists, length) goes to these services. No cookie, token or account data does.
+- Most of these endpoints are unofficial and could change or disappear. You can turn each source off under Settings > Playback & audio. Results are cached, and misses are remembered for 24 hours, so the app does not keep asking for lyrics a service does not have.
+- A line without a real timestamp is never shown as timed. Estimated and guessed timing carries a label ("estimated timing", "words guessed"), and word highlighting is real only when the source supplies word times.
+- The lyric-source code lives in `src-tauri/src/core/playback/lyric_sources/`.
 
 ## Security model
 
-- **IPC is least-privilege.** Every command is declared, allowed, and arguments are validated. Native permissions are never exposed to remote content.
-- **Content Security Policy is strict.** `style-src 'self'` with no inline styles, `script-src` limited to self and YouTube, images only from self, `data:` and the known thumbnail hosts. That is why motion code mounts client-side only.
-- **Credentials**: YouTube session cookies and the sync token live in the OS key store (Keychain, Credential Manager, Secret Service). They are never written to disk by the app, never logged, never sent to the backend, never shown to the UI. If no secure store exists (Linux without a Secret Service), the feature **fails closed**; there is no in-memory or plaintext fallback.
-- **No client secrets** are shipped in the binary.
-- **Ownership is the server's job.** The client never asserts a user id.
-- **The YouTube exception.** Provider guidelines normally forbid stream extraction and cookie use. For YouTube, the project owner explicitly chose native extraction and Google-session sign-in instead of OAuth2. That decision is recorded in `AGENT.md`. It is a project decision, **not** an approval from the provider. Spotify has no such exception and is unsupported.
-- To report a vulnerability, read [SECURITY.md](SECURITY.md). Do not open a public issue.
+- **IPC.** Every command is declared and allowed, and its arguments are validated. Native permissions are not exposed to remote content.
+- **Content Security Policy.** `style-src 'self'` with no inline styles, `script-src` limited to the app and YouTube, and images only from the app, `data:` and the known thumbnail hosts. This is why motion code mounts on the client only.
+- **Credentials.** YouTube session cookies and the sync token live in the OS key store (Keychain, Credential Manager, Secret Service). The app does not write them to disk, log them, send them to the backend or show them in the UI. Where no secure store exists (Linux without a Secret Service), the feature fails closed. There is no in-memory or plaintext fallback.
+- **Secrets in the binary.** None are shipped.
+- **Ownership.** The server decides who owns what. The client never asserts a user id.
+- **The YouTube exception.** Provider guidelines normally forbid stream extraction and cookie use. For YouTube, the project owner chose native extraction and Google-session sign-in instead of OAuth2, and `AGENT.md` records that decision. It is a decision by the project, and the provider has not approved it. Spotify has no such exception and is unsupported.
+- To report a vulnerability, read [SECURITY.md](SECURITY.md). Please do not open a public issue.
 
 ## Design system
 
-Dark glass-and-blur theme with one accent, **Lumen Lavender `#c5b4ff`**, that means *live state* and nothing else. No borders on panels. The sidebar and player bar use blur; everything else stays flat and quiet. Components are `ln-` classes plus Tailwind v4 tokens declared in `src/app/globals.css`.
+The theme is dark glass and blur with one accent, Lumen Lavender (`#c5b4ff`), which marks live state and nothing else. Panels have no borders. Only the sidebar and the player bar use blur, and everything else is flat. Components are `ln-` classes plus Tailwind v4 tokens declared in `src/app/globals.css`.
 
 - Product context: [PRODUCT.md](PRODUCT.md)
 - Visual system, tokens and component rules: [DESIGN.md](DESIGN.md)
 
-Read both before UI work. Every state is designed: loading, empty, unavailable, unauthorized, unsupported, failed, retrying and offline each look different, and an unsupported action is explained rather than hidden or faked.
+Read both before UI work. Loading, empty, unavailable, unauthorized, unsupported, failed, retrying and offline each have their own look, and an unsupported action is explained on screen instead of being hidden.
 
 ## Keyboard shortcuts
 
@@ -320,13 +313,13 @@ Read both before UI work. Every state is designed: loading, empty, unavailable, 
 | Play or pause (not while typing) | `Space` | `Space` |
 | Close Now Playing, palette or dialog | `Esc` | `Esc` |
 
-Lyric Maker and the macOS Playback menu have their own shortcuts, listed in **Settings → Keyboard shortcuts**.
+Lyric Maker and the macOS Playback menu have their own shortcuts, listed under Settings > Keyboard shortcuts.
 
 ## Quality gates and tests
 
-Run the gates for whatever you touch. Zero warnings is the policy; a blanket `#[allow]` is not accepted, a targeted one needs the smallest scope and a one-line reason. Use `--locked` and do not update dependencies to silence a lint.
+Run the gates for the part you changed. The policy is zero warnings. Blanket `#[allow]` is not accepted, and a targeted one needs the smallest possible scope and a one-line reason. Use `--locked`, and do not update dependencies to silence a lint.
 
-**Rust**, from `src-tauri/`:
+Rust, from `src-tauri/`:
 
 ```sh
 cargo fmt --check
@@ -334,7 +327,7 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked
 ```
 
-**Frontend**, from the repository root:
+Frontend, from the repository root:
 
 ```sh
 bun run lint           # tsc --noEmit
@@ -344,53 +337,44 @@ bun test tests/        # frontend tests (bun:test)
 
 | Suite | What it covers |
 |---|---|
-| Unit tests (`#[cfg(test)]` next to the code) | Domain, search engine, playback state machine, queue, autoplay, lyrics matching and parsing, lyric sources against local mock servers, library, sync engine, persistence, token store (in-memory double; tests never touch the real keychain) |
+| Unit tests (`#[cfg(test)]` next to the code) | Domain, search engine, playback state machine, queue, autoplay, lyrics matching and parsing, lyric sources against local mock servers, library, sync engine, persistence, and the token store (an in-memory double, so tests never touch the real keychain) |
 | `tests/acl_*.rs` | Every command is in the manifest and allowed in the capability set |
-| `tests/backend_sync_live.rs` | Real sign-in and playlist flow. Runs only when `LUNORX_LIVE_BACKEND_URL` is set; otherwise skips and passes |
-| `tests/youtube_live.rs` | Live YouTube Data API search. Runs only when `LUNORX_LIVE_YOUTUBE_KEY` is set; otherwise skips |
+| `tests/backend_sync_live.rs` | A real sign-in and playlist flow. Runs only when `LUNORX_LIVE_BACKEND_URL` is set, and otherwise skips |
+| `tests/youtube_live.rs` | Live YouTube Data API search. Runs only when `LUNORX_LIVE_YOUTUBE_KEY` is set, and otherwise skips |
 | `tests/*.test.mjs` | Frontend store logic |
 
-Last full Rust run recorded while writing this file (2026-10-22): **555 passed, 0 failed**. Treat that as a snapshot, not a promise; run it yourself.
+The last full Rust run, on 2026-10-22, passed 555 tests with no failures. Run it yourself for a current number.
 
 Not covered: end-to-end UI tests, a release bundle run on Windows or Linux, load tests, and playback against a real player in CI.
 
 ## Releasing
 
-A release is a version tag. Pushing it builds the installers and publishes them with `SHA256SUMS.txt`. Versions are kept in `package.json` and `src-tauri/Cargo.toml`; the workflow refuses a tag that does not match both. Full steps, the platform table and the signing secrets are in [RELEASING.md](RELEASING.md).
+A release is a version tag. Pushing the tag builds the installers and publishes them with `SHA256SUMS.txt`. The version lives in `package.json` and `src-tauri/Cargo.toml`, and the workflow rejects a tag that does not match both. [RELEASING.md](RELEASING.md) has the full steps, the platform table and the signing secrets.
 
 ## Known limits
 
-- libmpv is required at runtime on a developer machine. Release bundles are meant to ship it; that was only exercised on macOS, on a debug build.
-- Fetching an artist photo needs a full artist profile request. The app does two at a time and remembers results, so the first run with many liked artists fills in gradually.
-- Unofficial lyric endpoints may change or vanish at any time.
+- libmpv has to be installed to run from source. Release bundles are meant to ship it, but that has only been tried on macOS, on a debug build.
+- An artist photo needs a full artist profile request. The app makes two at a time and remembers the results, so the first run with many liked artists fills in gradually.
+- The unofficial lyric endpoints may change or disappear at any time.
 - The first request to LyricsPlus can be slow and may need one retry.
-- SimpMusic is not supported: its server only answers its own client.
-- Library albums and songs tabs include sample data, labelled in the UI.
-- Playlist track lists are not readable back from the local store yet; the editor shows counts and status.
-- GPL and LGPL notices for bundled dependencies are not finished.
+- SimpMusic is not supported, because its server answers only its own client.
+- The Library's albums and songs tabs include sample data, labelled in the UI.
+- Playlist track lists cannot be read back from the local store yet. The editor shows counts and status.
+- The GPL and LGPL notices for bundled dependencies are not written yet.
 
 ## Project documents
 
 | File | Purpose |
 |---|---|
-| [AGENT.md](AGENT.md) | The working rules: architecture, hard rules, commands, definition of done |
+| [AGENT.md](AGENT.md) | Working rules: architecture, hard rules, commands, definition of done |
 | [CLAUDE.md](CLAUDE.md) | Notes for Claude Code sessions |
-| [PRODUCT.md](PRODUCT.md) | Who it is for and what it must never become |
+| [PRODUCT.md](PRODUCT.md) | Who the app is for and what it must not become |
 | [DESIGN.md](DESIGN.md) | Tokens, components, motion and accessibility rules |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branching and quality gates |
 | [RELEASING.md](RELEASING.md) | Tags, installers, signing |
 | [SECURITY.md](SECURITY.md) | How to report a vulnerability |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community rules |
 | [LICENSE](LICENSE) | MIT, covering this repository's own code only |
-
----
-
-<div align="center">
-
-**Honest capabilities. A core you can trust. A library that outlives any one provider.**
-
-</div>
-
 
 ## Star History
 
