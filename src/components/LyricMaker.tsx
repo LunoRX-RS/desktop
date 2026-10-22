@@ -12,7 +12,7 @@ import {
   type MLine, type Stamp,
 } from "../lib/lyricMaker";
 import { lrcErrorText, lrcLoad, lrcReveal, lrcSave, type LrcSaveArgs } from "../services/tauri/lrc";
-import { formatDuration } from "../lib/demo-data";
+import { formatDuration } from "../lib/media";
 import { IconButton, Scrubber } from "./ui";
 import { TrackCover } from "./TrackCover";
 import { CalibrateSheet, calibrationLabel, useCalibration } from "./LyricMakerCalibrate";

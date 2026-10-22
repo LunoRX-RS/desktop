@@ -1,33 +1,26 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { ChevronRight, Heart, LayoutGrid, List, ListMusic, Search, X } from "lucide-react";
+import { ChevronRight, LayoutGrid, List, ListMusic, Search, X } from "lucide-react";
 import { useUi, type LibraryTab } from "../../lib/store";
-import { SAMPLE_ALBUMS, SAMPLE_ARTISTS, SAMPLE_TRACKS, type SampleTrack, type Tone } from "../../lib/demo-data";
 import { Art } from "../../components/Art";
+import type { Tone } from "../../lib/media";
 import { MediaCard } from "../../components/MediaCard";
-import { ActivePill, PopOnTrue } from "../../components/Motion";
-import { SongTable, thumbSeed, usePlayTrack } from "../../components/Tracks";
+import { ActivePill } from "../../components/Motion";
 import { Button, EmptyState, IconButton, Screen, Skeleton, StatusNote, cx } from "../../components/ui";
 import { describeUpload, entriesLabel, errorText, useLocalPlaylists } from "../playlists/usePlaylists";
 
-// Albums, Artists and Songs are sample data. Playlists are the user's real local playlists from the sync engine.
+// Playlists are the user's real local playlists from the sync engine. Songs and Artists render in SavedLibraryScreen.
 type SortKey = "added" | "name" | "artist";
 type ViewMode = "grid" | "list";
 
 const TABS: { key: LibraryTab; label: string }[] = [
-  { key: "albums", label: "Albums" },
   { key: "artists", label: "Artists" },
   { key: "songs", label: "Songs" },
   { key: "playlists", label: "Playlists" },
 ];
 
 const SORTS: Record<LibraryTab, { key: SortKey; label: string }[]> = {
-  albums: [
-    { key: "added", label: "Recently added" },
-    { key: "name", label: "Name" },
-    { key: "artist", label: "Artist" },
-  ],
   artists: [
     { key: "added", label: "Recently added" },
     { key: "name", label: "Name" },
@@ -166,11 +159,7 @@ function Loading({ mode }: { mode: ViewMode }) {
 
 export default function LibraryScreen({ onOpenPlaylist }: Props) {
   const tab = useUi((s) => s.libraryTab);
-  const likedOnly = useUi((s) => s.likedOnly);
-  const liked = useUi((s) => s.liked);
   const navigate = useUi((s) => s.navigate);
-  const openDetail = useUi((s) => s.openDetail);
-  const play = usePlayTrack();
   const { loading, playlists, error, reload } = useLocalPlaylists();
 
   const [sort, setSort] = useState<SortKey>("added");
@@ -200,29 +189,6 @@ export default function LibraryScreen({ onOpenPlaylist }: Props) {
   const sorts = SORTS[tab];
   const sortKey = sorts.some((o) => o.key === sort) ? sort : "added";
 
-  const albums = useMemo(() => {
-    const l = SAMPLE_ALBUMS.filter((a) => `${a.title} ${a.artist}`.toLowerCase().includes(needle));
-    if (sortKey === "name") l.sort((a, b) => byText(a.title, b.title));
-    else if (sortKey === "artist") l.sort((a, b) => byText(a.artist, b.artist) || byText(a.title, b.title));
-    else l.sort((a, b) => b.year - a.year);
-    return l;
-  }, [needle, sortKey]);
-
-  const artists = useMemo(() => {
-    const l = SAMPLE_ARTISTS.filter((a) => `${a.name} ${a.genre}`.toLowerCase().includes(needle));
-    if (sortKey === "name") l.sort((a, b) => byText(a.name, b.name));
-    return l;
-  }, [needle, sortKey]);
-
-  const songs = useMemo(() => {
-    const l: SampleTrack[] = SAMPLE_TRACKS.filter(
-      (t) => (!likedOnly || liked[t.id]) && (needle === "" || `${t.title} ${t.artist} ${t.album}`.toLowerCase().includes(needle)),
-    );
-    if (sortKey === "name") l.sort((a, b) => byText(a.title, b.title));
-    else if (sortKey === "artist") l.sort((a, b) => byText(a.artist, b.artist) || byText(a.title, b.title));
-    return l;
-  }, [needle, sortKey, likedOnly, liked]);
-
   // The engine returns playlists in the order they were made, so "Recently added" is that order reversed.
   const shownPlaylists = useMemo(() => {
     const l = playlists.filter((p) => p.name.toLowerCase().includes(needle));
@@ -231,7 +197,6 @@ export default function LibraryScreen({ onOpenPlaylist }: Props) {
     return l;
   }, [playlists, needle, sortKey]);
 
-  const isSample = tab !== "playlists";
   const filterText = filter.trim();
   const noMatch = (what: string): ReactNode => (
     <EmptyState
@@ -305,114 +270,16 @@ export default function LibraryScreen({ onOpenPlaylist }: Props) {
         </ul>
       );
     }
-  } else if (tab === "albums") {
-    if (albums.length === 0) panel = noMatch("albums");
-    else if (mode === "grid") {
-      panel = (
-        <div className={GRID}>
-          {albums.map((a) => (
-            <MediaCard
-              key={a.id}
-              seed={a.title}
-              tone={a.tone}
-              title={a.title}
-              subtitle={`${a.artist} · ${a.trackCount} songs`}
-              onOpen={() => openDetail("album", a.id)}
-              openLabel={`Open album ${a.title} by ${a.artist}`}
-            />
-          ))}
-        </div>
-      );
-    } else {
-      panel = (
-        <ul className="lx-stagger flex flex-col" aria-label="Sample albums">
-          {albums.map((a) => (
-            <Row
-              key={a.id}
-              seed={a.title}
-              tone={a.tone}
-              title={a.title}
-              subtitle={`${a.artist} · ${a.year} · ${a.trackCount} songs`}
-              onClick={() => openDetail("album", a.id)}
-              label={`Open album ${a.title} by ${a.artist}`}
-            />
-          ))}
-        </ul>
-      );
-    }
-  } else if (tab === "artists") {
-    if (artists.length === 0) panel = noMatch("artists");
-    else if (mode === "grid") {
-      panel = (
-        <div className={GRID}>
-          {artists.map((a) => (
-            <MediaCard key={a.id} round seed={a.name} tone={a.tone} title={a.name} subtitle={a.genre} />
-          ))}
-        </div>
-      );
-    } else {
-      panel = (
-        <ul className="lx-stagger flex flex-col" aria-label="Sample artists">
-          {artists.map((a) => (
-            <Row key={a.id} round seed={a.name} tone={a.tone} title={a.name} subtitle={a.genre} />
-          ))}
-        </ul>
-      );
-    }
-  } else if (songs.length === 0) {
-    panel =
-      filterText !== "" ? (
-        noMatch("songs")
-      ) : (
-        <EmptyState
-          icon={<Heart size={24} />}
-          title="No liked songs yet"
-          action={
-            <Button variant="secondary" onClick={() => useUi.setState({ likedOnly: false })} className="mt-1">
-              Show all songs
-            </Button>
-          }
-        >
-          Like a sample song with the heart in the player bar. Likes stay in this window.
-        </EmptyState>
-      );
-  } else if (mode === "grid") {
-    panel = (
-      <div className={GRID}>
-        {songs.map((t) => (
-          <MediaCard
-            key={t.id}
-            seed={thumbSeed(t)}
-            tone={t.tone}
-            title={t.title}
-            subtitle={t.artist}
-            onPlay={() => play.activate(t.id)}
-            playLabel={`${play.isPlaying(t.id) ? "Pause" : "Play"} ${t.title} by ${t.artist}, demo, no audio`}
-          />
-        ))}
-      </div>
-    );
-  } else {
-    panel = <SongTable tracks={songs} label={likedOnly ? "Liked songs (sample)" : "Songs (sample)"} />;
   }
 
   return (
     <Screen
       id="library-title"
-      title={likedOnly ? "Liked Songs" : "Library"}
-      caption={isSample ? "Demo: albums, artists and songs are sample data. Only playlists are yours." : undefined}
+      title="Library"
     >
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <Tabs value={tab} onChange={setTab} />
-          {tab === "songs" && (
-            <Button variant="secondary" aria-pressed={likedOnly} onClick={() => useUi.setState({ likedOnly: !likedOnly })} className={cx(likedOnly && "bg-frost-300")}>
-              <PopOnTrue on={likedOnly}>
-                <Heart size={14} fill={likedOnly ? "currentColor" : "none"} aria-hidden="true" />
-              </PopOnTrue>
-              Liked songs
-            </Button>
-          )}
           <div className="flex-1" />
           <div className="flex h-8 w-[220px] items-center gap-2 rounded-[8px] bg-frost-200 pr-1 pl-2.5 text-secondary-text focus-within:bg-frost-300">
             <Search size={14} className="shrink-0" aria-hidden="true" />

@@ -57,6 +57,7 @@ pub fn run() {
                 eprintln!("media cache unavailable: {kind:?}");
             }
             app.manage(commands::offline::OfflineState { manager: offline });
+            platform::discord::start(app.path().app_data_dir().ok());
             commands::player::PlayerState::start(app.handle());
             platform::install(app.handle());
             tauri::async_runtime::spawn(commands::youtube::YouTubeState::restore(
@@ -88,6 +89,9 @@ pub fn run() {
             commands::library::library_clear_history,
             commands::discovery::discovery_feed,
             commands::discovery::discovery_genres,
+            commands::fonts::fonts_installed,
+            commands::discord::discord_settings_get,
+            commands::discord::discord_settings_set,
             commands::discovery::search_suggestions,
             commands::library::library_likes,
             commands::library::library_set_like,

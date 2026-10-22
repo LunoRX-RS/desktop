@@ -2,7 +2,7 @@
 
 import { ListMusic, Pause, Play } from "lucide-react";
 import { useUi } from "../../lib/store";
-import { formatDuration, type SampleTrack } from "../../lib/demo-data";
+import { formatDuration, type QueueTrack } from "../../lib/media";
 import { Art } from "../../components/Art";
 import { Equaliser, thumbSeed } from "../../components/Tracks";
 import { Button, EmptyState, cx } from "../../components/ui";
@@ -10,7 +10,7 @@ import { Button, EmptyState, cx } from "../../components/ui";
 // The queue here is the demo queue kept in the UI store. The Rust core queue is not reported by any command yet,
 // so this list never shows real playback state. The store has no remove or clear action, so there are no such buttons.
 
-function QueueRow({ t, index, current }: { t: SampleTrack; index: number; current: boolean }) {
+function QueueRow({ t, index, current }: { t: QueueTrack; index: number; current: boolean }) {
   const playing = useUi((s) => s.playing);
   const playIndex = useUi((s) => s.playIndex);
   const togglePlay = useUi((s) => s.togglePlay);

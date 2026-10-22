@@ -7,7 +7,7 @@ import { loadLyricsSettings, useLyricsStore } from "../lib/lyricsStore";
 import { OFFSET_STEP_MS, clampOffset, formatOffset } from "../lib/lyricsTiming";
 import { lyricsSourceBind, lyricsSourceFetch, lyricsSourceSearch, lyricsSourceUnbind, type LyricsCandidateDto, type LyricsTrackArgs } from "../services/tauri/lyricsSources";
 import type { LyricsSourceDto } from "../services/tauri/player";
-import { formatDuration } from "../lib/demo-data";
+import { formatDuration } from "../lib/media";
 
 const FOCUSABLE = 'button:not(:disabled), input:not(:disabled), [tabindex="0"]';
 const REPEAT_DELAY_MS = 400;

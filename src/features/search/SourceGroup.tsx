@@ -6,7 +6,7 @@ import { OpenOnYouTube } from "./OpenOnYouTube";
 import { TrackCover } from "../../components/TrackCover";
 import { ProviderMark } from "../../components/ProviderMark";
 import { Button, StatusNote, cx } from "../../components/ui";
-import { formatDuration } from "../../lib/demo-data";
+import { formatDuration } from "../../lib/media";
 import { useUi } from "../../lib/store";
 import { usePlayback, playTrack } from "../../lib/playback";
 import { menuHandlers } from "../../components/ContextMenu";

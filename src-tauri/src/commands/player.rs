@@ -203,6 +203,7 @@ impl PlayerState {
                 };
                 drop(engine);
                 let dto = progress(&state).await;
+                crate::platform::discord::offer(&dto);
                 let _ = app.emit_to("main", "core://player/progress", dto);
                 if let Some(track) = history_track {
                     last_history_track = Some(track.provider_track_id.clone());
@@ -241,7 +242,7 @@ impl PlayerState {
 #[serde(rename_all = "camelCase")]
 pub struct LoadedTrackDto {
     provider: String,
-    provider_track_id: String,
+    pub(crate) provider_track_id: String,
     canonical_url: String,
     pub(crate) title: String,
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -831,6 +832,7 @@ async fn load_track(
                 let state = app.state::<PlayerState>();
                 let dto = progress(&state).await;
                 let _ = app.emit_to("main", STATE_EVENT, &dto.player);
+                crate::platform::discord::offer(&dto);
                 let _ = app.emit_to("main", "core://player/progress", dto);
             });
             *task = Some(job);
@@ -864,6 +866,7 @@ pub async fn player_set_mode(
     // Wake a running autoplay session so it plans the current track's ending again.
     state.reports.send_modify(|v| *v = v.wrapping_add(0));
     let dto = progress(&state).await;
+    crate::platform::discord::offer(&dto);
     let _ = app.emit_to("main", "core://player/progress", dto);
     Ok(())
 }
@@ -919,6 +922,7 @@ pub async fn player_skip(
         skip(&app, forward).await;
     }
     let dto = progress(&state).await;
+    crate::platform::discord::offer(&dto);
     let _ = app.emit_to("main", "core://player/progress", dto);
     Ok(())
 }

@@ -20,7 +20,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type Keybo
 import { createPortal } from "react-dom";
 import { useUi, type View } from "../../lib/store";
 import { usePlayback } from "../../lib/playback";
-import { SAMPLE_ALBUMS, type Tone } from "../../lib/demo-data";
+import type { Tone } from "../../lib/media";
 import { useLocalPlaylists } from "../../features/playlists/usePlaylists";
 import { syncStatus, type SyncStatusDto } from "../../services/tauri/sync";
 import { Art } from "../Art";
@@ -139,11 +139,10 @@ function NavRow({
 
 /* ---------- Library ---------- */
 
-type Filter = "all" | "playlists" | "albums" | "artists";
+type Filter = "all" | "playlists" | "artists";
 const FILTERS: { id: Filter; label: string }[] = [
   { id: "all", label: "All" },
   { id: "playlists", label: "Playlists" },
-  { id: "albums", label: "Albums" },
   { id: "artists", label: "Artists" },
 ];
 
@@ -293,16 +292,10 @@ export default function Sidebar() {
   const collapsed = useUi((s) => s.sidebarCollapsed);
   const toggleSidebar = useUi((s) => s.toggleSidebar);
   const openLibrary = useUi((s) => s.openLibrary);
-  const openDetail = useUi((s) => s.openDetail);
   const setSelectedPlaylist = useUi((s) => s.setSelectedPlaylist);
   const selectedPlaylistId = useUi((s) => s.selectedPlaylistId);
-  const detail = useUi((s) => s.detail);
   const savedTracks = useLibrary(s => s.tracks);
-  const queue = useUi((s) => s.queue);
-  const index = useUi((s) => s.index);
-  const playing = useUi((s) => s.playing);
   const playbackLabel = usePlayback((s) => s.requested || s.track ? `YouTube · ${s.player.state}` : s.available ? "YouTube · ready" : "Playback unavailable");
-  const playIndex = useUi((s) => s.playIndex);
   const { loading, playlists, error, reload } = useLocalPlaylists();
   const tips = useTip(collapsed);
 
@@ -362,18 +355,9 @@ export default function Sidebar() {
     return [...playlists].sort((a, b) => rank(a.id) - rank(b.id));
   }, [playlists, order]);
 
-  const track = queue[index];
   const likedCount = savedTracks.length;
 
   const items = useMemo<LibItem[]>(() => {
-    const playTrack = (i: number, label: string) => {
-      if (i < 0) {
-        setNote(`${label} has nothing to play in this demo.`);
-        return;
-      }
-      playIndex(i);
-      setNote(`Playing ${label}. Demo, no audio.`);
-    };
     const out: LibItem[] = [];
     const wantPlaylists = filter === "all" || filter === "playlists";
     if (wantPlaylists) {
@@ -408,28 +392,12 @@ export default function Sidebar() {
         });
       }
     }
-    if (filter === "all" || filter === "albums") {
-      for (const a of SAMPLE_ALBUMS) {
-        out.push({
-          key: `a:${a.id}`,
-          kind: "album",
-          title: a.title,
-          subtitle: `Album · ${a.artist}`,
-          tone: a.tone,
-          seed: a.id,
-          active: view === "details" && detail?.kind === "album" && detail.id === a.id,
-          playing: playing && track?.album === a.title,
-          open: () => openDetail("album", a.id),
-          play: () => playTrack(queue.findIndex((t) => t.album === a.title), a.title),
-        });
-      }
-    }
     if (filter === "all" || filter === "artists") {
       const artists = new Map(savedTracks.flatMap(t => t.artists.map(name => [`${t.provider}:${name}`, { name, provider: t.provider, id: t.artistRefs?.find(a => a.name === name)?.id ?? null }] as const)));
       for (const [key, artist] of artists) out.push({ key: `artist:${key}`, kind: "artist", title: artist.name, subtitle: artist.provider === "YouTube" ? "YouTube Music" : artist.provider, tone: "violet", seed: key, active: false, playing: false, open: () => useUi.getState().openArtist(artist), play: () => useUi.getState().openArtist(artist) });
     }
     return out;
-  }, [savedTracks, filter, ordered, likedCount, view, selectedPlaylistId, detail, playing, track, queue, openLibrary, openDetail, setSelectedPlaylist, navigate, playIndex]);
+  }, [savedTracks, filter, ordered, likedCount, view, selectedPlaylistId, openLibrary, setSelectedPlaylist, navigate]);
 
   const tabKey = items.some((i) => i.key === focusKey) ? focusKey : (items[0]?.key ?? null);
 

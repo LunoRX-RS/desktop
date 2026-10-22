@@ -1,5 +1,5 @@
 import { cx } from "./ui";
-import type { Tone } from "../lib/demo-data";
+import type { Tone } from "../lib/media";
 
 // Placeholder artwork drawn in code from a seed (album id or title). No image URLs, no network, no inline style:
 // every colour is an SVG attribute. Six compositions, each with its own palette jitter, so no two tiles match.

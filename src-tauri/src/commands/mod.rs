@@ -18,3 +18,7 @@ pub mod discovery;
 pub mod lrc;
 
 pub mod lyric_sources;
+
+pub mod fonts;
+
+pub mod discord;

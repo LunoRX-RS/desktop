@@ -25,19 +25,17 @@ import TopBar from "./TopBar";
 import PlayerBar from "./PlayerBar";
 import NowPlaying from "./NowPlaying";
 import CommandPalette from "./CommandPalette";
-import DetailsScreen from "../../features/details/DetailsScreen";
 import QueueScreen from "../../features/queue/QueueScreen";
 import NativeQueue from "../../features/queue/NativeQueue";
 import { PlaybackEvents } from "./NativePlayer";
 import { usePlayback, togglePlayback } from "../../lib/playback";
 import { DUR, tween } from "../../lib/motion";
-import { installDevMock } from "../../lib/devMock";
 import { ContextMenuHost } from "../ContextMenu";
 import { loadFeed } from "../../lib/discovery";
 import { initYouTubeImport } from "../../lib/youtubeImport";
 import { applySavedMode } from "../../lib/playMode";
+import { initAppStyle, resetAppScale, stepAppScale } from "../../lib/appStyle";
 
-if (process.env.NODE_ENV === "development") installDevMock();
 
 export type { View } from "../../lib/store";
 
@@ -67,6 +65,9 @@ function useGlobalKeys() {
         s.goForward();
         return;
       }
+      if (mod && (e.key === "=" || e.key === "+")) { e.preventDefault(); stepAppScale(1); return; }
+      if (mod && (e.key === "-" || e.key === "_")) { e.preventDefault(); stepAppScale(-1); return; }
+      if (mod && e.key === "0") { e.preventDefault(); resetAppScale(); return; }
       if (mod && e.key.toLowerCase() === "b") {
         e.preventDefault();
         s.toggleSidebar();
@@ -109,6 +110,7 @@ export default function AppShell() {
     void refreshLikes();
     const stopImport = initYouTubeImport();
     applySavedMode();
+    initAppStyle();
     // Warm the first screens while the window is still settling: both feeds, and Explore's first topic.
     const warm = () => { void loadFeed("home"); void loadFeed("explore", "charts"); };
     const idle = (window as { requestIdleCallback?: (f: () => void) => number }).requestIdleCallback;
@@ -165,7 +167,6 @@ export default function AppShell() {
                     {view === "player" && <div className="lx-scope"><PlayerScreen /></div>}
                     {view === "connections" && <div className="lx-scope"><ConnectionsScreen /></div>}
                     {view === "accounts" && <AccountsScreen />}
-                    {view === "details" && <DetailsScreen />}
                     {view === "settings" && <SettingsScreen />}
                     {view === "sync" && <div className="lx-scope"><SyncPanel /></div>}
                   </ViewFrame>

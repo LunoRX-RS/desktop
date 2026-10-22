@@ -1,9 +1,9 @@
 "use client";
 
 import { create } from "zustand";
-import { SAMPLE_TRACKS, type SampleTrack } from "./demo-data";
+import type { QueueTrack } from "./media";
 
-// UI state only. Playback below is a simulation: nothing produces sound and no provider is involved.
+// UI state only. Real playback lives in lib/playback; the queue below is empty until something is loaded into it.
 
 export type View =
   | "home"
@@ -16,12 +16,10 @@ export type View =
   | "accounts"
   | "settings"
   | "sync"
-  | "details"
   | "artist"
   | "album";
 
-export type DetailRef = { kind: "album" | "playlist"; id: string };
-export type LibraryTab = "albums" | "artists" | "songs" | "playlists";
+export type LibraryTab = "artists" | "songs" | "playlists";
 export type RepeatMode = "off" | "all" | "one";
 
 interface UiState {
@@ -41,7 +39,6 @@ interface UiState {
   lyricsOpen: boolean;
   queueOpen: boolean;
   selectedPlaylistId: string | null;
-  detail: DetailRef | null;
   libraryTab: LibraryTab;
   likedOnly: boolean;
   query: string;
@@ -49,7 +46,7 @@ interface UiState {
   recentSearches: string[];
 
   // Demo playback (simulated UI state only).
-  queue: SampleTrack[];
+  queue: QueueTrack[];
   index: number;
   playing: boolean;
   positionSec: number;
@@ -63,7 +60,6 @@ interface UiState {
   goForward: () => void;
   openLibrary: (tab: LibraryTab, likedOnly?: boolean) => void;
   setSelectedPlaylist: (id: string | null) => void;
-  openDetail: (kind: DetailRef["kind"], id: string) => void;
   toggleSidebar: () => void;
   setPalette: (open: boolean) => void;
   setNowPlaying: (open: boolean) => void;
@@ -109,14 +105,13 @@ export const useUi = create<UiState>()((set, get) => ({
   lyricsOpen: false,
   queueOpen: false,
   selectedPlaylistId: null,
-  detail: null,
   libraryTab: "playlists",
   likedOnly: false,
   query: "",
   pendingSearch: false,
   recentSearches: [],
 
-  queue: SAMPLE_TRACKS,
+  queue: [],
   // -1: nothing is loaded until the user plays something. No track is pre-selected at launch.
   index: -1,
   playing: false,
@@ -124,7 +119,7 @@ export const useUi = create<UiState>()((set, get) => ({
   volume: 100,
   shuffle: false,
   repeat: "off",
-  liked: { "s-01": true, "s-04": true },
+  liked: {},
 
   navigate: (view) => {
     const { view: current, back } = get();
@@ -148,10 +143,6 @@ export const useUi = create<UiState>()((set, get) => ({
     get().navigate("library");
   },
   setSelectedPlaylist: (id) => set({ selectedPlaylistId: id }),
-  openDetail: (kind, id) => {
-    set({ detail: { kind, id } });
-    get().navigate("details");
-  },
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
   setPalette: (open) => set({ paletteOpen: open }),
   setNowPlaying: (open) => set({ nowPlayingOpen: open, lyricsOpen: open ? get().lyricsOpen : false }),

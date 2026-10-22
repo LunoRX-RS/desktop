@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Play } from "lucide-react";
 import { Art, SCRIM_BG } from "./Art";
 import { cx } from "./ui";
-import type { Tone } from "../lib/demo-data";
+import type { Tone } from "../lib/media";
 
 // Square artwork tile, Apple Music style: art on top, title and subtitle under it, no container.
 // The small play button shows on hover and on keyboard focus.

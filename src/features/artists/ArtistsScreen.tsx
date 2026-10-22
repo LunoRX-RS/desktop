@@ -7,7 +7,7 @@ import type { ArtistRef } from "../../services/tauri/search";
 import { Button, Screen, Section, StatusNote, cx } from "../../components/ui";
 import { Art } from "../../components/Art";
 import { useArtistPhoto } from "../../lib/artistPhotos";
-import type { Tone } from "../../lib/demo-data";
+import type { Tone } from "../../lib/media";
 import { ResultRow, providerName } from "../search/SourceGroup";
 import { AddToPlaylist } from "../search/AddToPlaylist";
 import { playTrack, usePlayback } from "../../lib/playback";
@@ -42,7 +42,7 @@ function ArtistCard({ artist, songs }: { artist: ArtistRef; songs: number }) {
 }
 
 function LibraryNav() {
-  return <nav aria-label="Library views" className="flex gap-2">{(["songs", "artists", "playlists", "albums"] as const).map(tab => <Button key={tab} onClick={() => useUi.getState().openLibrary(tab)}>{tab === "songs" ? "Liked Songs" : tab[0].toUpperCase() + tab.slice(1)}</Button>)}</nav>;
+  return <nav aria-label="Library views" className="flex gap-2">{(["songs", "artists", "playlists"] as const).map(tab => <Button key={tab} onClick={() => useUi.getState().openLibrary(tab)}>{tab === "songs" ? "Liked Songs" : tab[0].toUpperCase() + tab.slice(1)}</Button>)}</nav>;
 }
 export function SavedLibraryScreen({ artists = false }: { artists?: boolean }) {
   const tracks = useLibrary(s => s.tracks);

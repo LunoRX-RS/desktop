@@ -2,16 +2,16 @@
 
 import { Pause, Play } from "lucide-react";
 import { useUi } from "../lib/store";
-import { SAMPLE_TRACKS, formatDuration, type SampleTrack } from "../lib/demo-data";
+import { formatDuration, type QueueTrack } from "../lib/media";
 import { Art } from "./Art";
 import { cx } from "./ui";
 
 // Shared by Home and the details view. Everything here is a demo control: no audio is produced.
 
 // Art seed is album plus track id, so two tracks of one album (or one track repeated) never share a cover.
-export const thumbSeed = (t: SampleTrack) => `${t.album}:${t.id}`;
+export const thumbSeed = (t: QueueTrack) => `${t.album}:${t.id}`;
 
-export const playLabel = (t: SampleTrack, current: boolean, playing: boolean) =>
+export const playLabel = (t: QueueTrack, current: boolean, playing: boolean) =>
   `${current && playing ? "Pause" : "Play"} ${t.title} by ${t.artist}, demo, no audio`;
 
 // Which sample track is current in the simulated queue, and whether it is "playing".
@@ -60,7 +60,7 @@ function PlayGlyph({ playing, size }: { playing: boolean; size: number }) {
 
 // 56px row: 40px thumbnail with the play button over it, title, artist, provider, duration.
 // The play button is the only control; the row itself is not interactive, so nothing is nested.
-export function TrackRow({ t }: { t: SampleTrack }) {
+export function TrackRow({ t }: { t: QueueTrack }) {
   const p = usePlayTrack();
   const current = p.isCurrent(t.id);
   const playing = p.isPlaying(t.id);
@@ -105,7 +105,7 @@ export function TrackRow({ t }: { t: SampleTrack }) {
 
 // Song table: sentence-case gray header, hairlines between rows. The number cell becomes the play button on
 // hover and on keyboard focus.
-export function SongTable({ tracks, label }: { tracks: SampleTrack[]; label: string }) {
+export function SongTable({ tracks, label }: { tracks: QueueTrack[]; label: string }) {
   const p = usePlayTrack();
   return (
     <table className="w-full table-fixed border-separate border-spacing-0 text-[13px] leading-[18px]">
@@ -198,4 +198,3 @@ export function SongTable({ tracks, label }: { tracks: SampleTrack[]; label: str
   );
 }
 
-export const trackById = (id: string) => SAMPLE_TRACKS.find((t) => t.id === id);

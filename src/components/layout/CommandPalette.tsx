@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Search } from "lucide-react";
 import { useUi, type View } from "../../lib/store";
-import { SAMPLE_TRACKS, formatDuration } from "../../lib/demo-data";
 import { useLocalPlaylists } from "../../features/playlists/usePlaylists";
 import { cx } from "../ui";
 import { DUR, tween } from "../../lib/motion";
@@ -54,14 +53,6 @@ export default function CommandPalette() {
         run: () => { s.setSelectedPlaylist(p.id); s.navigate("playlists"); close(); },
       });
     }
-    SAMPLE_TRACKS.forEach((t, i) => {
-      list.push({
-        key: `tr-${t.id}`,
-        label: `${t.title} · ${t.artist}`,
-        hint: `Demo ${formatDuration(t.durationSec)}`,
-        run: () => { s.playIndex(i); close(); },
-      });
-    });
     const q = text.trim();
     if (q !== "") {
       list.unshift({

@@ -6,13 +6,13 @@ import { ChevronDown, ListMusic, MicVocal, Pause, Play, SkipBack, SkipForward } 
 import { useUi } from "../../lib/store";
 import { AMBIENT_BG, Art } from "../Art";
 import { IconButton, Scrubber, cx } from "../ui";
-import { formatDuration, type SampleTrack } from "../../lib/demo-data";
+import { formatDuration, type QueueTrack } from "../../lib/media";
 import { usePlayback } from "../../lib/playback";
 import { NativeNowPlaying } from "./NativeNowPlaying";
 import { DUR, SPRING, tween } from "../../lib/motion";
 
 // Lyrics are sample text for one demo track. The active line is the last one whose start time has passed.
-function Lyrics({ track, position }: { track: SampleTrack; position: number }) {
+function Lyrics({ track, position }: { track: QueueTrack; position: number }) {
   const lines = track.lyrics ?? [];
   const activeIndex = lines.reduce((acc, line, i) => (line.at <= position ? i : acc), -1);
   const activeRef = useRef<HTMLParagraphElement>(null);

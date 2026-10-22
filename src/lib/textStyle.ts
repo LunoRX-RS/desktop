@@ -84,8 +84,11 @@ let state: State = typeof window === "undefined" ? { lyrics: DEFAULT, title: DEF
 const listeners = new Set<() => void>();
 const SERVER: State = { lyrics: DEFAULT, title: DEFAULT };
 
-const familyOf = (font: string): string | null => {
-  if (font.startsWith("custom:")) return `"lx-custom-${font.slice(7)}", var(--font-display)`;
+/** `fallback` follows the chosen font in the stack. The app-wide font passes a literal stack, since it replaces --font-display itself. */
+export const familyOf = (font: string, fallback = "var(--font-display)"): string | null => {
+  if (font.startsWith("custom:")) return `"lx-custom-${font.slice(7)}", ${fallback}`;
+  // A font already installed on this computer, used by its family name.
+  if (font.startsWith("system:")) { const name = font.slice(7); return /^[^"'\\;{}<>,\u0000-\u001f]{1,80}$/.test(name) ? `"${name}", ${fallback}` : null; }
   return BUILTIN_FONTS.find((f) => f.id === font)?.css ?? null;
 };
 /** Pushes each zone's font into a CSS variable that globals.css reads (`--lx-font-<zone>`). */
@@ -117,6 +120,24 @@ export function refreshFonts(available: string[]) {
 }
 
 const subscribe = (cb: () => void) => { listeners.add(cb); return () => { listeners.delete(cb); }; };
+// Set by appStyle.ts, which cannot be imported here without a cycle.
+let appFontHook: ((available: string[]) => void) | null = null;
+export const onCustomFontsChanged = (fn: (available: string[]) => void) => { appFontHook = fn; };
+export const refreshAppFont = (available: string[]) => appFontHook?.(available);
+// ---- Fonts installed on this computer, listed by the native side (no file is read or copied). ----
+let installedCache: string[] | null = null;
+let installedLoading: Promise<void> | null = null;
+const installedListeners = new Set<() => void>();
+/** The installed font families, loaded once on first use. Empty until then, and if the system cannot list them. */
+export function useInstalledFonts(): string[] {
+  const list = useSyncExternalStore((cb) => { installedListeners.add(cb); return () => { installedListeners.delete(cb); }; }, () => installedCache ?? EMPTY, () => EMPTY);
+  if (installedCache === null && installedLoading === null && typeof window !== "undefined") {
+    installedLoading = import("@tauri-apps/api/core").then(({ invoke }) => invoke<string[]>("fonts_installed")).then((l) => { installedCache = Array.isArray(l) ? l : []; }, () => { installedCache = []; }).then(() => installedListeners.forEach((l) => l()));
+  }
+  return list;
+}
+const EMPTY: string[] = [];
+
 export const useZoneStyle = (zone: Zone): ZoneStyle => useSyncExternalStore(subscribe, () => state[zone], () => SERVER[zone]);
 
 // ---- Imported fonts: stored in IndexedDB on this device, registered with FontFace (no network, no CSP change). ----
@@ -160,6 +181,7 @@ export async function loadCustomFonts(): Promise<void> {
     for (const f of all) { try { await register(f); ok.push({ slug: f.slug, label: f.label }); } catch { /* corrupt file: skip */ } }
     customCache = ok;
     refreshFonts(ok.map((f) => f.slug));
+    refreshAppFont(ok.map((f) => f.slug));
     emitCustom();
   } catch { /* IndexedDB unavailable: custom fonts last until reload */ }
 }
@@ -182,5 +204,6 @@ export async function removeFont(slug: string): Promise<void> {
   try { await tx("readwrite", (s) => s.delete(slug)); } catch { /* ignore */ }
   customCache = customCache.filter((f) => f.slug !== slug);
   refreshFonts(customCache.map((f) => f.slug));
+  refreshAppFont(customCache.map((f) => f.slug));
   emitCustom();
 }

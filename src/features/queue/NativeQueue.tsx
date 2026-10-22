@@ -5,7 +5,7 @@ import { usePlayback, playTrack } from "../../lib/playback";
 import { useUi } from "../../lib/store";
 import { TrackCover } from "../../components/TrackCover";
 import { LikeButton } from "../../components/LibraryActions";
-import { formatDuration } from "../../lib/demo-data";
+import { formatDuration } from "../../lib/media";
 import { Button, EmptyState } from "../../components/ui";
 
 const NEXT_STATUS: Record<string, string> = {

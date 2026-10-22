@@ -9,7 +9,7 @@ import { playerProgress, playerSkip, playerTrackInfo, subscribePlayerProgress, s
 import { TrackCover } from "../TrackCover";
 import { useUi } from "../../lib/store";
 import { usePlayback, togglePlayback, stopPlayback, seekPlayback, setPlaybackVolume, initLastPlayed, resumeLast, clearResume } from "../../lib/playback";
-import { formatDuration } from "../../lib/demo-data";
+import { formatDuration } from "../../lib/media";
 import { IconButton, Scrubber } from "../ui";
 
 export function PlaybackEvents() {

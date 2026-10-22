@@ -12,6 +12,7 @@ import { AudioSettingsPanel } from "./AudioSettings";
 import { ProviderKeys } from "./ProviderKeys";
 import { LyricsOrder } from "./LyricsOrder";
 import { TextStyleSettings } from "./TextStyleSettings";
+import { DiscordSettings } from "./DiscordSettings";
 import { Inset, NoteRow, SettingRow, SkeletonRows, StatusRow, syncSummary } from "./rows";
 
 export type CategoryKey = "general" | "playback" | "accounts" | "sync" | "shortcuts" | "about";
@@ -38,11 +39,15 @@ export const SEARCH_INDEX: { cat: CategoryKey; group: string; label: string }[] 
   { cat: "general", group: "settings-appearance", label: "Theme" },
   { cat: "general", group: "settings-appearance", label: "Reduced motion" },
   { cat: "general", group: "settings-appearance", label: "Reduced transparency" },
+  { cat: "general", group: "settings-appstyle", label: "App font" },
+  { cat: "general", group: "settings-appstyle", label: "Text size" },
   { cat: "general", group: "settings-text-lyrics", label: "Lyrics font" },
   { cat: "general", group: "settings-text-lyrics", label: "Lyrics motion" },
   { cat: "general", group: "settings-text-title", label: "Song title font" },
   { cat: "general", group: "settings-text-title", label: "Song title motion" },
   { cat: "general", group: "settings-fonts", label: "Imported fonts" },
+  { cat: "general", group: "settings-discord", label: "Discord Rich Presence" },
+  { cat: "general", group: "settings-discord", label: "Discord Application ID" },
   { cat: "general", group: "settings-startup", label: "Restore last track" },
   { cat: "playback", group: "settings-audio", label: "Stream quality" },
   { cat: "playback", group: "settings-cache", label: "Disk cache & offline storage" },
@@ -116,6 +121,7 @@ function General() {
         <SettingRow label="Reduced transparency" hint="Follows your operating system setting. The sidebar and player become solid.">System</SettingRow>
       </Inset>
       <TextStyleSettings />
+      <DiscordSettings />
       <Inset id="settings-startup" title="Startup">
         <SettingRow label="Restore last track" hint="Read-only. A restored track waits for you to press Play.">Resumes paused</SettingRow>
       </Inset>
@@ -214,6 +220,7 @@ function Shortcuts({ mac }: { mac: boolean }) {
       rows: [
         ["Back and forward", "⌘[ / ⌘]"],
         ["Collapse or expand the sidebar", "⌘B / Ctrl+B"],
+        ["Larger, smaller, reset text size", "⌘+ ⌘− ⌘0 / Ctrl+ Ctrl− Ctrl0"],
         ["Close Now Playing, the command list or a dialog", "Esc"],
       ],
     },

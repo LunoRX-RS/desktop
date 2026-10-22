@@ -1,6 +1,9 @@
 //! OS integration. macOS only: system Now Playing, hardware media keys and the Playback menu.
 //! Every other platform gets two empty functions, so callers need no cfg and behave as before.
 
+pub mod discord;
+pub mod fonts;
+
 #[cfg(target_os = "macos")]
 mod control;
 #[cfg(target_os = "macos")]

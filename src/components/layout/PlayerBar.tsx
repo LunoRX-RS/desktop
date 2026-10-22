@@ -18,7 +18,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { useUi } from "../../lib/store";
-import { formatDuration } from "../../lib/demo-data";
+import { formatDuration } from "../../lib/media";
 import { Art } from "../Art";
 import { IconButton, Scrubber } from "../ui";
 import { Crossfade, PopOnTrue } from "../Motion";

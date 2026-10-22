@@ -141,7 +141,12 @@ jobs:
 
       - name: Build app (macOS)
         if: runner.os == 'macOS'
-        run: npx tauri build --bundles app
+        run: |
+          # Unset secrets are empty strings; Tauri would still try to import an empty certificate.
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_TEAM_ID APPLE_APP_PASSWORD
+          fi
+          npx tauri build --bundles app
 
       - name: Bundle libmpv and make the DMG
         if: runner.os == 'macOS'
@@ -189,6 +194,10 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          # The archive no longer ships mpv.def, so build it from the DLL's export table.
+          $exports = dumpbin /exports "$env:MPV_DEV_DIR\libmpv-2.dll" | ForEach-Object { if ($_ -match '^\s+\d+\s+[0-9A-F]+\s+[0-9A-F]{8}\s+(mpv_\S+)') { $Matches[1] } }
+          if (-not $exports) { throw "No mpv_* exports found in libmpv-2.dll" }
+          "EXPORTS`n" + ($exports -join "`n") | Out-File -Encoding ascii "$env:MPV_DEV_DIR\mpv.def"
           lib /def:"$env:MPV_DEV_DIR\mpv.def" /name:libmpv-2.dll /out:"$env:MPV_DEV_DIR\mpv.lib" /MACHINE:X64
           "RUSTFLAGS=-L native=$env:MPV_DEV_DIR" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 

@@ -9,7 +9,7 @@ import { RepeatButton, AutoplayButton } from "../PlayModeButtons";
 import { useMotion } from "../../lib/motion";
 import { TrackCover } from "../TrackCover";
 import { IconButton, Scrubber, cx } from "../ui";
-import { formatDuration } from "../../lib/demo-data";
+import { formatDuration } from "../../lib/media";
 import { SyncedLyrics, UntimedLyrics, type LyricsSlots } from "../Lyrics";
 import { LyricsSourceControl } from "../LyricsSourceSheet";
 import { anchorKey } from "../../lib/lyricAnchors";
