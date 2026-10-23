@@ -103,6 +103,7 @@ pub fn run() {
                 eprintln!("sync engine unavailable: {kind:?}");
             }
             app.manage(commands::sync::SyncEngineState::new(engine));
+            commands::sync::start_auto_sync(app.handle().clone());
             app.manage(commands::remote::RemoteState::default());
             Ok(())
         })

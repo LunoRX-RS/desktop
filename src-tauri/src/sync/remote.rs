@@ -78,6 +78,11 @@ pub async fn run(
 ) {
     let mut pause = Duration::from_secs(1);
     loop {
+        // Every sender is gone: nothing can send again, so stop instead of reconnecting forever. Without this check a
+        // link that is between connections never sees the closed channel.
+        if outbound.is_closed() {
+            return;
+        }
         let token = match tokens.get() {
             Ok(Some(token)) => token,
             _ => return status(LinkStatus::SignedOut),
