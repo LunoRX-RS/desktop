@@ -1,15 +1,17 @@
-//! OS integration. macOS only: system Now Playing, hardware media keys and the Playback menu.
-//! Every other platform gets two empty functions, so callers need no cfg and behave as before.
+//! OS integration. macOS: system Now Playing, hardware media keys and the Playback menu. Linux: MPRIS (media widgets,
+//! `playerctl`, media keys). Every other platform gets two empty functions, so callers need no cfg and behave as before.
 
 pub mod discord;
 pub mod fonts;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod control;
 #[cfg(target_os = "macos")]
 mod macos_media;
 #[cfg(target_os = "macos")]
 mod menu;
+#[cfg(target_os = "linux")]
+mod mpris;
 
 /// Wires media keys, Now Playing and the Playback menu. Call from `setup`, on the main thread, after
 /// `PlayerState` is managed. A failure is logged once and never retried.
@@ -27,8 +29,18 @@ pub fn poke() {
     macos_media::poke();
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "linux")]
+pub fn install(app: &tauri::AppHandle) {
+    mpris::install(app);
+}
+
+#[cfg(target_os = "linux")]
+pub fn poke() {
+    mpris::poke();
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn install(_app: &tauri::AppHandle) {}
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn poke() {}

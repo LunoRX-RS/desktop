@@ -11,7 +11,9 @@ use crate::commands::player::{
 };
 use crate::core::playback::command::PlaybackCommand;
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // only the macOS Playback menu uses this
 pub const VOLUME_STEP: i8 = 5;
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // only the macOS Playback menu uses this
 const SEEK_STEP_MS: i64 = 10_000;
 const RESTORE_VOLUME: u8 = 100;
 const RESTART_AFTER_MS: u64 = 3_000;
@@ -24,12 +26,17 @@ pub enum Remote {
     Stop,
     SeekTo(i64),
     SeekBy(i64),
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    // only the macOS Playback menu uses this
     VolumeBy(i8),
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    // only the macOS Playback menu uses this
     ToggleMute,
     Next,
     Previous,
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))] // only the macOS Playback menu uses this
 impl Remote {
     pub const SEEK_BACK: Remote = Remote::SeekBy(-SEEK_STEP_MS);
     pub const SEEK_FORWARD: Remote = Remote::SeekBy(SEEK_STEP_MS);
