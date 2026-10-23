@@ -28,8 +28,8 @@ export interface Category {
 export const CATEGORIES: Category[] = [
   { key: "general", label: "General", description: "Appearance and what happens when the app starts.", Icon: SlidersHorizontal },
   { key: "playback", label: "Playback & audio", description: "Stream quality, audio output and what can play in the app.", Icon: Volume2 },
-  { key: "accounts", label: "Accounts & providers", description: "Music provider sign-in and your LUNOR-X account.", Icon: UserRound },
-  { key: "sync", label: "Sync", description: "How your playlists reach the LUNOR-X server.", Icon: Cable },
+  { key: "accounts", label: "Accounts & providers", description: "Music provider sign-in and your LunoRX account.", Icon: UserRound },
+  { key: "sync", label: "Sync", description: "How your playlists reach the LunoRX server.", Icon: Cable },
   { key: "shortcuts", label: "Keyboard shortcuts", description: "Keys that work across the app.", Icon: Keyboard },
   { key: "about", label: "About & diagnostics", description: "Version, platform and what the app can report about itself.", Icon: Info },
 ];
@@ -65,7 +65,7 @@ export const SEARCH_INDEX: { cat: CategoryKey; group: string; label: string }[] 
   { cat: "playback", group: "settings-playback", label: "Spotify audio" },
   { cat: "accounts", group: "settings-providers", label: "YouTube Music" },
   { cat: "accounts", group: "settings-providers", label: "Spotify" },
-  { cat: "accounts", group: "settings-lunor-account", label: "LUNOR-X account" },
+  { cat: "accounts", group: "settings-lunor-account", label: "LunoRX account" },
   { cat: "sync", group: "settings-sync-server", label: "Server endpoint" },
   { cat: "sync", group: "settings-sync-state", label: "Sync state" },
   { cat: "sync", group: "settings-sync-state", label: "Waiting changes" },
@@ -152,7 +152,7 @@ function Playback() {
           label="Spotify audio"
           tone="off"
           status="Unsupported"
-          hint="Spotify’s third-party playback SDK requires Premium. Spotify Free playback in LUNOR-X is unavailable."
+          hint="Spotify’s third-party playback SDK requires Premium. Spotify Free playback in LunoRX is unavailable."
         />
       </Inset>
     </>
@@ -166,15 +166,15 @@ function Accounts() {
   return (
     <>
       <ProviderKeys />
-      <Inset id="settings-lunor-account" title="LUNOR-X account">
+      <Inset id="settings-lunor-account" title="LunoRX account">
         {data.state === "loading" && <SkeletonRows rows={1} />}
         {data.state === "error" && <RetryRow onRetry={retry}>Could not read your account status.</RetryRow>}
         {sum && (
           <StatusRow
-            label="LUNOR-X account"
+            label="LunoRX account"
             tone={sum.tone}
             status={sum.text}
-            hint="Sign-in and sign-out for LUNOR-X sync. Separate from music provider sign-in."
+            hint="Sign-in and sign-out for LunoRX sync. Separate from music provider sign-in."
           >
             <Button onClick={() => navigate("accounts")}>Open Accounts</Button>
           </StatusRow>

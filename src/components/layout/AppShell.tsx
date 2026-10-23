@@ -22,6 +22,7 @@ import PlaylistEditor from "../../features/playlists/PlaylistEditor";
 import PlayerScreen from "../../features/player/PlayerScreen";
 import ConnectionsScreen from "../../features/connections/ConnectionsScreen";
 import AccountsScreen from "../../features/accounts/AccountsScreen";
+import LoginPage from "../../features/accounts/LoginPage";
 import SettingsScreen from "../../features/settings/SettingsScreen";
 import StatsScreen from "../../features/stats/StatsScreen";
 import SyncPanel from "../../features/sync/SyncPanel";
@@ -178,6 +179,7 @@ export default function AppShell() {
                     {view === "player" && <div className="lx-scope"><PlayerScreen /></div>}
                     {view === "connections" && <div className="lx-scope"><ConnectionsScreen /></div>}
                     {view === "accounts" && <AccountsScreen />}
+                    {view === "login" && <LoginPage />}
                     {view === "settings" && <SettingsScreen />}
                     {view === "stats" && <StatsScreen />}
                     {view === "sync" && <div className="lx-scope"><SyncPanel /></div>}

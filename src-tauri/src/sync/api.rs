@@ -101,6 +101,22 @@ pub struct PlaylistCreateRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ShareView {
+    pub id: String,
+    pub created_at: String,
+    pub revoked_at: Option<String>,
+}
+
+/// Not Debug: the token must never reach a log through `{:?}`.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatedShare {
+    pub id: String,
+    pub token: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PlaylistCreated {
     pub id: String,
     pub name: String,
@@ -296,6 +312,20 @@ impl ApiClient {
         }
     }
 
+    /// Creates an account. The backend returns no session: the caller logs in afterwards.
+    pub async fn register(&self, email: &str, password: &str) -> Result<(), SyncError> {
+        #[derive(Serialize)]
+        struct Body<'a> {
+            email: &'a str,
+            password: &'a str,
+        }
+        let req = self
+            .http
+            .post(self.url("/api/v1/auth/register"))
+            .json(&Body { email, password });
+        self.send(req).await.map(|_| ())
+    }
+
     pub async fn login(&self, email: &str, password: &str) -> Result<LoginResponse, SyncError> {
         #[derive(Serialize)]
         struct Body<'a> {
@@ -369,6 +399,40 @@ impl ApiClient {
             .delete(self.url("/api/v1/stats"))
             .bearer_auth(token);
         self.send(req).await.map(|_| ())
+    }
+
+    /// Creates a read-only share link. The token is returned once and never logged or stored by the client.
+    pub async fn create_share(&self, token: &str, id: &str) -> Result<CreatedShare, SyncError> {
+        let id = path_id(id)?;
+        let req = self
+            .http
+            .post(self.url(&format!("/api/v1/playlists/{id}/shares")))
+            .bearer_auth(token);
+        decode(&self.send(req).await?)
+    }
+
+    pub async fn list_shares(&self, token: &str, id: &str) -> Result<Vec<ShareView>, SyncError> {
+        let id = path_id(id)?;
+        let req = self
+            .http
+            .get(self.url(&format!("/api/v1/playlists/{id}/shares")))
+            .bearer_auth(token);
+        decode(&self.send(req).await?)
+    }
+
+    pub async fn revoke_share(&self, token: &str, id: &str, share: &str) -> Result<(), SyncError> {
+        let id = path_id(id)?;
+        let share = path_id(share)?;
+        let req = self
+            .http
+            .delete(self.url(&format!("/api/v1/playlists/{id}/shares/{share}")))
+            .bearer_auth(token);
+        self.send(req).await.map(|_| ())
+    }
+
+    /// The public URL a recipient opens; contains the share token, so it is shown to the user and never logged.
+    pub fn share_url(&self, share_token: &str) -> String {
+        self.url(&format!("/api/v1/shared/{share_token}"))
     }
 
     pub async fn list_playlists(&self, token: &str) -> Result<Vec<Playlist>, SyncError> {
@@ -694,6 +758,65 @@ mod tests {
         assert_eq!(
             json(&req.body),
             serde_json::json!({"email": "a@example.test", "password": "correct horse battery"})
+        );
+    }
+
+    #[tokio::test]
+    async fn register_posts_credentials_without_a_token() {
+        let s = stub(raw(
+            "201 Created",
+            "",
+            r#"{"id":"5c8a0f2e-3d7b-4e1a-9f6c-2b1d0e4a7c33"}"#,
+        ))
+        .await;
+        client(&s.base)
+            .register("a@example.test", "correct horse battery")
+            .await
+            .unwrap();
+        let req = s.last();
+        assert_eq!(req.method, "POST");
+        assert_eq!(req.path, "/api/v1/auth/register");
+        assert_eq!(req.auth, None);
+        assert_eq!(
+            json(&req.body),
+            serde_json::json!({"email": "a@example.test", "password": "correct horse battery"})
+        );
+    }
+
+    #[tokio::test]
+    async fn create_share_posts_with_bearer_and_reads_token() {
+        let body = r#"{"id":"5c8a0f2e-3d7b-4e1a-9f6c-2b1d0e4a7c33","token":"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ","createdAt":"2026-10-23T00:00:00Z"}"#;
+        let s = stub(raw("201 Created", "", body)).await;
+        let created = client(&s.base).create_share(TOKEN, PLAYLIST).await.unwrap();
+        assert_eq!(created.token.len(), 43);
+        let req = s.last();
+        assert_eq!(req.method, "POST");
+        assert_eq!(req.path, format!("/api/v1/playlists/{PLAYLIST}/shares"));
+        assert_eq!(req.auth, Some(format!("Bearer {TOKEN}")));
+    }
+
+    #[tokio::test]
+    async fn revoke_share_deletes_that_share_only() {
+        let s = stub(raw("204 No Content", "", "")).await;
+        client(&s.base)
+            .revoke_share(TOKEN, PLAYLIST, ENTRY)
+            .await
+            .unwrap();
+        let req = s.last();
+        assert_eq!(req.method, "DELETE");
+        assert_eq!(
+            req.path,
+            format!("/api/v1/playlists/{PLAYLIST}/shares/{ENTRY}")
+        );
+        assert_eq!(req.auth, Some(format!("Bearer {TOKEN}")));
+    }
+
+    #[tokio::test]
+    async fn share_url_points_at_the_shared_endpoint() {
+        let c = client("https://backend.example.test");
+        assert_eq!(
+            c.share_url("tok"),
+            "https://backend.example.test/api/v1/shared/tok"
         );
     }
 

@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (sender, mut reports) = tokio::sync::mpsc::unbounded_channel();
     let host = if std::env::args().any(|arg| arg == "--session") {
         let yt = extract::resolver()?;
-        let cookie = keyring::Entry::new("com.lunorx.desktop", "provider-youtube-session-cookie")
+        let cookie = keyring::Entry::new("io.lunorx.desktop", "provider-youtube-session-cookie")
             .map_err(|_| "session storage unavailable")?
             .get_password()
             .map_err(|error| match error {

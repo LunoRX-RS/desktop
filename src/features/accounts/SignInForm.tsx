@@ -5,19 +5,23 @@ import { Button } from "../../components/ui";
 import { FIELD, Inset, NoteRow, SettingRow } from "../settings/rows";
 
 // Shared by Accounts and Sync. The password lives in state only until submit, then the field is cleared.
+// Sign in to an existing account, or create one. The backend limits passwords to 12 to 128 bytes.
 export function SignInForm({
   idPrefix,
+  mode = "signIn",
   busy,
   blockedReason,
   error,
   onSubmit,
 }: {
   idPrefix: string;
+  mode?: "signIn" | "register";
   busy: boolean;
   blockedReason?: string;
   error: string | null;
   onSubmit: (email: string, password: string) => void | Promise<void>;
 }) {
+  const registering = mode === "register";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [problems, setProblems] = useState<{ email?: string; password?: string }>({});
@@ -33,7 +37,9 @@ export function SignInForm({
     const next: { email?: string; password?: string } = {};
     if (email.trim() === "") next.email = "Enter your email address.";
     else if (!/^\S+@\S+$/.test(email.trim())) next.email = "Enter an email address like name@example.com.";
+    const bytes = new TextEncoder().encode(password).length;
     if (password === "") next.password = "Enter your password.";
+    else if (registering && (bytes < 12 || bytes > 128)) next.password = "Use a password of 12 to 128 characters.";
     setProblems(next);
     if (next.email) return void emailRef.current?.focus();
     if (next.password) return void passwordRef.current?.focus();
@@ -47,7 +53,7 @@ export function SignInForm({
 
   return (
     <form onSubmit={submit} noValidate aria-busy={busy}>
-      <Inset id={`${idPrefix}-title`} title="Sign in">
+      <Inset id={`${idPrefix}-title`} title={registering ? "Create account" : "Sign in"}>
         <SettingRow label="Email" htmlFor={eId}>
           <input
             ref={emailRef}
@@ -72,7 +78,7 @@ export function SignInForm({
             ref={passwordRef}
             id={pId}
             type="password"
-            autoComplete="current-password"
+            autoComplete={registering ? "new-password" : "current-password"}
             value={password}
             disabled={busy}
             aria-invalid={problems.password ? true : undefined}
@@ -91,9 +97,13 @@ export function SignInForm({
             {error}
           </NoteRow>
         )}
-        <SettingRow label="LUNOR-X account" hint={blockedReason ?? "Press Enter to sign in."} hintId={`${idPrefix}-hint`}>
+        <SettingRow
+          label="LunoRX account"
+          hint={blockedReason ?? (registering ? "Creates a LunoRX account and signs you in." : "Press Enter to sign in.")}
+          hintId={`${idPrefix}-hint`}
+        >
           <Button type="submit" variant="primary" disabled={busy || !!blockedReason} aria-describedby={`${idPrefix}-hint`}>
-            {busy ? "Signing in…" : "Sign in"}
+            {registering ? (busy ? "Creating account…" : "Create account") : busy ? "Signing in…" : "Sign in"}
           </Button>
         </SettingRow>
       </Inset>

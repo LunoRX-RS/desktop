@@ -82,6 +82,38 @@ export function syncFlushPending(): Promise<number> {
 export const ACCOUNT_CHANGED = "lunorx:account-changed";
 const accountChanged = () => window.dispatchEvent(new Event(ACCOUNT_CHANGED));
 
+/** Creates an account and signs in with it. Rejects with "validation" for a bad email or a password outside 12 to 128 bytes. */
+export async function syncRegister(email: string, password: string): Promise<SignedInDto> {
+  const done = await invoke<SignedInDto>("sync_register", { email, password });
+  accountChanged();
+  return done;
+}
+
+/** A read-only share link. `url` contains the token: show it to the user, do not log it. */
+export interface ShareLinkDto {
+  id: string;
+  url: string;
+}
+
+export interface ShareDto {
+  id: string;
+  createdAt: string;
+  active: boolean;
+}
+
+/** Makes a read-only link for a playlist that is on the server. Rejects with "unauthenticated" when signed out. */
+export function syncShare(localId: string): Promise<ShareLinkDto> {
+  return invoke<ShareLinkDto>("sync_share_playlist", { localId });
+}
+
+export function syncListShares(localId: string): Promise<ShareDto[]> {
+  return invoke<ShareDto[]>("sync_list_shares", { localId });
+}
+
+export function syncRevokeShare(localId: string, shareId: string): Promise<void> {
+  return invoke<void>("sync_revoke_share", { localId, shareId });
+}
+
 export async function syncSignIn(email: string, password: string): Promise<SignedInDto> {
   const done = await invoke<SignedInDto>("sync_sign_in", { email, password });
   accountChanged();

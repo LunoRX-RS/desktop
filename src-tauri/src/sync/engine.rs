@@ -402,6 +402,25 @@ fn auth_category(e: &AuthError) -> ErrorCategory {
 }
 
 /// Signs in. Refused while writes are queued: they belong to the previous account and must not be replayed onto a new one.
+/// Creates an account, then signs in with it. The backend answers a registration the same way whether or not the email
+/// exists, so a wrong password on an existing account shows as the sign-in failure, not as "already registered".
+pub(crate) async fn register(
+    h: &mut Host<'_>,
+    email: &str,
+    password: &str,
+) -> Result<SignedInUser, ErrorCategory> {
+    let email = email.trim();
+    // The backend's rule: 12 to 128 bytes. Checked here so a bad password never leaves the device.
+    if email.is_empty() || !(12..=128).contains(&password.len()) {
+        return Err(ErrorCategory::Validation);
+    }
+    let api = h.step(|e| Ok(e.api.clone())).await?;
+    api.register(email, password)
+        .await
+        .map_err(|e| category(&e))?;
+    sign_in(h, email, password).await
+}
+
 pub(crate) async fn sign_in(
     h: &mut Host<'_>,
     email: &str,
@@ -639,6 +658,69 @@ pub(crate) async fn stats_clear_remote(h: &mut Host<'_>) -> Result<(), ErrorCate
 pub(crate) async fn upload(h: &mut Host<'_>, local_id: &str) -> Result<String, ErrorCategory> {
     let (api, token) = h.step(|e| Ok((e.api.clone(), e.token()?))).await?;
     push_tail(h, &api, &token, local_id).await
+}
+
+/// A share link for a playlist that has reached the backend. The URL contains the token; callers show it, never log it.
+pub(crate) struct ShareLink {
+    pub id: String,
+    pub url: String,
+}
+
+/// The remote id of a playlist that has been uploaded; a playlist that is only local cannot be shared.
+fn remote_of(e: &SyncEngine, local_id: &str) -> Result<String, ErrorCategory> {
+    e.store
+        .playlists()
+        .iter()
+        .find(|p| p.id == local_id)
+        .and_then(|p| p.remote_id.clone())
+        .ok_or(ErrorCategory::Validation)
+}
+
+pub(crate) async fn share(h: &mut Host<'_>, local_id: &str) -> Result<ShareLink, ErrorCategory> {
+    let (api, token, remote) = h
+        .step(|e| Ok((e.api.clone(), e.token()?, remote_of(e, local_id)?)))
+        .await?;
+    let created = api
+        .create_share(&token, &remote)
+        .await
+        .map_err(|e| category(&e))?;
+    Ok(ShareLink {
+        id: created.id,
+        url: api.share_url(&created.token),
+    })
+}
+
+pub(crate) async fn list_shares(
+    h: &mut Host<'_>,
+    local_id: &str,
+) -> Result<Vec<(String, String, bool)>, ErrorCategory> {
+    let (api, token, remote) = h
+        .step(|e| Ok((e.api.clone(), e.token()?, remote_of(e, local_id)?)))
+        .await?;
+    let shares = api
+        .list_shares(&token, &remote)
+        .await
+        .map_err(|e| category(&e))?;
+    Ok(shares
+        .into_iter()
+        .map(|s| {
+            let active = s.revoked_at.is_none();
+            (s.id, s.created_at, active)
+        })
+        .collect())
+}
+
+pub(crate) async fn revoke_share(
+    h: &mut Host<'_>,
+    local_id: &str,
+    share: &str,
+) -> Result<(), ErrorCategory> {
+    let (api, token, remote) = h
+        .step(|e| Ok((e.api.clone(), e.token()?, remote_of(e, local_id)?)))
+        .await?;
+    api.revoke_share(&token, &remote, share)
+        .await
+        .map_err(|e| category(&e))
 }
 
 /// Each request is planned under the engine, sent with it released, and its result recorded under the engine again.

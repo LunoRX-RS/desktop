@@ -6,7 +6,7 @@ import { Inset, PageRoot, SettingRow, SkeletonRows, StatusRow } from "../setting
 import { searchLabelFor, searchTone, useProviderStatuses } from "./providerStatus";
 import { YouTubeConnection } from "./YouTubeConnection";
 
-// No Spotify connect command is registered. sync_sign_in and sync_sign_out are LUNOR-X backend sign-in, not provider connect.
+// No Spotify connect command is registered. sync_sign_in and sync_sign_out are LunoRX backend sign-in, not provider connect.
 const SPOTIFY_REASON = "Not available: no Spotify sign-in command is registered yet.";
 
 export default function ConnectionsScreen() {
@@ -19,7 +19,7 @@ export default function ConnectionsScreen() {
       <Screen
         id="connections-title"
         title="Connections"
-        caption="Music provider accounts and what each one can do. Sign-in to LUNOR-X sync is on Accounts."
+        caption="Music provider accounts and what each one can do. Sign-in to LunoRX sync is on Accounts."
       >
         <div className="flex flex-col gap-8">
           <Inset id="connections-youtube-title" title="YouTube Music">

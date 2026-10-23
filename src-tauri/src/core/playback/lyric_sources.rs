@@ -217,7 +217,7 @@ impl Http {
             .timeout(timeout)
             .redirect(reqwest::redirect::Policy::none())
             .https_only(!cfg!(test))
-            .user_agent("LUNOR-X/0.1.0 (desktop lyrics)")
+            .user_agent("LunoRX/0.1.0 (desktop lyrics)")
             .build()
             .ok()?;
         Some(Http {

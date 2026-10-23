@@ -685,7 +685,7 @@ pub async fn fallback_cached(
         .connect_timeout(Duration::from_secs(2))
         .timeout(REQUEST_TIMEOUT)
         .redirect(reqwest::redirect::Policy::none())
-        .user_agent("LUNOR-X/0.1.0 (desktop lyrics)")
+        .user_agent("LunoRX/0.1.0 (desktop lyrics)")
         .build()
         .map_err(|_| LyricsError)?;
     lookup(

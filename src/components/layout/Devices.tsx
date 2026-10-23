@@ -42,7 +42,7 @@ export function DevicesButton() {
         <div role="dialog" aria-label="Devices" className="glass-solid lx-pop-in absolute right-0 bottom-full z-[80] mb-2 flex w-[300px] flex-col gap-0.5 rounded-[10px] p-1.5 text-[13px] shadow-[0_24px_64px_rgba(0,0,0,0.55)]">
           {!enabled ? (
             <div className="flex flex-col gap-2 p-2">
-              <p className="text-secondary-text">Control playback on your other devices, or let them control this one. Your devices talk through your LUNOR-X account; no audio leaves a device.</p>
+              <p className="text-secondary-text">Control playback on your other devices, or let them control this one. Your devices talk through your LunoRX account; no audio leaves a device.</p>
               <button type="button" onClick={() => setEnabled(true)} className="h-8 rounded-[8px] bg-primary-text text-on-ink font-semibold lx-press">Turn on</button>
             </div>
           ) : (
@@ -61,7 +61,7 @@ export function DevicesButton() {
                   </span>
                 </button>
               ))}
-              {link === "online" && list.length === 0 && <p className="p-2 text-secondary-text">No other devices yet. Open LUNOR-X on another device signed in to this account and turn this on there.</p>}
+              {link === "online" && list.length === 0 && <p className="p-2 text-secondary-text">No other devices yet. Open LunoRX on another device signed in to this account and turn this on there.</p>}
               {link !== "online" && <p role="status" className="p-2 text-secondary-text">{LINK_TEXT[link]}</p>}
               {notice && <p role="alert" className="px-2 text-[11px] text-critical-coral">{notice}</p>}
               <button type="button" onClick={() => setEnabled(false)} className="mt-1 h-8 rounded-[6px] px-2.5 text-left text-secondary-text hover:bg-white/10">Turn off</button>

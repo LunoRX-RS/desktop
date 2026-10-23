@@ -100,7 +100,7 @@ export function YouTubeConnection() {
           </p>
         </div>
       )}
-      <p className="text-secondary-text">Sign in on Google’s own page. YouTube session cookies stay in this device’s OS key store and are never sent to the LUNOR-X server.</p>
+      <p className="text-secondary-text">Sign in on Google’s own page. YouTube session cookies stay in this device’s OS key store and are never sent to the LunoRX server.</p>
       {error && <p role="alert" className="text-critical-coral">{error}</p>}
     </div>
   );

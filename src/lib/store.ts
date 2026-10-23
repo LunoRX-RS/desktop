@@ -14,6 +14,7 @@ export type View =
   | "player"
   | "connections"
   | "accounts"
+  | "login"
   | "settings"
   | "sync"
   | "stats"

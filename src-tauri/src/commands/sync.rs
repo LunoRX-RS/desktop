@@ -155,6 +155,19 @@ pub enum ResolutionDto {
     KeepMine,
 }
 
+pub async fn run_register(
+    state: &SyncEngineState,
+    email: &str,
+    password: &str,
+) -> Result<SignedInDto, ErrorCategory> {
+    let _net = state.net.lock().await;
+    let user = engine::register(&mut Host::Shared(state), email, password).await?;
+    Ok(SignedInDto {
+        user_id: user.user_id,
+        expires_at: user.expires_at,
+    })
+}
+
 pub async fn run_sign_in(
     state: &SyncEngineState,
     email: &str,
@@ -306,6 +319,59 @@ pub async fn run_remove_local_entry(
 
 /// Returns how many queued writes the server accepted.
 /// Returns how many queued writes the server accepted.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShareLinkDto {
+    pub id: String,
+    /// Contains the share token. Shown to the user once and never logged.
+    pub url: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShareDto {
+    pub id: String,
+    pub created_at: String,
+    pub active: bool,
+}
+
+pub async fn run_share_playlist(
+    state: &SyncEngineState,
+    local_id: &str,
+) -> Result<ShareLinkDto, ErrorCategory> {
+    let _net = state.net.lock().await;
+    let link = engine::share(&mut Host::Shared(state), local_id).await?;
+    Ok(ShareLinkDto {
+        id: link.id,
+        url: link.url,
+    })
+}
+
+pub async fn run_list_shares(
+    state: &SyncEngineState,
+    local_id: &str,
+) -> Result<Vec<ShareDto>, ErrorCategory> {
+    let _net = state.net.lock().await;
+    let shares = engine::list_shares(&mut Host::Shared(state), local_id).await?;
+    Ok(shares
+        .into_iter()
+        .map(|(id, created_at, active)| ShareDto {
+            id,
+            created_at,
+            active,
+        })
+        .collect())
+}
+
+pub async fn run_revoke_share(
+    state: &SyncEngineState,
+    local_id: &str,
+    share: &str,
+) -> Result<(), ErrorCategory> {
+    let _net = state.net.lock().await;
+    engine::revoke_share(&mut Host::Shared(state), local_id, share).await
+}
+
 pub async fn run_flush_pending(state: &SyncEngineState) -> Result<usize, ErrorCategory> {
     let _net = state.net.lock().await;
     engine::flush_pending(&mut Host::Shared(state)).await
@@ -353,6 +419,15 @@ pub async fn run_resolve_conflict(
     };
     let _net = state.net.lock().await;
     engine::resolve_conflict(&mut Host::Shared(state), playlist_id, resolution).await
+}
+
+#[tauri::command]
+pub async fn sync_register(
+    state: State<'_, SyncEngineState>,
+    email: String,
+    password: String,
+) -> Result<SignedInDto, ErrorCategory> {
+    run_register(&state, &email, &password).await
 }
 
 #[tauri::command]
@@ -459,6 +534,31 @@ pub async fn sync_remove_local_entry(
     index: usize,
 ) -> Result<(), ErrorCategory> {
     run_remove_local_entry(&state, &local_id, index).await
+}
+
+#[tauri::command]
+pub async fn sync_share_playlist(
+    state: State<'_, SyncEngineState>,
+    local_id: String,
+) -> Result<ShareLinkDto, ErrorCategory> {
+    run_share_playlist(&state, &local_id).await
+}
+
+#[tauri::command]
+pub async fn sync_list_shares(
+    state: State<'_, SyncEngineState>,
+    local_id: String,
+) -> Result<Vec<ShareDto>, ErrorCategory> {
+    run_list_shares(&state, &local_id).await
+}
+
+#[tauri::command]
+pub async fn sync_revoke_share(
+    state: State<'_, SyncEngineState>,
+    local_id: String,
+    share_id: String,
+) -> Result<(), ErrorCategory> {
+    run_revoke_share(&state, &local_id, &share_id).await
 }
 
 #[tauri::command]

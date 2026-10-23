@@ -520,6 +520,7 @@ mod tests {
             channel: Some(ChannelRef {
                 id: Some("UCuAXFkgsw1L7xaCfnd5JJOw".into()),
                 name: "Channel".into(),
+                verification: Default::default(),
             }),
             duration_ms: Some(200_000),
             thumbnails: vec![],
