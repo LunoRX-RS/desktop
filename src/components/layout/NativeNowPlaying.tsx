@@ -330,7 +330,9 @@ export function NativeNowPlaying() {
           </div>
         </div>
       </div>
-      <AnimatePresence>{queueOpen && <QueuePanel inDialog />}</AnimatePresence>
+      <div inert={maker} className={maker ? "invisible" : undefined}>
+        <AnimatePresence>{queueOpen && <QueuePanel inDialog />}</AnimatePresence>
+      </div>
       {maker && <LyricMaker key={track.providerTrackId} trackId={track.providerTrackId} inset={100} onClose={() => { setMaker(false); dialog.current?.focus(); }} />}
     </dialog>
   );

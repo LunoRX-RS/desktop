@@ -8,7 +8,7 @@ import { TrackCover } from "../../components/TrackCover";
 import { LikeButton } from "../../components/LibraryActions";
 import { formatDuration } from "../../lib/media";
 import { Button, EmptyState, IconButton, cx } from "../../components/ui";
-import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { addToPlaylist } from "../../lib/playlistActions";
 import { syncCreateLocalPlaylist } from "../../services/tauri/sync";
 
@@ -36,9 +36,15 @@ export default function NativeQueue() {
   const rows = useRef<(HTMLLIElement | null)[]>([]);
   const startY = useRef(0);
   const [drag, setDrag] = useState<{ from: number; over: number; dy: number } | null>(null);
+  // One move at a time: a second press before the list has caught up would send the same indices against the old order.
+  const moving = useRef(false);
+  const order = upcoming.map((u) => u.id).join(",");
+  useEffect(() => { moving.current = false; }, [order]);
   const move = (from: number, to: number) => {
-    if (to < 0 || to >= upcoming.length || to === from) return;
-    void playerQueueEdit({ op: "move", from, to }).catch(() => {});
+    if (moving.current || to < 0 || to >= upcoming.length || to === from) return;
+    moving.current = true;
+    void playerQueueEdit({ op: "move", from, to }).catch(() => { moving.current = false; });
+    window.setTimeout(() => { moving.current = false; }, 600); // a move that changed nothing never updates the order
   };
   function rowUnder(clientY: number): number {
     const ol = list.current;
@@ -59,8 +65,8 @@ export default function NativeQueue() {
   function onHandleMove(e: ReactPointerEvent<HTMLButtonElement>) {
     if (drag) setDrag({ ...drag, over: rowUnder(e.clientY), dy: e.clientY - startY.current });
   }
-  function onHandleUp() {
-    if (drag) move(drag.from, drag.over);
+  function onHandleUp(e: ReactPointerEvent<HTMLButtonElement>) {
+    if (drag) move(drag.from, rowUnder(e.clientY)); // where the pointer was let go, not the last move event
     setDrag(null);
   }
   function onHandleKey(e: ReactKeyboardEvent<HTMLButtonElement>, index: number) {

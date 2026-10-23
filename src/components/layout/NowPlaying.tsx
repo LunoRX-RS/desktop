@@ -10,6 +10,7 @@ import { formatDuration, type QueueTrack } from "../../lib/media";
 import { usePlayback } from "../../lib/playback";
 import { useDragRegion, usePlatform } from "../../lib/platform";
 import { NativeNowPlaying } from "./NativeNowPlaying";
+import { QueuePanel } from "./QueuePanel";
 import { DUR, SPRING, tween } from "../../lib/motion";
 
 // Lyrics are sample text for one demo track. The active line is the last one whose start time has passed.
@@ -177,6 +178,7 @@ export default function NowPlaying() {
               <p className="text-center text-[11px] leading-4 text-secondary-text">Demo content · no audio is played and no provider is connected.</p>
             </div>
           </div>
+          <AnimatePresence>{s.queueOpen && <QueuePanel inDialog />}</AnimatePresence>
         </motion.div>
       )}
     </AnimatePresence>
