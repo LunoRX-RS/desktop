@@ -53,6 +53,8 @@ pub struct SearchHitDto {
     pub artist_refs: Vec<crate::core::search::hit::ArtistRef>,
     pub artwork_url: Option<String>,
     pub duration_ms: Option<u64>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub official: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -84,6 +86,7 @@ impl From<&SearchHit> for SearchHitDto {
             artist_refs: h.artist_refs().to_vec(),
             artwork_url: h.artwork_url().map(str::to_owned),
             duration_ms: h.duration_ms(),
+            official: h.official(),
         }
     }
 }

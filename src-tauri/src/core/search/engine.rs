@@ -9,6 +9,7 @@ use crate::core::capabilities::CapabilityStatus;
 use crate::core::domain::ProviderId;
 use crate::core::errors::CoreError;
 use crate::core::registry::ProviderRegistry;
+use crate::core::search::cache::ResponseCache;
 use crate::core::search::{
     CancelToken, GroupStatus, QuotaBudget, SearchProvider, SearchRequest, SearchResponse,
     SkipReason, SourceGroup, ordered,
@@ -22,6 +23,7 @@ pub struct SearchEngine {
     pub(crate) budgets: HashMap<ProviderId, QuotaBudget>,
     pub(crate) providers: Vec<Arc<dyn SearchProvider>>,
     pub(crate) timeout: Duration,
+    cache: ResponseCache,
 }
 
 impl SearchEngine {
@@ -37,6 +39,7 @@ impl SearchEngine {
             budgets,
             providers,
             timeout,
+            cache: ResponseCache::default(),
         }
     }
 
@@ -51,6 +54,10 @@ impl SearchEngine {
         } else {
             ordered(&req.providers)
         };
+        let key = ResponseCache::key(&req, &ids);
+        if let Some(cached) = self.cache.get(&key, std::time::Instant::now()) {
+            return cached;
+        }
         let sem = Arc::new(Semaphore::new(2));
         let mut slots: Vec<Option<SourceGroup>> = vec![None; ids.len()];
         let mut set = JoinSet::new();
@@ -108,7 +115,9 @@ impl SearchEngine {
                 })
             })
             .collect();
-        SearchResponse::new(req.query, groups)
+        let response = SearchResponse::new(req.query, groups);
+        self.cache.put(key, &response, std::time::Instant::now());
+        response
     }
 }
 
@@ -246,6 +255,10 @@ mod tests {
 
     fn req(ids: Vec<ProviderId>) -> SearchRequest {
         SearchRequest::new("rock", ids, 5).unwrap()
+    }
+
+    fn req_for(query: &str, ids: Vec<ProviderId>) -> SearchRequest {
+        SearchRequest::new(query, ids, 5).unwrap()
     }
 
     #[tokio::test(start_paused = true)]
@@ -537,7 +550,9 @@ mod tests {
                 GroupStatus::Ok(vec![hit(YouTube, "a")])
             )]
         );
-        let exhausted = e.search(req(vec![YouTube]), CancelToken::new(), 1).await;
+        let exhausted = e
+            .search(req_for("jazz", vec![YouTube]), CancelToken::new(), 1)
+            .await;
         assert_eq!(
             exhausted.groups,
             vec![SourceGroup::new(
@@ -545,13 +560,43 @@ mod tests {
                 GroupStatus::Skipped(SkipReason::QuotaExhausted)
             )]
         );
-        let next_day = e.search(req(vec![YouTube]), CancelToken::new(), 2).await;
+        let next_day = e
+            .search(req_for("blues", vec![YouTube]), CancelToken::new(), 2)
+            .await;
         assert_eq!(
             next_day.groups,
             vec![SourceGroup::new(
                 YouTube,
                 GroupStatus::Ok(vec![hit(YouTube, "a")])
             )]
+        );
+    }
+
+    // The suggestions panel searches while typing; Enter then repeats the question. The repeat must come from memory.
+    #[tokio::test(start_paused = true)]
+    async fn repeated_query_is_answered_from_memory_without_quota_or_adapter() {
+        let f = fake(YouTube, 0, Some(Ok(vec![hit(YouTube, "a")])));
+        let mut e = engine(vec![f], CapabilityStatus::Supported, 1);
+        let first = e.search(req(vec![YouTube]), CancelToken::new(), 1).await;
+        let again = e
+            .search(req_for("  ROCK ", vec![YouTube]), CancelToken::new(), 1)
+            .await;
+        assert_eq!(first.groups, again.groups);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_failed_search_is_not_remembered() {
+        let f = fake(YouTube, 0, Some(Err(CoreError::ProviderUnavailable)));
+        let mut e = engine(vec![f], CapabilityStatus::Supported, 5);
+        let first = e.search(req(vec![YouTube]), CancelToken::new(), 1).await;
+        assert!(matches!(first.groups[0].status, GroupStatus::Failed(_)));
+        assert!(
+            e.cache
+                .get(
+                    &ResponseCache::key(&req(vec![YouTube]), &[YouTube]),
+                    std::time::Instant::now()
+                )
+                .is_none()
         );
     }
 }
