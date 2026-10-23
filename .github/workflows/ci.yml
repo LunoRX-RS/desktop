@@ -151,7 +151,12 @@ jobs:
           "EXPORTS`n" + ($exports -join "`n") | Out-File -Encoding ascii "$env:MPV_DEV_DIR\mpv.def"
           lib /def:"$env:MPV_DEV_DIR\mpv.def" /name:libmpv-2.dll /out:"$env:MPV_DEV_DIR\mpv.lib" /MACHINE:X64
           "RUSTFLAGS=-L native=$env:MPV_DEV_DIR" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          # The test binaries load libmpv-2.dll at start.
+          # The test binaries load libmpv-2.dll at start (STATUS_DLL_NOT_FOUND otherwise). Windows looks next to the exe
+          # first, so the DLL goes where cargo puts the test binaries; PATH gets the folder as well.
+          if (-not (Test-Path "$env:MPV_DEV_DIR\libmpv-2.dll")) { throw "libmpv-2.dll missing from $env:MPV_DEV_DIR" }
+          New-Item -ItemType Directory -Force src-tauri/target/debug/deps | Out-Null
+          Copy-Item "$env:MPV_DEV_DIR\libmpv-2.dll" src-tauri/target/debug/deps/
+          Copy-Item "$env:MPV_DEV_DIR\libmpv-2.dll" src-tauri/target/debug/
           $env:MPV_DEV_DIR | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
 
       - uses: Swatinem/rust-cache@v2
