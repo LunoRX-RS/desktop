@@ -1020,6 +1020,9 @@ dialog.lx-np[data-np-layout="page"] { --np-scrim: 0.5; }
 .ln-np-stage[data-idle="true"] .ln-np-chrome:not(:has(:focus-visible)) { opacity: 0; pointer-events: none; }
 .ln-np-stage[data-idle="true"][data-layout="full"] { cursor: none; }
 .ln-np-stage[data-idle="true"][data-layout="full"] * { cursor: none; }
+/* Linux (WebKitGTK): a cursor hidden by `cursor: none` can stay hidden and read as a dead mouse, so keep it visible. */
+html[data-platform="linux"] .ln-np-stage[data-idle="true"][data-layout="full"],
+html[data-platform="linux"] .ln-np-stage[data-idle="true"][data-layout="full"] * { cursor: auto; }
 .ln-np-pill {
   display: flex;
   flex-direction: column;

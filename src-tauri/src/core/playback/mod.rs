@@ -3,6 +3,7 @@ pub mod command;
 pub mod engine;
 pub mod extract;
 pub mod host;
+mod locale;
 pub mod lyrics;
 pub mod native;
 mod proxy;

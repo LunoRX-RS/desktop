@@ -5,6 +5,7 @@ import { playerAudioSettings, playerSetAudioSettings, type AudioSettings, type A
 import { saveAudioSettings } from "../../lib/audioSettings";
 import { AudioEffectsPanel } from "./AudioEffects";
 import { setSleepTimer, useSleepTimer } from "../../lib/sleepTimer";
+import { usePlatform } from "../../lib/platform";
 import { FIELD, Inset, NoteRow, SettingRow } from "./rows";
 
 const LOUDNESS_HINT: Record<AudioSettings["loudness"], string> = {
@@ -13,7 +14,14 @@ const LOUDNESS_HINT: Record<AudioSettings["loudness"], string> = {
   loud: "Balanced, plus 4 dB more gain with a limiter to avoid clipping. May sound compressed on quiet tracks.",
 };
 
+const OUTPUT_HINT = {
+  mac: "macOS uses shared CoreAudio. Device hardware format remains controlled by Audio MIDI Setup.",
+  linux: "Linux uses the first output mpv can open, usually PipeWire, then PulseAudio, then ALSA. The sound server decides the device format.",
+  other: "The system audio output decides the device hardware format.",
+} as const;
+
 export function AudioSettingsPanel() {
+  const platform = usePlatform();
   const [value, setValue] = useState<AudioSettingsDto | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -63,7 +71,7 @@ export function AudioSettingsPanel() {
       </select>
       {endsAt && <Button onClick={() => setSleepTimer(null)}>Cancel</Button>}
     </SettingRow>
-    <SettingRow label="Negotiated audio output" hint="macOS uses shared CoreAudio. Device hardware format remains controlled by Audio MIDI Setup.">
+    <SettingRow label="Negotiated audio output" hint={OUTPUT_HINT[platform]}>
       <span>{output?.format ? `${output.driver ?? "Audio"} · ${output.format} · ${output.sampleRate ?? "?"} Hz` : "No active output"}</span>
       <Button disabled={busy} onClick={refresh}>Refresh</Button>
     </SettingRow>

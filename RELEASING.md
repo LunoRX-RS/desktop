@@ -22,7 +22,7 @@ To build installers without publishing, run the workflow by hand (Actions → Re
 | Platform | Files | Status |
 |---|---|---|
 | macOS Apple silicon, Intel | `.dmg` | libmpv and its libraries are copied into the app, so Homebrew is not needed on the user's Mac |
-| Linux x86_64 | `.deb`, `.AppImage` | not verified on a real machine; the `.deb` depends on `libmpv2` |
+| Linux x86_64 | `.deb`, `.AppImage` | not verified on a real machine; the `.deb` depends on `libmpv2` (or `libmpv1` on older Ubuntu). Whether the AppImage carries libmpv is untested |
 | Windows x86_64 | `-setup.exe` (NSIS) | not verified on a real machine; `libmpv-2.dll` is installed next to the app |
 
 Linux and Windows jobs are allowed to fail without blocking the release. Check the release assets to see which ones were built.

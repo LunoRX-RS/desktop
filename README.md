@@ -112,7 +112,8 @@ Three rules shape the code:
 | Sync with the backend | Works against a running backend (sign in, create, add, upload). Not production-hardened. |
 | Library: albums and songs tabs | Partly sample data, labelled as a demo in the UI. Playlists and likes are real. |
 | macOS bundle | Bundling has been run locally, on a debug build only. |
-| Windows and Linux | Targets. Not verified on real machines. Linux sign-in needs a Secret Service (GNOME Keyring or KWallet). |
+| Linux | Runs from source on Arch Linux under Hyprland (Wayland), with playback and MPRIS media controls. Other distributions, X11 and other window managers are targets that have not been run. Installers are not verified. Sign-in needs a Secret Service (GNOME Keyring or KWallet). See [Linux notes](#linux-notes). |
+| Windows | Target. Not verified on a real machine. |
 | Release signing | macOS apps are ad-hoc signed unless signing secrets are set. Windows installers are unsigned. |
 | Licences | This repository is GPL-3.0, because it links `rustypipe` (GPL-3.0). `libmpv` is LGPL. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists every component and licence. |
 
@@ -125,10 +126,19 @@ Three rules shape the code:
 | Rust stable with edition 2024 (`cargo`, `rustfmt`, `clippy`) | The core and the Tauri shell |
 | Bun, or Node 22 with npm | The frontend. `tauri.conf.json` calls `bun run dev` and `bun run build`, so Bun has to be on the `PATH` for `tauri dev` and `tauri build` as configured |
 | Tauri 2 platform prerequisites | See the Tauri docs for your OS |
-| libmpv | Native playback. On macOS: `brew install mpv` |
+| libmpv | Native playback. macOS: `brew install mpv`. Debian/Ubuntu: `libmpv-dev`. Arch: `mpv` |
 | A Secret Service (Linux only) | GNOME Keyring or KWallet, to store the sign-in token |
 
-On Linux the build also needs `build-essential pkg-config libssl-dev libdbus-1-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev`.
+On Debian/Ubuntu the build also needs `build-essential pkg-config libssl-dev libdbus-1-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev`. On Arch: `base-devel webkit2gtk-4.1 libayatana-appindicator librsvg openssl dbus mpv`.
+
+### Linux notes
+
+- **Window.** The window keeps the window manager's own title bar, so it moves, tiles and resizes like any other window on GNOME, KDE, Hyprland, Sway and i3, on Wayland and X11. The app draws its own drag area only on macOS.
+- **Media keys and widgets.** The app registers an MPRIS player (`org.mpris.MediaPlayer2.io.lunorx.desktop`). Desktop media widgets, `playerctl` and the media keys your desktop routes to MPRIS players control it. On a bare window manager, run a daemon such as `playerctld` or bind the keys to `playerctl`.
+- **Sign-in storage.** YouTube sign-in and the sync token are stored through the Secret Service. GNOME Keyring or KWallet must be running; many tiling window manager setups do not start one, so start `gnome-keyring-daemon` from your session.
+- **Locale.** libmpv needs the numeric locale `C`. The app sets it for itself, so a UTF-8 system locale such as `en_US.UTF-8` is fine.
+- **Wayland rendering.** On Wayland the app sets `WEBKIT_FORCE_VBLANK_TIMER=1` unless you set it yourself. Without it the window stopped repainting on a hybrid Intel/NVIDIA laptop under Hyprland (the page froze while audio kept playing). Set `WEBKIT_FORCE_VBLANK_TIMER=0` to opt out.
+- **Audio output.** mpv picks the first output it can open, usually PipeWire, then PulseAudio, then ALSA.
 
 Building, running and testing need no secrets.
 

@@ -12,6 +12,7 @@ use tauri::{Emitter, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    platform::prepare_webview_environment();
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
             if let Some(window) = app.get_webview_window("main") {

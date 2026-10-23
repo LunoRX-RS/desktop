@@ -8,6 +8,7 @@ import { AMBIENT_BG, Art } from "../Art";
 import { IconButton, Scrubber, cx } from "../ui";
 import { formatDuration, type QueueTrack } from "../../lib/media";
 import { usePlayback } from "../../lib/playback";
+import { useDragRegion, usePlatform } from "../../lib/platform";
 import { NativeNowPlaying } from "./NativeNowPlaying";
 import { DUR, SPRING, tween } from "../../lib/motion";
 
@@ -56,6 +57,8 @@ export default function NowPlaying() {
   const s = useUi();
   const native = usePlayback((state) => state.requested !== null || state.track !== null);
   const reduce = useReducedMotion();
+  const mac = usePlatform() === "mac";
+  const dragRegion = useDragRegion();
   const track = s.queue[s.index];
   const dur = track?.durationSec ?? 0;
 
@@ -105,7 +108,7 @@ export default function NowPlaying() {
 
           <div className="relative mx-auto flex h-full max-w-content flex-col px-10 pb-8">
             {/* Top row: close chevron sits right of the traffic lights. Empty space drags the window. */}
-            <div data-tauri-drag-region className="flex h-[52px] shrink-0 items-center gap-2 pl-[76px]">
+            <div {...dragRegion} className={cx("flex h-[52px] shrink-0 items-center gap-2", mac ? "pl-[76px]" : "pl-0")}>
               <IconButton label="Collapse Now Playing" onClick={() => s.setNowPlaying(false)} className="size-9">
                 <ChevronDown size={22} />
               </IconButton>
