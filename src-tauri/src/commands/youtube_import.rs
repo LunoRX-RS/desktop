@@ -345,6 +345,8 @@ fn write_liked_diag(app: &AppHandle, import: &Import) {
         "otherRows": s.other,
         "tracks": s.tracks,
         "kept": s.kept,
+        "headerCount": s.header_count,
+        "continuationKeys": s.continuation_keys,
         "at": now_secs(),
     });
     let _ = std::fs::create_dir_all(&dir);

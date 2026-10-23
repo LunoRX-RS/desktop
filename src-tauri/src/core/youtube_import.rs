@@ -124,17 +124,23 @@ pub struct LikedStats {
     pub tracks: u64,
     pub kept: u64,
     pub stop: &'static str,
+    /// The count YouTube printed in the first page's header, when there was one.
+    pub header_count: Option<u64>,
+    /// Names of continuation-looking keys seen across the pages (no values).
+    pub continuation_keys: Vec<String>,
 }
 
 async fn liked(yt: &Yt) -> Result<(Vec<SavedTrack>, bool, LikedStats), LibraryError> {
     let music = yt.music();
-    let (first, tally) = step(music.saved_tracks_tally()).await?;
+    let (first, tally, probe) = step(music.saved_tracks_tally()).await?;
     let mut stats = LikedStats {
         pages: 1,
         rows: tally.rows as u64,
         no_id: tally.no_id as u64,
         other: tally.other as u64,
         tracks: tally.tracks as u64,
+        header_count: probe.header_count,
+        continuation_keys: probe.continuation_keys,
         ..LikedStats::default()
     };
     let mut items = first.items;
@@ -151,7 +157,12 @@ async fn liked(yt: &Yt) -> Result<(Vec<SavedTrack>, bool, LikedStats), LibraryEr
         if last.as_ref() == Some(&token) {
             break "repeat";
         }
-        let (page, tally) = step(music.saved_tracks_more_tally(&token)).await?;
+        let (page, tally, probe) = step(music.saved_tracks_more_tally(&token)).await?;
+        for key in probe.continuation_keys {
+            if stats.continuation_keys.len() < 40 && !stats.continuation_keys.contains(&key) {
+                stats.continuation_keys.push(key);
+            }
+        }
         stats.pages += 1;
         stats.rows += tally.rows as u64;
         stats.no_id += tally.no_id as u64;
