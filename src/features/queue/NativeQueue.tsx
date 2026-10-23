@@ -8,6 +8,7 @@ import { TrackCover } from "../../components/TrackCover";
 import { LikeButton } from "../../components/LibraryActions";
 import { formatDuration } from "../../lib/media";
 import { Button, EmptyState, IconButton, cx } from "../../components/ui";
+import { VibePicker } from "../../components/PlayModeButtons";
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { addToPlaylist } from "../../lib/playlistActions";
 import { syncCreateLocalPlaylist } from "../../services/tauri/sync";
@@ -107,6 +108,7 @@ export default function NativeQueue() {
         <p className="text-[13px] leading-[18px] text-secondary-text">
           Autoplay · {upcoming.length} songs up next. Select any song to continue from there.
         </p>
+        <div className="mt-2"><VibePicker /></div>
         <Button variant="secondary" className="mt-2 self-start" disabled={saved === "saving"} onClick={() => void saveQueue()}>
           {saved === "saving" ? "Saving…" : saved === "done" ? "Saved to Playlists" : saved === "failed" ? "Could not save. Retry" : "Save queue as playlist"}
         </Button>
