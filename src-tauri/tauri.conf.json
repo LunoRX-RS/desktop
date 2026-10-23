@@ -44,7 +44,7 @@
     "shortDescription": "Desktop music player for YouTube Music",
     "longDescription": "LunoRX is a desktop music player for YouTube Music with synced lyrics, local-first playlists and an optional sync backend.",
     "copyright": "Copyright (c) 2026 EvarinthoSec & LUNOR-X contributors",
-    "license": "GPL-3.0-only",
+    "license": "MIT",
     "licenseFile": "../LICENSE",
     "macOS": {
       "minimumSystemVersion": "11.0"

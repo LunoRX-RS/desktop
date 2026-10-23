@@ -4,16 +4,19 @@ use super::{
     provider::{SearchFuture, SearchProvider},
     rank::{Candidate, Channel, Kind, order},
 };
-use crate::core::{domain::ProviderId, errors::CoreError, playback::extract::valid_id};
-use rustypipe::client::RustyPipe;
-use rustypipe::model::{TrackType, Verification};
+use crate::core::{domain::ProviderId, errors::CoreError, playback::extract::valid_id, yt::Yt};
+use innerlight::{
+    Error as YtError,
+    music::{Track, TrackKind},
+    youtube::{Verification, Video},
+};
 
 pub struct YouTubeMusicSearch {
-    pipe: RustyPipe,
+    yt: Yt,
 }
 impl YouTubeMusicSearch {
-    pub fn new(pipe: RustyPipe) -> Self {
-        Self { pipe }
+    pub fn new(yt: Yt) -> Self {
+        Self { yt }
     }
 }
 // After the song search answers, the video search gets this long to finish. Waiting out its full timeout made every search as
@@ -27,19 +30,19 @@ impl SearchProvider for YouTubeMusicSearch {
     }
     fn search<'a>(&'a self, query: &'a str, limit: u8) -> SearchFuture<'a> {
         Box::pin(async move {
-            let client = self.pipe.query();
+            let (music_api, youtube_api) = (self.yt.music(), self.yt.youtube());
             let mut music = std::pin::pin!(tokio::time::timeout(
                 REQUEST_TIMEOUT,
-                client.music_search_tracks(query)
+                music_api.search_tracks(query)
             ));
             let mut videos = std::pin::pin!(tokio::time::timeout(
                 REQUEST_TIMEOUT,
-                client.search::<rustypipe::model::VideoItem, _>(query)
+                youtube_api.search_videos(query, None)
             ));
             let (music, videos) = tokio::select! {
                 music = &mut music => {
                     let videos = tokio::time::timeout(VIDEO_GRACE, &mut videos).await;
-                    (music, videos.unwrap_or(Ok(Err(rustypipe::error::Error::Other("video search still running".into())))))
+                    (music, videos.unwrap_or(Ok(Err(YtError::Network))))
                 }
                 videos = &mut videos => ((&mut music).await, videos),
             };
@@ -49,10 +52,10 @@ impl SearchProvider for YouTubeMusicSearch {
                 return Err(CoreError::ProviderUnavailable);
             }
             let mut candidates = Vec::new();
-            for track in music.into_iter().flat_map(|r| r.items.items) {
+            for track in music.into_iter().flat_map(|r| r.items) {
                 candidates.extend(music_candidate(track));
             }
-            for video in videos.into_iter().flat_map(|r| r.items.items) {
+            for video in videos.into_iter().flat_map(|r| r.items) {
                 candidates.extend(video_candidate(video));
             }
             Ok(order(query, candidates, usize::from(limit.clamp(1, 10))))
@@ -60,8 +63,8 @@ impl SearchProvider for YouTubeMusicSearch {
     }
 }
 
-fn music_candidate(track: rustypipe::model::TrackItem) -> Option<Candidate> {
-    if !valid_id(&track.id) || track.track_type == TrackType::Episode {
+fn music_candidate(track: Track) -> Option<Candidate> {
+    if !valid_id(&track.id) {
         return None;
     }
     let artist_refs = track
@@ -77,19 +80,19 @@ fn music_candidate(track: rustypipe::model::TrackItem) -> Option<Candidate> {
         ProviderId::YouTube,
         track.id.clone(),
         format!("https://www.youtube.com/watch?v={}", track.id),
-        track.name,
+        track.title,
         track.artists.into_iter().map(|a| a.name).collect(),
     )
     .ok()?;
     hit.source = Some(SearchSource::YouTubeMusic);
     hit.artist_refs = artist_refs;
-    hit.duration_ms = track.duration.map(|seconds| u64::from(seconds) * 1000);
+    hit.duration_ms = track.duration_ms;
     hit.artwork_url = track
-        .cover
+        .thumbnails
         .into_iter()
         .max_by_key(|cover| cover.width)
         .and_then(|cover| crate::core::playback::track_info::artwork_url(&cover.url));
-    let kind = if track.track_type == TrackType::Track {
+    let kind = if track.kind == TrackKind::Audio {
         Kind::Release
     } else {
         Kind::MusicVideo
@@ -101,8 +104,9 @@ fn music_candidate(track: rustypipe::model::TrackItem) -> Option<Candidate> {
     })
 }
 
-fn video_candidate(video: rustypipe::model::VideoItem) -> Option<Candidate> {
-    if !valid_id(&video.id) || video.is_live || video.is_upcoming || video.is_short {
+fn video_candidate(video: Video) -> Option<Candidate> {
+    // Live streams, Shorts and premieres that have not started (no length) are not songs to play.
+    if !valid_id(&video.id) || video.is_live || video.is_short || video.duration_ms.is_none() {
         return None;
     }
     let channel = match video.channel.as_ref().map(|c| c.verification) {
@@ -110,31 +114,33 @@ fn video_candidate(video: rustypipe::model::VideoItem) -> Option<Candidate> {
         Some(Verification::Verified) => Channel::Verified,
         _ => Channel::Unknown,
     };
-    let mut hit = SearchHit::new(
-        ProviderId::YouTube,
-        video.id.clone(),
-        format!("https://www.youtube.com/watch?v={}", video.id),
-        video.name,
-        video
-            .channel
-            .as_ref()
-            .map(|c| vec![c.name.clone()])
-            .unwrap_or_default(),
-    )
-    .ok()?;
-    hit.source = Some(SearchSource::YouTube);
-    hit.artist_refs = video
+    let artists = video
+        .channel
+        .as_ref()
+        .map(|c| vec![c.name.clone()])
+        .unwrap_or_default();
+    let artist_refs = video
         .channel
         .into_iter()
         .map(|c| ArtistRef {
             provider: ProviderId::YouTube,
-            id: Some(c.id),
+            id: c.id,
             name: c.name,
         })
         .collect();
-    hit.duration_ms = video.duration.map(|d| u64::from(d) * 1000);
+    let mut hit = SearchHit::new(
+        ProviderId::YouTube,
+        video.id.clone(),
+        format!("https://www.youtube.com/watch?v={}", video.id),
+        video.title,
+        artists,
+    )
+    .ok()?;
+    hit.source = Some(SearchSource::YouTube);
+    hit.artist_refs = artist_refs;
+    hit.duration_ms = video.duration_ms;
     hit.artwork_url = video
-        .thumbnail
+        .thumbnails
         .into_iter()
         .max_by_key(|c| c.width)
         .and_then(|c| crate::core::playback::track_info::artwork_url(&c.url));
@@ -143,4 +149,99 @@ fn video_candidate(video: rustypipe::model::VideoItem) -> Option<Candidate> {
         kind: Kind::Video,
         channel,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn provider(transport: innerlight::FixtureTransport) -> YouTubeMusicSearch {
+        let client = innerlight::Client::builder()
+            .transport(std::sync::Arc::new(transport))
+            .build()
+            .unwrap();
+        YouTubeMusicSearch::new(Yt::from_client(client))
+    }
+    fn video(id: &str, extra: serde_json::Value) -> serde_json::Value {
+        let mut renderer = serde_json::json!({
+            "videoId": id, "title": {"simpleText": "Video"},
+            "ownerText": {"runs": [{"text": "Channel"}]},
+            "lengthText": {"simpleText": "3:21"},
+            "thumbnail": {"thumbnails": [{"url": "https://i.ytimg.com/vi/x/hq.jpg", "width": 360, "height": 202}]}
+        });
+        renderer
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        serde_json::json!({"videoRenderer": renderer})
+    }
+    #[tokio::test]
+    async fn video_search_alone_supplies_hits_and_skips_live_shorts_and_premieres() {
+        let page = serde_json::json!({"contents": [
+            video("abcdefghijk", serde_json::json!({})),
+            video("kJQP7kiw5Fk", serde_json::json!({"badges": [{"metadataBadgeRenderer": {"style": "BADGE_STYLE_TYPE_LIVE_NOW"}}], "lengthText": null})),
+            video("aqz-KE-bpKQ", serde_json::json!({"lengthText": null})),
+            video("r-G2pKr2_n8", serde_json::json!({"navigationEndpoint": {"reelWatchEndpoint": {"videoId": "r-G2pKr2_n8"}}})),
+        ]});
+        // Music search answers with nothing readable; the video half still delivers.
+        let hits = provider(
+            innerlight::FixtureTransport::new()
+                .with_match("search", "EgIQAQ", page)
+                .with("search", serde_json::json!({"unexpected": true})),
+        )
+        .search("lofi", 5)
+        .await;
+        let hits = hits.unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].source(), Some(SearchSource::YouTube));
+        assert_eq!(hits[0].provider_track_id(), "abcdefghijk");
+    }
+    #[tokio::test]
+    async fn unreadable_answers_from_both_sources_are_unavailable_not_a_panic() {
+        for body in [
+            serde_json::json!({}),
+            serde_json::json!(null),
+            serde_json::json!({"contents": 7}),
+        ] {
+            let result = provider(innerlight::FixtureTransport::new().with("search", body))
+                .search("lofi", 5)
+                .await;
+            // Parse failures on the music half, an empty list on the video half: no hits, no panic.
+            assert!(result.map_or(true, |hits| hits.is_empty()));
+        }
+        let down = provider(innerlight::FixtureTransport::new().with_raw("search", 503, b"{}"));
+        assert!(matches!(
+            down.search("lofi", 5).await,
+            Err(CoreError::ProviderUnavailable)
+        ));
+    }
+
+    #[test]
+    fn a_verified_artist_channel_ranks_as_artist_and_a_live_row_is_dropped() {
+        let channel = innerlight::youtube::ChannelRef {
+            id: Some("UCuAXFkgsw1L7xaCfnd5JJOw".into()),
+            name: "Artist".into(),
+            verification: Verification::Artist,
+        };
+        let row = Video {
+            id: "abcdefghijk".into(),
+            title: "Song".into(),
+            channel: Some(channel.clone()),
+            duration_ms: Some(200_000),
+            thumbnails: vec![],
+            is_live: false,
+            is_short: false,
+            set_video_id: None,
+        };
+        let candidate = video_candidate(row.clone()).unwrap();
+        assert_eq!(candidate.channel, Channel::Artist);
+        assert_eq!(candidate.kind, Kind::Video);
+        assert!(
+            video_candidate(Video {
+                is_live: true,
+                ..row
+            })
+            .is_none()
+        );
+    }
 }

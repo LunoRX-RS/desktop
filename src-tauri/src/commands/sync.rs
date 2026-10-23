@@ -311,6 +311,30 @@ pub async fn run_flush_pending(state: &SyncEngineState) -> Result<usize, ErrorCa
     engine::flush_pending(&mut Host::Shared(state)).await
 }
 
+/// How often the signed-in device sends queued writes and pulls the server state.
+const AUTO_SYNC_EVERY: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Background cloud sync. While signed in it sends queued playlist writes and pulls the server state every minute.
+/// Signed out it does nothing. Failures stay in the sync status (offline, rate limited, conflict); nothing pops up.
+pub fn start_auto_sync(app: tauri::AppHandle) {
+    use tauri::{Emitter, Manager};
+    tauri::async_runtime::spawn(async move {
+        let mut tick = tokio::time::interval(AUTO_SYNC_EVERY);
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        loop {
+            tick.tick().await;
+            let state = app.state::<SyncEngineState>();
+            let before = run_status(&state).await;
+            if before.state == SyncState::SignedOut {
+                continue;
+            }
+            let _ = run_flush_pending(&state).await;
+            let after = run_status(&state).await;
+            let _ = app.emit_to("main", "core://sync/auto", after);
+        }
+    });
+}
+
 pub async fn run_list_local_playlists(
     state: &SyncEngineState,
 ) -> Result<Vec<LocalPlaylistDto>, ErrorCategory> {

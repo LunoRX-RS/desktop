@@ -2,7 +2,7 @@
 use super::extract::{failed, valid_id};
 use super::lyrics::{FallbackLyrics, LyricsError, TimedLine};
 use crate::core::errors::PlaybackErrorKind;
-use rustypipe::client::RustyPipe;
+use crate::core::yt::Yt;
 use serde::Serialize;
 
 #[derive(Clone, Serialize)]
@@ -219,16 +219,16 @@ pub fn artwork_url(raw: &str) -> Option<String> {
     .then(|| url.into())
 }
 
-pub async fn fetch(pipe: &RustyPipe, id: &str) -> Result<TrackInfo, PlaybackErrorKind> {
-    fetch_cached(pipe, id, None).await
+pub async fn fetch(yt: &Yt, id: &str) -> Result<TrackInfo, PlaybackErrorKind> {
+    fetch_cached(yt, id, None).await
 }
 
 pub async fn fetch_cached(
-    pipe: &RustyPipe,
+    yt: &Yt,
     id: &str,
     cache: Option<&std::path::Path>,
 ) -> Result<TrackInfo, PlaybackErrorKind> {
-    fetch_with(pipe, id, cache, &super::lyric_sources::Ctx::default()).await
+    fetch_with(yt, id, cache, &super::lyric_sources::Ctx::default()).await
 }
 
 /// Entry rank for the Auto pick: real word timings, then timestamps, then plain text.
@@ -269,8 +269,28 @@ fn chosen_from(entry: &LyricsSource) -> Chosen {
     }
 }
 
+struct Details {
+    track: innerlight::music::Track,
+    lyrics_id: Option<String>,
+}
+
+/// The track's own entry in its radio answer, plus the id of its lyrics page. The service lists the requested video
+/// first; an answer without it (an unavailable video) is an error rather than another track's data.
+async fn details(yt: &Yt, id: &str) -> Result<Details, innerlight::Error> {
+    let radio = yt.music().radio(id).await?;
+    let track = radio
+        .queue
+        .into_iter()
+        .find(|t| t.id == id)
+        .ok_or(innerlight::Error::Parse)?;
+    Ok(Details {
+        track,
+        lyrics_id: radio.lyrics_browse_id,
+    })
+}
+
 pub async fn fetch_with(
-    pipe: &RustyPipe,
+    yt: &Yt,
     id: &str,
     cache: Option<&std::path::Path>,
     ctx: &super::lyric_sources::Ctx,
@@ -278,16 +298,13 @@ pub async fn fetch_with(
     if !valid_id(id) {
         return Err(PlaybackErrorKind::Validation("invalid YouTube id"));
     }
-    let details = tokio::time::timeout(
-        std::time::Duration::from_secs(10),
-        pipe.query().music_details(id),
-    )
-    .await
-    .map_err(|_| failed())?
-    .map_err(|_| failed())?;
+    let details = tokio::time::timeout(std::time::Duration::from_secs(10), details(yt, id))
+        .await
+        .map_err(|_| failed())?
+        .map_err(|_| failed())?;
     let artwork = details
         .track
-        .cover
+        .thumbnails
         .iter()
         .max_by_key(|image| image.width)
         .and_then(|image| artwork_url(&image.url));
@@ -307,6 +324,10 @@ pub async fn fetch_with(
         .into_iter()
         .map(|artist| artist.name)
         .collect();
+    let seconds = details
+        .track
+        .duration_ms
+        .and_then(|ms| u32::try_from(ms / 1000).ok());
     // Both sources are best effort and run together, each with its own deadline; one failing or
     // timing out never fails the other or the call.
     let youtube_lookup = async {
@@ -318,13 +339,14 @@ pub async fn fetch_with(
         };
         match tokio::time::timeout(
             std::time::Duration::from_secs(6),
-            pipe.query().music_lyrics(lyrics_id),
+            yt.music().lyrics(&lyrics_id),
         )
         .await
         {
-            Ok(Ok(lyrics)) if !lyrics.body.trim().is_empty() => {
-                (Some((lyrics.body, lyrics.footer)), "available")
-            }
+            Ok(Ok(lyrics)) if !lyrics.text.trim().is_empty() => (
+                Some((lyrics.text, lyrics.source.unwrap_or_default())),
+                "available",
+            ),
             Ok(Ok(_)) => (None, "unavailable"),
             _ => (None, "failed"),
         }
@@ -336,14 +358,14 @@ pub async fn fetch_with(
         tokio::time::timeout(
             std::time::Duration::from_secs(9),
             super::lyrics::fallback_cached(
-                &details.track.name,
+                &details.track.title,
                 &artists,
                 details
                     .track
                     .album
                     .as_ref()
                     .map(|album| album.name.as_str()),
-                details.track.duration,
+                seconds,
                 cache,
             ),
         )
@@ -351,10 +373,10 @@ pub async fn fetch_with(
         .unwrap_or(Err(LyricsError))
     };
     let query = super::lyric_sources::Query {
-        title: details.track.name.clone(),
+        title: details.track.title.clone(),
         artists: artists.clone(),
         album: details.track.album.as_ref().map(|album| album.name.clone()),
-        duration_ms: details.track.duration.unwrap_or(0).saturating_mul(1000),
+        duration_ms: seconds.unwrap_or(0).saturating_mul(1000),
     };
     let extra_lookup = super::lyric_sources::run_all(ctx, id, &query);
     let (((youtube, youtube_status), lookup), extra) = tokio::join!(
@@ -364,9 +386,7 @@ pub async fn fetch_with(
     let mut lyrics_sources = sources(youtube.as_ref(), youtube_status, &lookup);
     if ctx.settings.is_disabled("lrclib") {
         lyrics_sources[1].status = "disabled";
-    } else if matches!(lookup, Ok(None))
-        && !super::lyrics::searchable(&artists, details.track.duration)
-    {
+    } else if matches!(lookup, Ok(None)) && !super::lyrics::searchable(&artists, seconds) {
         lyrics_sources[1].status = "unavailable";
     }
     lyrics_sources.extend(
@@ -382,7 +402,7 @@ pub async fn fetch_with(
     };
     Ok(TrackInfo {
         provider_track_id: id.into(),
-        title: details.track.name,
+        title: details.track.title,
         artists,
         artist_refs,
         artwork_url: artwork,

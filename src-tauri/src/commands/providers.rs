@@ -7,7 +7,7 @@ use crate::commands::state::SearchState;
 use crate::core::domain::ProviderId;
 use crate::sync::credentials::{TokenStore, TokenStoreError};
 
-const SERVICE: &str = "com.lunorx.desktop";
+const SERVICE: &str = "io.lunorx.desktop";
 // Distinct from the sync session slot ("backend-session").
 const YOUTUBE_ACCOUNT: &str = "provider-youtube-api-key";
 const KEY_MIN: usize = 20;

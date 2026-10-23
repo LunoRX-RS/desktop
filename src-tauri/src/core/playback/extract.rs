@@ -1,9 +1,16 @@
 //! YouTube resolution stays on the desktop; signed URLs never enter IPC or storage.
+//!
+//! One `player` request per attempt, made the way the site's own pages make it (web music client, the user's own
+//! session cookie when connected). A sign-in or verification challenge is reported as a typed error and nothing is
+//! retried, rotated or worked around.
 use super::audio::AudioQuality;
-use crate::core::errors::{HostRejectKind, PlaybackErrorKind};
-use rustypipe::{
-    client::{ClientType, RustyPipe},
-    model::AudioStream,
+use crate::core::{
+    errors::{HostRejectKind, PlaybackErrorKind},
+    yt::Yt,
+};
+use innerlight::{
+    ClientKind,
+    player::{Player, PlayerError, Quality, ResolveOptions, Resolved},
 };
 use std::time::Duration;
 
@@ -16,75 +23,78 @@ pub fn valid_id(id: &str) -> bool {
 pub(super) fn failed() -> PlaybackErrorKind {
     PlaybackErrorKind::HostRejected(HostRejectKind::Failed)
 }
-pub fn resolver() -> Result<RustyPipe, PlaybackErrorKind> {
-    RustyPipe::builder()
-        .no_storage()
-        .no_reporter()
-        .timeout(Duration::from_secs(12))
-        .build()
-        .map_err(|_| failed())
-}
-fn best_audio(streams: &[AudioStream], quality: AudioQuality) -> Option<&AudioStream> {
-    let eligible = || {
-        streams
-            .iter()
-            .filter(|s| s.drm_track_type.is_none() && s.size > 0)
-    };
-    let default = eligible().any(|s| s.track.as_ref().is_none_or(|t| t.is_default));
-    let candidates =
-        || eligible().filter(|s| !default || s.track.as_ref().is_none_or(|t| t.is_default));
-    candidates()
-        .filter(|s| s.bitrate <= quality.bitrate_limit())
-        .max_by_key(|s| s.bitrate)
-        .or_else(|| candidates().min_by_key(|s| s.bitrate))
+pub fn resolver() -> Result<Yt, PlaybackErrorKind> {
+    Yt::new(Duration::from_secs(12)).map_err(|_| failed())
 }
 pub struct ResolvedAudio {
     pub url: String,
     pub size: u64,
 }
 
-pub async fn resolve(pipe: &RustyPipe, id: &str) -> Result<ResolvedAudio, PlaybackErrorKind> {
-    resolve_with_quality(pipe, id, AudioQuality::High).await
+fn quality(q: AudioQuality) -> Quality {
+    match q {
+        AudioQuality::Low => Quality::Low,
+        AudioQuality::Normal => Quality::Normal,
+        AudioQuality::High => Quality::High,
+    }
+}
+
+/// Only a sign-in or bot challenge has its own category, so the UI can say what to do. Everything else is "failed".
+fn rejection(error: PlayerError) -> PlaybackErrorKind {
+    match error {
+        PlayerError::LoginRequired { .. } => {
+            PlaybackErrorKind::HostRejected(HostRejectKind::VerificationRequired)
+        }
+        _ => failed(),
+    }
+}
+
+pub async fn resolve(yt: &Yt, id: &str) -> Result<ResolvedAudio, PlaybackErrorKind> {
+    resolve_with_quality(yt, id, AudioQuality::High).await
 }
 
 pub async fn resolve_with_quality(
-    pipe: &RustyPipe,
+    yt: &Yt,
     id: &str,
     quality: AudioQuality,
 ) -> Result<ResolvedAudio, PlaybackErrorKind> {
     if !valid_id(id) {
         return Err(PlaybackErrorKind::Validation("invalid YouTube id"));
     }
-    if let Ok(audio) = super::visionos::resolve(pipe, id, quality).await {
-        return Ok(audio);
-    }
-    let query = pipe.query();
-    let player = tokio::time::timeout(Duration::from_secs(40), async {
-        if query.auth_enabled(ClientType::DesktopMusic) {
-            // Stored cookies are sent only for explicitly authenticated queries.
-            for client in [ClientType::DesktopMusic, ClientType::Desktop] {
-                if let Ok(player) = query
-                    .clone()
-                    .authenticated()
-                    .player_from_client(id, client)
-                    .await
-                {
-                    return Ok(player);
-                }
-            }
-        }
-        query
-            .player_from_clients(id, query.player_client_order())
-            .await
-    })
-    .await
-    .map_err(|_| PlaybackErrorKind::HostRejected(HostRejectKind::Timeout))?
-    .map_err(|_| failed())?;
-    let stream = best_audio(&player.audio_streams, quality).ok_or_else(failed)?;
+    let stream = tokio::time::timeout(Duration::from_secs(40), player(yt, id, quality))
+        .await
+        .map_err(|_| PlaybackErrorKind::HostRejected(HostRejectKind::Timeout))?
+        .map_err(rejection)?;
     Ok(ResolvedAudio {
         url: checked_url(&stream.url)?,
         size: stream.size,
     })
+}
+
+/// The one service request, plus at most one repeat when the cached player script no longer deciphers (that repeat
+/// fetches the script again; it is not a retry against the service's answer).
+async fn player(yt: &Yt, id: &str, quality_wish: AudioQuality) -> Result<Resolved, PlayerError> {
+    let mut script_refreshed = false;
+    loop {
+        let script = yt.decipher().await;
+        let mut handle = Player::new(yt.client());
+        if let Some(script) = &script {
+            handle = handle.with_decipher(script.clone());
+        }
+        let options = ResolveOptions {
+            kind: ClientKind::WebMusic,
+            authed: yt.signed_in(),
+            quality: quality(quality_wish),
+            signature_timestamp: script.as_ref().and_then(|s| s.signature_timestamp().ok()),
+        };
+        match handle.resolve(id, options).await {
+            Err(PlayerError::DecipherFailed) if script.is_some() && !script_refreshed => {
+                script_refreshed = true;
+                yt.forget_script();
+            }
+            other => return other,
+        }
+    }
 }
 pub(super) fn checked_url(raw: &str) -> Result<String, PlaybackErrorKind> {
     let url = reqwest::Url::parse(raw).map_err(|_| failed())?;
@@ -105,42 +115,147 @@ pub(super) fn checked_url(raw: &str) -> Result<String, PlaybackErrorKind> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn quality_selects_bitrate_and_falls_back_when_limit_unavailable() {
-        let streams: Vec<AudioStream> = [48_000, 96_000, 160_000]
-            .into_iter()
-            .map(|bitrate| {
-                serde_json::from_value(serde_json::json!({
-                    "url": "https://rr1.googlevideo.com/x", "itag": 1,
-                    "bitrate": bitrate, "average_bitrate": bitrate, "size": 100,
-                    "mime": "audio/webm", "format": "webm", "codec": "opus", "drm_systems": []
-                }))
-                .unwrap()
-            })
-            .collect();
-        assert_eq!(
-            best_audio(&streams, AudioQuality::Low).unwrap().bitrate,
-            48_000
-        );
-        assert_eq!(
-            best_audio(&streams, AudioQuality::Normal).unwrap().bitrate,
-            96_000
-        );
-        assert_eq!(
-            best_audio(&streams, AudioQuality::High).unwrap().bitrate,
-            160_000
-        );
-        assert_eq!(
-            best_audio(&streams[1..], AudioQuality::Low)
-                .unwrap()
-                .bitrate,
-            96_000
-        );
-        assert!(best_audio(&[], AudioQuality::High).is_none());
-        let mut unavailable = streams;
-        unavailable.iter_mut().for_each(|s| s.size = 0);
-        assert!(best_audio(&unavailable, AudioQuality::High).is_none());
+    use innerlight::{Client, FixtureTransport};
+    use serde_json::json;
+    use std::sync::Arc;
+
+    fn offline_script() -> FixtureTransport {
+        // The player-script loader answers 404, so no deciphering is available and no GET reaches a network.
+        FixtureTransport::new().with_raw("iframe_api", 404, b"")
     }
+    fn yt_with(transport: FixtureTransport) -> (Yt, Arc<FixtureTransport>) {
+        let transport = Arc::new(transport);
+        let client = Client::builder()
+            .transport(transport.clone())
+            .build()
+            .unwrap();
+        (Yt::from_client(client), transport)
+    }
+    fn formats() -> serde_json::Value {
+        let format = |bitrate: u32, url: &str, extra: serde_json::Value| {
+            let mut f = json!({
+                "itag": 140 + bitrate / 1000, "mimeType": "audio/mp4; codecs=\"mp4a.40.2\"",
+                "bitrate": bitrate, "contentLength": "100", "url": url
+            });
+            if let (Some(f), Some(extra)) = (f.as_object_mut(), extra.as_object()) {
+                f.extend(extra.clone());
+            }
+            f
+        };
+        json!({"playabilityStatus": {"status": "OK"}, "streamingData": {"adaptiveFormats": [
+            format(48_000, "https://rr1.googlevideo.com/low", json!({})),
+            format(96_000, "https://rr1.googlevideo.com/mid", json!({})),
+            format(160_000, "https://rr1.googlevideo.com/high", json!({})),
+            format(256_000, "https://rr1.googlevideo.com/dub", json!({"audioTrack": {"id": "x", "displayName": "Dub", "audioIsDefault": false}})),
+        ]}})
+    }
+
+    #[tokio::test]
+    async fn quality_picks_the_bitrate_and_skips_non_default_tracks() {
+        for (wish, suffix) in [
+            (AudioQuality::Low, "/low"),
+            (AudioQuality::Normal, "/mid"),
+            (AudioQuality::High, "/high"),
+        ] {
+            let (yt, _) = yt_with(offline_script().with("player", formats()));
+            let audio = resolve_with_quality(&yt, "a_B-9zZ0-_x", wish)
+                .await
+                .unwrap();
+            assert!(audio.url.ends_with(suffix), "{wish:?}: {}", audio.url);
+            assert_eq!(audio.size, 100);
+        }
+    }
+
+    #[tokio::test]
+    async fn a_url_outside_the_media_hosts_is_never_returned() {
+        let mut v = formats();
+        v["streamingData"]["adaptiveFormats"] = json!([{
+            "itag": 140, "mimeType": "audio/mp4", "bitrate": 128000, "contentLength": "100",
+            "url": "https://evil.test/audio"
+        }]);
+        let (yt, _) = yt_with(offline_script().with("player", v));
+        assert!(
+            resolve_with_quality(&yt, "a_B-9zZ0-_x", AudioQuality::High)
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_bot_check_is_a_typed_error_after_exactly_one_request() {
+        let transport = offline_script().with_file(
+            "player",
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/fixtures/player_login_bot_check.json"
+            ),
+        );
+        let (yt, transport) = yt_with(transport);
+        let err = resolve_with_quality(&yt, "a_B-9zZ0-_x", AudioQuality::High)
+            .await
+            .map(|_| ())
+            .unwrap_err();
+        assert_eq!(
+            err,
+            PlaybackErrorKind::HostRejected(HostRejectKind::VerificationRequired)
+        );
+        let posts: Vec<_> = transport
+            .requests()
+            .into_iter()
+            .filter(|r| r.endpoint == "player")
+            .collect();
+        assert_eq!(posts.len(), 1, "no retry, no second client identity");
+        assert_eq!(
+            posts[0].body["context"]["client"]["clientName"],
+            "WEB_REMIX"
+        );
+    }
+
+    #[tokio::test]
+    async fn other_refusals_stay_plain_failures() {
+        for body in [
+            json!({"playabilityStatus": {"status": "UNPLAYABLE", "reason": "Video unavailable"}}),
+            json!({"playabilityStatus": {"status": "OK"}, "streamingData": {"adaptiveFormats": []}}),
+            json!({"unrelated": true}),
+        ] {
+            let (yt, _) = yt_with(offline_script().with("player", body));
+            assert_eq!(
+                resolve_with_quality(&yt, "a_B-9zZ0-_x", AudioQuality::High)
+                    .await
+                    .map(|_| ())
+                    .unwrap_err(),
+                failed()
+            );
+        }
+        let (yt, transport) = yt_with(offline_script().with_raw("player", 500, b"{}"));
+        assert!(
+            resolve_with_quality(&yt, "a_B-9zZ0-_x", AudioQuality::High)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            transport
+                .requests()
+                .iter()
+                .filter(|r| r.endpoint == "player")
+                .count(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    async fn a_bad_id_sends_nothing() {
+        let (yt, transport) = yt_with(offline_script());
+        assert!(matches!(
+            resolve_with_quality(&yt, "--exec=evil", AudioQuality::High)
+                .await
+                .map(|_| ())
+                .unwrap_err(),
+            PlaybackErrorKind::Validation(_)
+        ));
+        assert!(transport.requests().is_empty());
+    }
+
     #[test]
     fn ids_and_stream_hosts_are_restricted() {
         assert!(valid_id("a_B-9zZ0-_x"));

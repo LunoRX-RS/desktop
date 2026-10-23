@@ -60,6 +60,9 @@ pub enum HostRejectKind {
     Timeout,
     #[error("failed")]
     Failed,
+    /// YouTube answered with a sign-in or "confirm you're not a bot" challenge. Nothing is retried or worked around.
+    #[error("verification required")]
+    VerificationRequired,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]

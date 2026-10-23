@@ -21,7 +21,7 @@ Success means the app feels like one coherent desktop product, not two websites 
 ## Positioning
 
 - **One library, many providers.** Playlists mix Spotify and YouTube Music tracks in one place, and each entry always shows which provider it comes from.
-- **The user owns the data.** Open source (GPL-3.0), local-first playlists that survive offline, and a backend the user can self-host for sync.
+- **The user owns the data.** Open source (MIT), local-first playlists that survive offline, and a backend the user can self-host for sync.
 - **Native desktop feel.** It must behave like a single, fluent desktop application on every OS.
 
 ## Operating Context

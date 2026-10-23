@@ -1,6 +1,6 @@
 # Third-party notices
 
-LunoRX Desktop is released under GPL-3.0 (see [LICENSE](LICENSE)) and is built from its own code and from the open-source components below.
+LunoRX Desktop is released under the MIT licence (see [LICENSE](LICENSE)) and is built from its own code and from the open-source components below.
 This file is generated from `Cargo.lock` (Rust, macOS target) and lists each crate with the licence it declares.
 It is an inventory, not legal advice.
 
@@ -8,14 +8,14 @@ It is an inventory, not legal advice.
 
 | Component | Licence | Why it matters |
 |---|---|---|
-| `rustypipe` 0.11.4 | GPL-3.0 | Linked into the application, with one local patch (`src-tauri/vendor/rustypipe/PATCHES.md`). This is why the whole program is released under GPL-3.0: anyone who receives a build can get the corresponding source from this repository. Keep the source of every released build available. |
+| `innerlight` | MIT | Path dependency on the sibling `innerlight` repository, written clean-room; this application's MIT licence is only as sound as that claim. It pulls in `boa_engine` (Unlicense OR MIT) to run the player script's deciphering functions in a sandbox, and `reqwest` 0.13 with rustls on `aws-lc-rs` (a C build, `aws-lc-sys`). |
 | `libmpv` (the mpv library) | LGPL-2.1 or later, or GPL-2.0 or later, depending on how a given build was configured | Loaded as a shared library and bundled with the macOS and Windows installers. Redistribution needs this notice, the licence text and a way to get the corresponding source: https://github.com/mpv-player/mpv. Check the licence of the exact build that is bundled (the Homebrew build on macOS, the community build on Windows), and of the libraries that build pulls in. |
 | `libmpv2`, `libmpv2-sys` | LGPL-2.1 | Rust bindings to libmpv. |
 | Five crates under MPL-2.0 | MPL-2.0 | File-level copyleft: keep their licence files and publish modifications to those files. None is modified here. |
 
 ## Local modifications
 
-- `rustypipe`: see `src-tauri/vendor/rustypipe/PATCHES.md`. The modified source is in this repository.
+None. No third-party source is vendored or patched in this repository.
 
 ## Rust crates
 
@@ -23,12 +23,18 @@ It is an inventory, not legal advice.
 |---|---|---|
 | adler2 | 2.0.1 | 0BSD OR MIT OR Apache-2.0 |
 | aho-corasick | 1.1.5 | Unlicense OR MIT |
+| aligned-vec | 0.6.4 | MIT |
 | alloc-no-stdlib | 3.0.0 | BSD-3-Clause |
 | alloc-stdlib | 0.3.0 | BSD-3-Clause |
+| allocator-api2 | 0.2.21 | MIT OR Apache-2.0 |
 | anyhow | 1.0.104 | MIT OR Apache-2.0 |
+| arrayvec | 0.7.8 | MIT OR Apache-2.0 |
+| async-channel | 2.5.0 | Apache-2.0 OR MIT |
 | async-compression | 0.4.51 | MIT OR Apache-2.0 |
 | atomic-waker | 1.1.2 | Apache-2.0 OR MIT |
 | autocfg | 1.5.1 | Apache-2.0 OR MIT |
+| aws-lc-rs | 1.18.2 | ISC AND (Apache-2.0 OR ISC) |
+| aws-lc-sys | 0.46.0 | ISC AND (Apache-2.0 OR ISC) AND Apache-2.0 AND MIT AND BSD-3-Clause AND (Apache-2.0 OR ISC OR MIT) AND (Apache-2.0 OR ISC OR MIT-0) |
 | base64 | 0.21.7 | MIT OR Apache-2.0 |
 | base64 | 0.22.1 | MIT OR Apache-2.0 |
 | base64 | 0.23.1 | MIT OR Apache-2.0 |
@@ -37,10 +43,20 @@ It is an inventory, not legal advice.
 | bitflags | 1.3.2 | MIT/Apache-2.0 |
 | bitflags | 2.13.2 | MIT OR Apache-2.0 |
 | block-buffer | 0.10.4 | MIT OR Apache-2.0 |
+| block-buffer | 0.12.1 | MIT OR Apache-2.0 |
 | block2 | 0.6.2 | MIT |
+| boa_ast | 0.22.0 | Unlicense OR MIT |
+| boa_engine | 0.22.0 | Unlicense OR MIT |
+| boa_gc | 0.22.0 | Unlicense OR MIT |
+| boa_interner | 0.22.0 | Unlicense OR MIT |
+| boa_macros | 0.22.0 | Unlicense OR MIT |
+| boa_parser | 0.22.0 | Unlicense OR MIT |
+| boa_string | 0.22.0 | Unlicense OR MIT |
 | brotli | 9.0.0 | BSD-3-Clause AND MIT |
 | brotli-decompressor | 6.0.1 | BSD-3-Clause/MIT |
 | bs58 | 0.5.1 | MIT/Apache-2.0 |
+| bytemuck | 1.25.2 | Zlib OR Apache-2.0 OR MIT |
+| bytemuck_derive | 1.12.1 | Zlib OR Apache-2.0 OR MIT |
 | byteorder | 1.5.0 | Unlicense OR MIT |
 | bytes | 1.12.1 | MIT |
 | camino | 1.2.6 | MIT OR Apache-2.0 |
@@ -54,24 +70,31 @@ It is an inventory, not legal advice.
 | chacha20 | 0.10.2 | MIT OR Apache-2.0 |
 | chrono | 0.4.45 | MIT OR Apache-2.0 |
 | chrono-tz | 0.10.4 | MIT OR Apache-2.0 |
+| cmake | 0.1.58 | MIT OR Apache-2.0 |
 | compression-codecs | 0.4.46 | MIT OR Apache-2.0 |
 | compression-core | 0.4.34 | MIT OR Apache-2.0 |
+| concurrent-queue | 2.5.0 | Apache-2.0 OR MIT |
+| const-oid | 0.10.2 | Apache-2.0 OR MIT |
 | cookie | 0.18.2 | MIT OR Apache-2.0 |
 | core-foundation | 0.10.1 | MIT OR Apache-2.0 |
 | core-foundation-sys | 0.8.7 | MIT OR Apache-2.0 |
 | core-graphics | 0.25.0 | MIT OR Apache-2.0 |
 | core-graphics-types | 0.2.0 | MIT OR Apache-2.0 |
+| cow-utils | 0.1.3 | MIT |
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 |
+| cpufeatures | 0.3.1 | MIT OR Apache-2.0 |
 | crc32fast | 1.5.2 | MIT OR Apache-2.0 |
 | crossbeam-channel | 0.5.17 | MIT OR Apache-2.0 |
 | crossbeam-utils | 0.8.23 | MIT OR Apache-2.0 |
 | crypto-common | 0.1.7 | MIT OR Apache-2.0 |
+| crypto-common | 0.2.2 | MIT OR Apache-2.0 |
 | cssparser | 0.37.0 | MPL-2.0 |
 | cssparser-macros | 0.7.1 | MPL-2.0 |
 | ctor | 1.0.13 | Apache-2.0 OR MIT |
 | darling | 0.24.1 | MIT |
 | darling_core | 0.24.1 | MIT |
 | darling_macro | 0.24.1 | MIT |
+| dashmap | 6.2.1 | MIT |
 | data-encoding | 2.11.1 | MIT |
 | defmt | 1.2.0 | MIT OR Apache-2.0 |
 | defmt-macros | 1.2.0 | MIT OR Apache-2.0 |
@@ -80,6 +103,7 @@ It is an inventory, not legal advice.
 | derive_more | 2.1.1 | MIT |
 | derive_more-impl | 2.1.1 | MIT |
 | digest | 0.10.7 | MIT OR Apache-2.0 |
+| digest | 0.11.3 | MIT OR Apache-2.0 |
 | dirs | 7.0.0 | MIT OR Apache-2.0 |
 | dirs-sys | 0.5.0 | MIT OR Apache-2.0 |
 | dispatch2 | 0.3.1 | Zlib OR Apache-2.0 OR MIT |
@@ -90,15 +114,22 @@ It is an inventory, not legal advice.
 | dtoa-short | 0.3.5 | MPL-2.0 |
 | dunce | 1.0.5 | CC0-1.0 OR MIT-0 OR Apache-2.0 |
 | dyn-clone | 1.0.20 | MIT OR Apache-2.0 |
+| dynify | 0.1.2 | MIT OR Apache-2.0 |
+| dynify-macros | 0.1.2 | MIT OR Apache-2.0 |
+| either | 1.19.0 | MIT OR Apache-2.0 |
 | embed-resource | 3.0.12 | MIT |
 | embed_plist | 1.2.2 | MIT OR Apache-2.0 |
+| equator | 0.4.2 | MIT |
+| equator-macro | 0.4.2 | MIT |
 | equivalent | 1.0.3 | Apache-2.0 OR MIT |
 | erased-serde | 0.4.10 | MIT OR Apache-2.0 |
-| errno | 0.3.14 | MIT OR Apache-2.0 |
-| fancy-regex | 0.14.0 | MIT |
+| event-listener | 5.4.2 | Apache-2.0 OR MIT |
+| event-listener-strategy | 0.5.4 | Apache-2.0 OR MIT |
+| fast-float2 | 0.2.4 | MIT OR Apache-2.0 |
 | fastrand | 2.5.0 | Apache-2.0 OR MIT |
 | fdeflate | 0.3.7 | MIT OR Apache-2.0 |
 | find-msvc-tools | 0.1.14 | MIT OR Apache-2.0 |
+| fixedbitset | 0.5.7 | MIT OR Apache-2.0 |
 | flate2 | 1.1.10 | MIT OR Apache-2.0 |
 | fnv | 1.0.7 | Apache-2.0 / MIT |
 | foldhash | 0.2.0 | Zlib |
@@ -106,9 +137,12 @@ It is an inventory, not legal advice.
 | foreign-types-macros | 0.2.4 | MIT/Apache-2.0 |
 | foreign-types-shared | 0.3.1 | MIT/Apache-2.0 |
 | form_urlencoded | 1.2.2 | MIT OR Apache-2.0 |
+| fs_extra | 1.3.0 | MIT |
 | futures-channel | 0.3.34 | MIT OR Apache-2.0 |
+| futures-concurrency | 7.7.1 | MIT OR Apache-2.0 |
 | futures-core | 0.3.34 | MIT OR Apache-2.0 |
 | futures-io | 0.3.34 | MIT OR Apache-2.0 |
+| futures-lite | 2.6.1 | Apache-2.0 OR MIT |
 | futures-macro | 0.3.34 | MIT OR Apache-2.0 |
 | futures-sink | 0.3.34 | MIT OR Apache-2.0 |
 | futures-task | 0.3.34 | MIT OR Apache-2.0 |
@@ -119,6 +153,7 @@ It is an inventory, not legal advice.
 | getrandom | 0.4.3 | MIT OR Apache-2.0 |
 | glob | 0.3.4 | MIT OR Apache-2.0 |
 | hashbrown | 0.12.3 | MIT OR Apache-2.0 |
+| hashbrown | 0.14.5 | MIT OR Apache-2.0 |
 | hashbrown | 0.17.1 | MIT OR Apache-2.0 |
 | heck | 0.5.0 | MIT OR Apache-2.0 |
 | hex | 0.4.3 | MIT OR Apache-2.0 |
@@ -127,6 +162,7 @@ It is an inventory, not legal advice.
 | http-body | 1.1.0 | MIT |
 | http-body-util | 0.1.5 | MIT |
 | httparse | 1.10.1 | MIT OR Apache-2.0 |
+| hybrid-array | 0.4.15 | MIT OR Apache-2.0 |
 | hyper | 1.12.0 | MIT |
 | hyper-rustls | 0.27.10 | Apache-2.0 OR ISC OR MIT |
 | hyper-util | 0.1.21 | MIT |
@@ -145,10 +181,14 @@ It is an inventory, not legal advice.
 | indexmap | 1.9.3 | Apache-2.0 OR MIT |
 | indexmap | 2.14.2 | Apache-2.0 OR MIT |
 | infer | 0.22.0 | MIT |
+| innerlight | 0.0.1 | MIT |
+| intrusive-collections | 0.10.3 | MIT OR Apache-2.0 |
 | ipnet | 2.12.2 | MIT OR Apache-2.0 |
+| itertools | 0.15.0 | MIT OR Apache-2.0 |
 | itoa | 1.0.18 | MIT OR Apache-2.0 |
 | jiff | 0.2.38 | Unlicense OR MIT |
 | jiff-core | 0.1.1 | Unlicense OR MIT |
+| jobserver | 0.1.35 | MIT OR Apache-2.0 |
 | json-patch | 4.2.0 | MIT/Apache-2.0 |
 | jsonptr | 0.7.1 | MIT OR Apache-2.0 |
 | keyboard-types | 0.8.3 | MIT OR Apache-2.0 |
@@ -157,7 +197,6 @@ It is an inventory, not legal advice.
 | libmpv2 | 4.1.0 | LGPL-2.1 |
 | libmpv2-sys | 4.0.1 | LGPL-2.1 |
 | litemap | 0.8.3 | Unicode-3.0 |
-| localzone | 0.3.1 | Apache-2.0 |
 | lock_api | 0.4.14 | MIT OR Apache-2.0 |
 | log | 0.4.34 | MIT OR Apache-2.0 |
 | lru-slab | 0.1.3 | MIT OR Apache-2.0 OR Zlib |
@@ -169,8 +208,12 @@ It is an inventory, not legal advice.
 | mio | 1.2.4 | MIT |
 | muda | 0.20.0 | Apache-2.0 OR MIT |
 | new_debug_unreachable | 1.0.6 | MIT |
+| num-bigint | 0.5.1 | MIT OR Apache-2.0 |
 | num-conv | 0.2.2 | MIT OR Apache-2.0 |
+| num-integer | 0.1.47 | MIT OR Apache-2.0 |
 | num-traits | 0.2.19 | MIT OR Apache-2.0 |
+| num_enum | 0.7.6 | BSD-3-Clause OR MIT OR Apache-2.0 |
+| num_enum_derive | 0.7.6 | BSD-3-Clause OR MIT OR Apache-2.0 |
 | num_threads | 0.1.8 | MIT OR Apache-2.0 |
 | objc2 | 0.6.5 | MIT |
 | objc2-app-kit | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
@@ -185,28 +228,38 @@ It is an inventory, not legal advice.
 | objc2-quartz-core | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
 | objc2-web-kit | 0.3.2 | Zlib OR Apache-2.0 OR MIT |
 | once_cell | 1.21.4 | MIT OR Apache-2.0 |
+| oneshot | 0.2.1 | MIT OR Apache-2.0 |
 | open | 5.4.4 | MIT |
 | option-ext | 0.2.0 | MPL-2.0 |
+| parking | 2.2.1 | Apache-2.0 OR MIT |
 | parking_lot | 0.12.5 | MIT OR Apache-2.0 |
 | parking_lot_core | 0.9.12 | MIT OR Apache-2.0 |
+| pastey | 0.2.3 | MIT OR Apache-2.0 |
 | percent-encoding | 2.3.2 | MIT OR Apache-2.0 |
-| phf | 0.11.3 | MIT |
 | phf | 0.12.1 | MIT |
 | phf | 0.13.1 | MIT |
+| phf | 0.14.0 | MIT |
 | phf_codegen | 0.13.1 | MIT |
 | phf_generator | 0.13.1 | MIT |
+| phf_generator | 0.14.0 | MIT |
 | phf_macros | 0.13.1 | MIT |
-| phf_shared | 0.11.3 | MIT |
+| phf_macros | 0.14.0 | MIT |
 | phf_shared | 0.12.1 | MIT |
 | phf_shared | 0.13.1 | MIT |
+| phf_shared | 0.14.0 | MIT |
+| pin-project | 1.1.13 | Apache-2.0 OR MIT |
+| pin-project-internal | 1.1.13 | Apache-2.0 OR MIT |
 | pin-project-lite | 0.2.17 | Apache-2.0 OR MIT |
+| pkg-config | 0.3.34 | MIT OR Apache-2.0 |
 | plist | 1.10.1 | MIT |
 | png | 0.17.16 | MIT OR Apache-2.0 |
 | png | 0.18.1 | MIT OR Apache-2.0 |
+| portable-atomic | 1.15.0 | Apache-2.0 OR MIT |
 | potential_utf | 0.1.6 | Unicode-3.0 |
 | powerfmt | 0.2.1 | MIT OR Apache-2.0 |
 | ppv-lite86 | 0.2.21 | MIT OR Apache-2.0 |
 | precomputed-hash | 0.1.1 | MIT |
+| proc-macro-crate | 3.5.0 | MIT OR Apache-2.0 |
 | proc-macro2 | 1.0.107 | MIT OR Apache-2.0 |
 | quick-xml | 0.42.0 | MIT |
 | quinn | 0.11.12 | MIT OR Apache-2.0 |
@@ -225,19 +278,19 @@ It is an inventory, not legal advice.
 | regex | 1.13.1 | MIT OR Apache-2.0 |
 | regex-automata | 0.4.18 | MIT OR Apache-2.0 |
 | regex-syntax | 0.8.11 | MIT OR Apache-2.0 |
+| regress | 0.12.0 | MIT OR Apache-2.0 |
 | reqwest | 0.12.28 | MIT OR Apache-2.0 |
-| ress | 0.11.7 | MIT |
+| reqwest | 0.13.5 | MIT OR Apache-2.0 |
 | ring | 0.17.14 | Apache-2.0 AND ISC |
-| rquickjs | 0.9.0 | MIT |
-| rquickjs-core | 0.9.0 | MIT |
-| rquickjs-sys | 0.9.0 | MIT |
 | rustc-hash | 2.1.3 | Apache-2.0 OR MIT |
 | rustc_version | 0.4.1 | MIT OR Apache-2.0 |
 | rustls | 0.23.46 | Apache-2.0 OR ISC OR MIT |
 | rustls-pki-types | 1.15.1 | MIT OR Apache-2.0 |
+| rustls-platform-verifier | 0.7.1 | MIT OR Apache-2.0 |
 | rustls-webpki | 0.103.16 | ISC |
-| rustypipe | 0.11.4 | GPL-3.0 |
+| rustversion | 1.0.23 | MIT OR Apache-2.0 |
 | ryu | 1.0.23 | Apache-2.0 OR BSL-1.0 |
+| ryu-js | 1.0.3 | Apache-2.0 OR BSL-1.0 |
 | same-file | 1.0.6 | Unlicense/MIT |
 | schemars | 0.8.22 | MIT |
 | schemars | 0.9.0 | MIT |
@@ -254,7 +307,6 @@ It is an inventory, not legal advice.
 | serde_derive | 1.0.229 | MIT OR Apache-2.0 |
 | serde_derive_internals | 0.29.1 | MIT OR Apache-2.0 |
 | serde_json | 1.0.154 | MIT OR Apache-2.0 |
-| serde_plain | 1.0.2 | MIT/Apache-2.0 |
 | serde_repr | 0.1.21 | MIT OR Apache-2.0 |
 | serde_spanned | 1.1.2 | MIT OR Apache-2.0 |
 | serde_urlencoded | 0.7.1 | MIT/Apache-2.0 |
@@ -264,26 +316,32 @@ It is an inventory, not legal advice.
 | serialize-to-javascript-impl | 0.1.2 | MIT OR Apache-2.0 |
 | servo_arc | 0.4.3 | MIT OR Apache-2.0 |
 | sha1 | 0.10.7 | MIT OR Apache-2.0 |
+| sha1 | 0.11.0 | MIT OR Apache-2.0 |
 | sha2 | 0.10.9 | MIT OR Apache-2.0 |
 | shlex | 2.0.1 | MIT OR Apache-2.0 |
-| signal-hook-registry | 1.4.8 | MIT OR Apache-2.0 |
 | simd-adler32 | 0.3.10 | MIT |
 | siphasher | 1.0.4 | MIT OR Apache-2.0 |
 | slab | 0.4.12 | MIT |
+| small_btree | 0.1.0 | Unlicense OR MIT |
 | smallvec | 1.16.3 | MIT OR Apache-2.0 |
 | socket2 | 0.6.5 | MIT OR Apache-2.0 |
 | stable_deref_trait | 1.2.1 | MIT OR Apache-2.0 |
+| static_assertions | 1.1.0 | MIT OR Apache-2.0 |
 | static_vcruntime | 3.0.0 | MIT OR Apache-2.0 OR Zlib |
 | string_cache | 0.9.0 | MIT OR Apache-2.0 |
 | string_cache_codegen | 0.6.1 | MIT OR Apache-2.0 |
 | strsim | 0.11.1 | MIT |
+| strum | 0.28.0 | MIT |
+| strum_macros | 0.28.0 | MIT |
 | subtle | 2.6.1 | BSD-3-Clause |
 | swift-rs | 1.0.9 | MIT OR Apache-2.0 |
 | syn | 2.0.119 | MIT OR Apache-2.0 |
 | syn | 3.0.9 | MIT OR Apache-2.0 |
 | sync_wrapper | 1.0.2 | Apache-2.0 |
 | synstructure | 0.14.0 | MIT |
+| tag_ptr | 0.1.0 | Unlicense OR MIT |
 | tao | 0.37.1 | Apache-2.0 |
+| tap | 1.0.1 | MIT |
 | tauri | 2.12.4 | Apache-2.0 OR MIT |
 | tauri-build | 2.7.3 | Apache-2.0 OR MIT |
 | tauri-codegen | 2.7.3 | Apache-2.0 OR MIT |
@@ -296,6 +354,7 @@ It is an inventory, not legal advice.
 | tauri-utils | 2.10.2 | Apache-2.0 OR MIT |
 | tauri-winres | 0.3.6 | MIT |
 | tendril | 0.5.1 | MIT OR Apache-2.0 |
+| thin-vec | 0.2.21 | MIT OR Apache-2.0 |
 | thiserror | 2.0.21 | MIT OR Apache-2.0 |
 | thiserror-impl | 2.0.21 | MIT OR Apache-2.0 |
 | time | 0.3.55 | MIT OR Apache-2.0 |
@@ -303,12 +362,14 @@ It is an inventory, not legal advice.
 | time-macros | 0.2.32 | MIT OR Apache-2.0 |
 | tinystr | 0.8.4 | Unicode-3.0 |
 | tinyvec | 1.13.3 | Zlib OR Apache-2.0 OR MIT |
-| tokio | 1.53.3 | MIT |
+| tokio | 1.54.1 | MIT |
 | tokio-macros | 2.7.2 | MIT |
 | tokio-rustls | 0.26.6 | MIT OR Apache-2.0 |
+| tokio-tungstenite | 0.29.0 | MIT |
 | tokio-util | 0.7.20 | MIT |
 | toml | 1.1.8+spec-1.1.0 | MIT OR Apache-2.0 |
 | toml_datetime | 1.1.2+spec-1.1.0 | MIT OR Apache-2.0 |
+| toml_edit | 0.25.17+spec-1.1.0 | MIT OR Apache-2.0 |
 | toml_parser | 1.1.5+spec-1.1.0 | MIT OR Apache-2.0 |
 | toml_writer | 1.1.3+spec-1.1.0 | MIT OR Apache-2.0 |
 | tower | 0.5.3 | MIT |
@@ -320,14 +381,14 @@ It is an inventory, not legal advice.
 | tracing-core | 0.1.36 | MIT |
 | tray-icon | 0.25.1 | MIT OR Apache-2.0 |
 | try-lock | 0.2.5 | MIT |
+| tungstenite | 0.29.0 | MIT OR Apache-2.0 |
 | typeid | 1.0.3 | MIT OR Apache-2.0 |
 | typenum | 1.20.1 | MIT OR Apache-2.0 |
 | unicode-ident | 1.0.27 | (MIT OR Apache-2.0) AND Unicode-3.0 |
-| unicode-xid | 0.2.6 | MIT OR Apache-2.0 |
 | untrusted | 0.9.0 | ISC |
 | url | 2.5.8 | MIT OR Apache-2.0 |
-| urlencoding | 2.1.3 | MIT |
 | urlpattern | 0.6.0 | MIT |
+| utf16_iter | 1.0.5 | Apache-2.0 OR MIT |
 | utf8_iter | 1.0.4 | Apache-2.0 OR MIT |
 | uuid | 1.28.0 | Apache-2.0 OR MIT |
 | version_check | 0.9.5 | MIT/Apache-2.0 |
@@ -335,9 +396,11 @@ It is an inventory, not legal advice.
 | want | 0.3.2 | MIT |
 | web-time | 1.1.0 | MIT OR Apache-2.0 |
 | web_atoms | 0.2.6 | MIT OR Apache-2.0 |
+| webpki-roots | 0.26.11 | CDLA-Permissive-2.0 |
 | webpki-roots | 1.0.10 | CDLA-Permissive-2.0 |
 | window-vibrancy | 0.8.1 | Apache-2.0 OR MIT |
 | winnow | 1.0.4 | MIT |
+| write16 | 1.0.0 | Apache-2.0 OR MIT |
 | writeable | 0.6.4 | Unicode-3.0 |
 | wry | 0.57.0 | Apache-2.0 OR MIT |
 | yoke | 0.8.3 | Unicode-3.0 |

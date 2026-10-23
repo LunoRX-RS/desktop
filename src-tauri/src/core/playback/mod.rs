@@ -10,8 +10,6 @@ mod proxy;
 pub mod state;
 pub mod track_info;
 
-mod visionos;
-
 pub mod cache;
 
 pub mod autoplay;

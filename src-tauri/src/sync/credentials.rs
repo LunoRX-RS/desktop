@@ -28,7 +28,7 @@ pub trait TokenStore: Send + Sync {
     fn clear(&self) -> Result<(), TokenStoreError>;
 }
 
-const SERVICE: &str = "com.lunorx.desktop";
+const SERVICE: &str = "io.lunorx.desktop";
 const ACCOUNT: &str = "backend-session";
 
 /// macOS Keychain, Windows Credential Manager, Linux Secret Service (D-Bus; GNOME Keyring,

@@ -47,8 +47,8 @@ pub async fn player_track_info(
     let _permit = REQUESTS
         .try_acquire()
         .map_err(|_| PlayerError::new(PlayerErrorCategory::HostRejected))?;
-    let pipe = youtube
-        .pipe
+    let yt = youtube
+        .yt
         .as_ref()
         .ok_or_else(|| PlayerError::new(PlayerErrorCategory::UnsupportedCapability))?;
     let lyric_path = app
@@ -59,7 +59,7 @@ pub async fn player_track_info(
     let lyrics_ctx = crate::commands::lyric_sources::context(&app, &provider_track_id).await;
     let result = tokio::time::timeout(
         Duration::from_secs(25),
-        track_info::fetch_with(pipe, &provider_track_id, lyric_path.as_deref(), &lyrics_ctx),
+        track_info::fetch_with(yt, &provider_track_id, lyric_path.as_deref(), &lyrics_ctx),
     )
     .await
     .map_err(|_| PlayerError::new(PlayerErrorCategory::Timeout))
@@ -120,10 +120,10 @@ impl PlayerState {
         let (reports, mut receiver) = tokio::sync::mpsc::unbounded_channel();
         let native = app
             .state::<crate::commands::youtube::YouTubeState>()
-            .pipe
+            .yt
             .clone()
             .ok_or(PlaybackErrorKind::UnsupportedCapability)
-            .and_then(|pipe| {
+            .and_then(|yt| {
                 let cache = app
                     .state::<crate::commands::offline::OfflineState>()
                     .manager
@@ -131,7 +131,7 @@ impl PlayerState {
                     .map_err(|_| PlaybackErrorKind::UnsupportedCapability)?
                     .cache
                     .clone();
-                NativeHost::with_pipe(pipe, reports).map(|host| host.with_cache(cache))
+                NativeHost::with_yt(yt, reports).map(|host| host.with_cache(cache))
             });
         let state = match native {
             Ok(host) => {
@@ -435,6 +435,7 @@ pub enum PlayerErrorCategory {
     Timeout,
     StaleOutcome,
     Internal,
+    VerificationRequired,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -460,6 +461,9 @@ impl PlayerError {
             Timeout => "the player did not respond in time",
             StaleOutcome => "the player report is out of date",
             Internal => "playback failed",
+            VerificationRequired => {
+                "YouTube asked for verification; sign in with Google in Connections"
+            }
         };
         Self { category, message }
     }
@@ -489,6 +493,9 @@ fn from_core(e: &CoreError) -> PlayerError {
             PlaybackErrorKind::QueueBoundary => C::QueueBoundary,
             PlaybackErrorKind::HostRejected(HostRejectKind::Timeout) => C::Timeout,
             PlaybackErrorKind::HostRejected(HostRejectKind::Failed) => C::HostRejected,
+            PlaybackErrorKind::HostRejected(HostRejectKind::VerificationRequired) => {
+                C::VerificationRequired
+            }
             PlaybackErrorKind::StaleOutcome => C::StaleOutcome,
             PlaybackErrorKind::Validation(_) => C::Validation,
         },
@@ -862,9 +869,9 @@ async fn load_track(
         state
             .history_pending
             .store(true, std::sync::atomic::Ordering::Relaxed);
-        let pipe = app
+        let yt = app
             .state::<crate::commands::youtube::YouTubeState>()
-            .pipe
+            .yt
             .clone();
         let cache = app
             .state::<crate::commands::offline::OfflineState>()
@@ -872,14 +879,14 @@ async fn load_track(
             .as_ref()
             .ok()
             .map(|m| m.cache.clone());
-        if let (Some(pipe), Some(cache)) = (pipe, cache) {
+        if let (Some(yt), Some(cache)) = (yt, cache) {
             // Autoplay prefetches the next track's lyrics into the same cache the UI reads.
             if let Ok(root) = app.path().app_cache_dir() {
                 crate::core::playback::track_info::set_cache_root(root);
             }
             let session = crate::core::playback::autoplay::run(
                 state.engine.clone(),
-                pipe,
+                yt,
                 cache,
                 state.audio.clone(),
                 state.reports.subscribe(),

@@ -98,7 +98,7 @@ pub async fn offline_keep(
         )
     };
     manager(&state)?.start(
-        youtube.pipe.clone().ok_or(CacheError::Unavailable)?,
+        youtube.yt.clone().ok_or(CacheError::Unavailable)?,
         playlist_id,
         name,
         tracks,

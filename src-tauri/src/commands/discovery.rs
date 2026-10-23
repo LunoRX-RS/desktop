@@ -46,7 +46,7 @@ pub async fn discovery_feed(
         })
         .map(|t| t.provider_track_id);
     crate::core::discovery::feed(
-        youtube.pipe.as_ref().ok_or(LibraryError::Unavailable)?,
+        youtube.yt.as_ref().ok_or(LibraryError::Unavailable)?,
         &kind,
         &topic,
         seed.as_deref(),
@@ -64,7 +64,7 @@ pub async fn discovery_genres(
     let _permit = REQUESTS
         .try_acquire()
         .map_err(|_| LibraryError::Unavailable)?;
-    crate::core::discovery::genres(youtube.pipe.as_ref().ok_or(LibraryError::Unavailable)?).await
+    crate::core::discovery::genres(youtube.yt.as_ref().ok_or(LibraryError::Unavailable)?).await
 }
 #[tauri::command]
 pub async fn search_suggestions(
@@ -78,7 +78,7 @@ pub async fn search_suggestions(
         .try_acquire()
         .map_err(|_| LibraryError::Unavailable)?;
     crate::core::discovery::suggestions(
-        youtube.pipe.as_ref().ok_or(LibraryError::Unavailable)?,
+        youtube.yt.as_ref().ok_or(LibraryError::Unavailable)?,
         &query,
     )
     .await

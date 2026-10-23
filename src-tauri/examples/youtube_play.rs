@@ -24,26 +24,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .clamp(2, 600);
     let (sender, mut reports) = tokio::sync::mpsc::unbounded_channel();
     let host = if std::env::args().any(|arg| arg == "--session") {
-        let pipe = extract::resolver()?;
-        let cookie = keyring::Entry::new("com.lunorx.desktop", "provider-youtube-session-cookie")
+        let yt = extract::resolver()?;
+        let cookie = keyring::Entry::new("io.lunorx.desktop", "provider-youtube-session-cookie")
             .map_err(|_| "session storage unavailable")?
             .get_password()
             .map_err(|error| match error {
                 keyring::Error::NoEntry => "session not found in this keyring slot",
                 _ => "session keyring access refused or unavailable",
             })?;
-        tokio::time::timeout(Duration::from_secs(20), pipe.user_auth_set_cookie(cookie))
+        tokio::time::timeout(Duration::from_secs(20), yt.connect(&cookie))
             .await?
             .map_err(|_| "session validation failed")?;
         println!("local YouTube session validated; credentials kept private");
-        NativeHost::with_pipe(pipe, sender)?
+        NativeHost::with_yt(yt, sender)?
     } else if std::env::args().any(|a| a == "--offline") {
-        let pipe = rustypipe::client::RustyPipe::builder()
-            .no_storage()
-            .no_reporter()
-            .timeout(Duration::from_nanos(1))
-            .build()?;
-        NativeHost::with_pipe(pipe, sender)?
+        let yt = lunorx_lib::core::yt::Yt::new(Duration::from_nanos(1))?;
+        NativeHost::with_yt(yt, sender)?
     } else {
         NativeHost::new(sender)?
     };
