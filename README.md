@@ -137,6 +137,7 @@ On Debian/Ubuntu the build also needs `build-essential pkg-config libssl-dev lib
 - **Media keys and widgets.** The app registers an MPRIS player (`org.mpris.MediaPlayer2.io.lunorx.desktop`). Desktop media widgets, `playerctl` and the media keys your desktop routes to MPRIS players control it. On a bare window manager, run a daemon such as `playerctld` or bind the keys to `playerctl`.
 - **Sign-in storage.** YouTube sign-in and the sync token are stored through the Secret Service. GNOME Keyring or KWallet must be running; many tiling window manager setups do not start one, so start `gnome-keyring-daemon` from your session.
 - **Locale.** libmpv needs the numeric locale `C`. The app sets it for itself, so a UTF-8 system locale such as `en_US.UTF-8` is fine.
+- **Wayland rendering.** On Wayland the app sets `WEBKIT_FORCE_VBLANK_TIMER=1` unless you set it yourself. Without it the window stopped repainting on a hybrid Intel/NVIDIA laptop under Hyprland (the page froze while audio kept playing). Set `WEBKIT_FORCE_VBLANK_TIMER=0` to opt out.
 - **Audio output.** mpv picks the first output it can open, usually PipeWire, then PulseAudio, then ALSA.
 
 Building, running and testing need no secrets.
