@@ -1,7 +1,7 @@
 "use client";
 import { ArtistLinks, LikeButton } from "../LibraryActions";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import { AlignLeft, ChevronDown, FilePenLine, MicVocal, Maximize2, Minimize2, PanelLeft, Pause, Play, SkipBack, SkipForward, Volume1, Volume2, VolumeX } from "lucide-react";
+import { AlignLeft, ChevronDown, FilePenLine, ListMusic, MicVocal, Maximize2, Minimize2, PanelLeft, Pause, Play, SkipBack, SkipForward, Volume1, Volume2, VolumeX } from "lucide-react";
 import { useUi } from "../../lib/store";
 import { usePlayback, togglePlayback, seekPlayback, setPlaybackVolume } from "../../lib/playback";
 import { playerSkip } from "../../services/tauri/player";
@@ -22,6 +22,8 @@ import { useZoneStyle } from "../../lib/textStyle";
 import { useFullscreen } from "../../lib/windowFullscreen";
 import { useDragRegion, usePlatform } from "../../lib/platform";
 import { LyricMaker } from "../LyricMaker";
+import { AnimatePresence } from "motion/react";
+import { QueuePanel } from "./QueuePanel";
 import { mineSource, useMyLrc, useMyLrcStore } from "../../lib/myLrc";
 import { track as trackUse } from "../../lib/telemetry";
 import { parseLrc } from "../../lib/lrcParse";
@@ -122,6 +124,7 @@ export function NativeNowPlaying() {
   const s = usePlayback();
   const open = useUi((state) => state.nowPlayingOpen);
   const lyricsOpen = useUi((state) => state.lyricsOpen);
+  const queueOpen = useUi((state) => state.queueOpen);
   const dialog = useRef<HTMLDialogElement>(null);
   const stage = useRef<HTMLDivElement>(null);
   const pill = useRef<HTMLDivElement>(null);
@@ -318,6 +321,7 @@ export function NativeNowPlaying() {
                     {fullscreen.active ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
                   </IconButton>)}
                 <IconButton label="Make lyrics file" active={maker} aria-pressed={maker} onClick={() => setMaker(true)} className="size-9"><FilePenLine size={20} /></IconButton>
+                <IconButton label="Queue" active={queueOpen} aria-pressed={queueOpen} onClick={() => useUi.getState().toggleQueue()} className="size-9"><ListMusic size={20} /></IconButton>
                 <IconButton label="Show lyrics" active={lyricsOpen} aria-pressed={lyricsOpen} onClick={() => useUi.getState().setLyrics(!lyricsOpen)} className="size-9"><MicVocal size={20} /></IconButton>
                 <IconButton label="Collapse Now Playing" onClick={() => useUi.getState().setNowPlaying(false)} className="size-9"><ChevronDown size={20} /></IconButton>
               </div>
@@ -326,6 +330,7 @@ export function NativeNowPlaying() {
           </div>
         </div>
       </div>
+      <AnimatePresence>{queueOpen && <QueuePanel inDialog />}</AnimatePresence>
       {maker && <LyricMaker key={track.providerTrackId} trackId={track.providerTrackId} inset={100} onClose={() => { setMaker(false); dialog.current?.focus(); }} />}
     </dialog>
   );
