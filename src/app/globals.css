@@ -1169,7 +1169,7 @@ html[data-platform="linux"] .ln-np-stage[data-idle="true"][data-layout="full"] *
   .ln-mk-line, .ln-mk-tools, .ln-mk-btn { transition: none; }
 }
 
-/* text-style: per-zone fonts and motion (Settings > General > Text style). Fonts come from --lx-font-<zone>, set by lib/textStyle.ts. */
+/* text-style: per-zone fonts and motion (Settings > Appearance > Text style). Fonts come from --lx-font-<zone>, set by lib/textStyle.ts. */
 .ln-lyr-region .ln-lyr-line.ln-lyr-line, .ln-lyr-region .ln-lyr-text.ln-lyr-text { font-family: var(--lx-font-lyrics, var(--font-display)); }
 .ln-np-title.ln-np-title { font-family: var(--lx-font-title, var(--font-display)); }
 .lx-fx-w { display: inline-block; white-space: pre; }

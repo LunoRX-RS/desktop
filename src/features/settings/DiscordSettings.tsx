@@ -12,7 +12,7 @@ const STATUS: Record<DiscordStatus, string> = {
   unavailable: "Discord is not reachable. Open the Discord app (not the website) and check the Application ID.",
 };
 
-/** Settings > General > Discord. Off by default: turning it on shares what you play with your Discord profile. */
+/** Settings > Discord. Off by default: turning it on shares what you play with your Discord profile. */
 export function DiscordSettings() {
   const [settings, setSettings] = useState<Dto | null>(null);
   const [id, setId] = useState("");

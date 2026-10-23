@@ -66,7 +66,7 @@ function ZoneRows({ zone, label, hint }: { zone: Zone; label: string; hint: stri
   );
 }
 
-/** Settings > General > Text style: a font and a motion effect for each text zone, plus imported fonts kept on this device. */
+/** Settings > Appearance > Text style: a font and a motion effect for each text zone, plus imported fonts kept on this device. */
 export function TextStyleSettings() {
   const custom = useCustomFonts();
   const input = useRef<HTMLInputElement>(null);

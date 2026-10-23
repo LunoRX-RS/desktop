@@ -159,11 +159,11 @@ export function NativeNowPlaying() {
   const offsetMs = offKey ? (offState.key === offKey ? offState.ms : readOffset(offKey)) : 0;
   const changeOffset = (ms: number) => { if (!offKey) return; const next = clampOffset(ms); setOffState({ key: offKey, ms: next }); writeOffset(offKey, next); };
   const openLyricsSettings = () => {
-    try { window.localStorage.setItem("lunorx.settings.category", "playback"); } catch { /* storage unavailable: Settings opens on its last category */ }
+    try { window.localStorage.setItem("lunorx.settings.category", "lyrics"); } catch { /* storage unavailable: Settings opens on its last category */ }
     useUi.getState().setNowPlaying(false);
     useUi.getState().navigate("settings");
     // An already-open Settings jumps at once; a new one reads the saved category, then scrolls to the group.
-    window.setTimeout(() => window.dispatchEvent(new CustomEvent("lunorx:settings-open", { detail: { cat: "playback", group: "settings-lyrics" } })), 150);
+    window.setTimeout(() => window.dispatchEvent(new CustomEvent("lunorx:settings-open", { detail: { cat: "lyrics", group: "settings-lyrics" } })), 150);
   };
   const [layout, setLayoutState] = useState<LyricsLayout>(readLyricsLayout);
   const setLayout = (next: LyricsLayout) => { setLayoutState(next); writeLyricsLayout(next); };

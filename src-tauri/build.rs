@@ -83,6 +83,7 @@ fn main() {
             "sync_add_local_entry",
             "sync_upload_playlist",
             "sync_list_local_playlists",
+            "sync_check_playlists",
             "sync_playlist_entries",
             "sync_delete_local_playlist",
             "sync_rename_local_playlist",

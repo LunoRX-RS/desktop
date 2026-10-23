@@ -665,6 +665,67 @@ pub(crate) async fn stats_clear_remote(h: &mut Host<'_>) -> Result<(), ErrorCate
     api.delete_stats(&token).await.map_err(|e| category(&e))
 }
 
+/// Where a local playlist stands against the server. Read-only: nothing is uploaded or changed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum RemoteState {
+    /// Never uploaded from this device.
+    NotUploaded,
+    /// Uploaded once, but the server no longer has it (deleted on another device or in the account).
+    MissingOnServer,
+    /// The server copy changed since this device last saw it.
+    ServerNewer,
+    /// This device has entries or edits the server has not received yet.
+    LocalChanges,
+    /// The server has everything this device has.
+    InSync,
+}
+
+/// Pure comparison, so the rules are testable without a server. `server` maps remote id to its version.
+pub(crate) fn remote_state(
+    p: &LocalPlaylist,
+    queued_writes: usize,
+    server: &std::collections::HashMap<String, i64>,
+) -> RemoteState {
+    let Some(remote) = p.remote_id.as_deref() else {
+        return RemoteState::NotUploaded;
+    };
+    let Some(&version) = server.get(remote) else {
+        return RemoteState::MissingOnServer;
+    };
+    if version > p.version {
+        RemoteState::ServerNewer
+    } else if queued_writes > 0 || p.entries.len() > p.uploaded {
+        RemoteState::LocalChanges
+    } else {
+        RemoteState::InSync
+    }
+}
+
+/// Asks the server which playlists it holds and compares them with this device's. Uploads nothing: the user decides.
+pub(crate) async fn check_remote(
+    h: &mut Host<'_>,
+) -> Result<Vec<(String, RemoteState)>, ErrorCategory> {
+    let (api, token) = h.step(|e| Ok((e.api.clone(), e.token()?))).await?;
+    let server: std::collections::HashMap<String, i64> = api
+        .list_playlists(&token)
+        .await
+        .map_err(|e| category(&e))?
+        .into_iter()
+        .map(|p| (p.id, p.version))
+        .collect();
+    h.step(|e| {
+        Ok(e.local_playlists()
+            .iter()
+            .map(|p| {
+                let queued = p.remote_id.as_deref().map_or(0, |r| e.queued_writes(r));
+                (p.id.clone(), remote_state(p, queued, &server))
+            })
+            .collect())
+    })
+    .await
+}
+
 /// Sends the unsent tail of a playlist, one request at a time. Returns the remote id.
 pub(crate) async fn upload(h: &mut Host<'_>, local_id: &str) -> Result<String, ErrorCategory> {
     let (api, token) = h.step(|e| Ok((e.api.clone(), e.token()?))).await?;
@@ -2669,5 +2730,68 @@ mod tests {
         assert_eq!(e.status().await.state, SyncState::Synced);
         assert!(e.store.refresh_marks().is_empty());
         assert_eq!(s.lines(), ["POST /api/v1/auth/login HTTP/1.1".to_string()]);
+    }
+}
+
+#[cfg(test)]
+mod remote_state_rules {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn playlist(
+        remote: Option<&str>,
+        version: i64,
+        entries: usize,
+        uploaded: usize,
+    ) -> LocalPlaylist {
+        let entry = LocalEntry {
+            provider: Provider::YouTube,
+            provider_track_id: "dQw4w9WgXcQ".into(),
+            provider_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ".into(),
+            title: None,
+            artists: None,
+            artwork_url: None,
+            duration_ms: None,
+            remote_entry_id: None,
+        };
+        LocalPlaylist {
+            id: "l1".into(),
+            name: "n".into(),
+            description: None,
+            entries: vec![entry; entries],
+            remote_id: remote.map(str::to_owned),
+            uploaded,
+            queued: 0,
+            version,
+        }
+    }
+
+    #[test]
+    fn each_state_follows_the_rules() {
+        let server = HashMap::from([("r1".to_owned(), 3_i64)]);
+        assert_eq!(
+            remote_state(&playlist(None, 0, 2, 0), 0, &server),
+            RemoteState::NotUploaded
+        );
+        assert_eq!(
+            remote_state(&playlist(Some("gone"), 3, 1, 1), 0, &server),
+            RemoteState::MissingOnServer
+        );
+        assert_eq!(
+            remote_state(&playlist(Some("r1"), 2, 1, 1), 0, &server),
+            RemoteState::ServerNewer
+        );
+        assert_eq!(
+            remote_state(&playlist(Some("r1"), 3, 2, 1), 0, &server),
+            RemoteState::LocalChanges
+        );
+        assert_eq!(
+            remote_state(&playlist(Some("r1"), 3, 1, 1), 1, &server),
+            RemoteState::LocalChanges
+        );
+        assert_eq!(
+            remote_state(&playlist(Some("r1"), 3, 1, 1), 0, &server),
+            RemoteState::InSync
+        );
     }
 }

@@ -4,17 +4,17 @@ import { Search } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { ActivePill } from "../../components/Motion";
 import { Screen, cx } from "../../components/ui";
-import { CATEGORIES, CategoryPane, SEARCH_INDEX, type CategoryKey } from "./categories";
+import { CATEGORIES, CategoryPane, LEGACY_KEYS, SEARCH_INDEX, type CategoryKey } from "./categories";
 import { FIELD, InsetLevel } from "./rows";
 
 const STORE_KEY = "lunorx.settings.category";
 const isKey = (v: unknown): v is CategoryKey => CATEGORIES.some((c) => c.key === v);
 
-// Settings, split into categories (DESIGN.md, Settings). Left rail from 1100px, a wrapping tab row below.
+// Settings, split into zones (DESIGN.md, Settings), one file each under zones/. Left rail from 1100px, a wrapping tab row below.
 // The chosen category is local state, remembered per viewer in localStorage. `initialCategory` lets other screens link later.
 export default function SettingsScreen({ initialCategory }: { initialCategory?: CategoryKey } = {}) {
   const uid = useId();
-  const [cat, setCat] = useState<CategoryKey>(initialCategory ?? "general");
+  const [cat, setCat] = useState<CategoryKey>(initialCategory ?? "appearance");
   const [wide, setWide] = useState(true);
   const [mac, setMac] = useState(false);
   const [platform, setPlatform] = useState("");
@@ -28,10 +28,11 @@ export default function SettingsScreen({ initialCategory }: { initialCategory?: 
     setMac(/Mac/i.test(navigator.userAgent));
     if (!initialCategory) {
       try {
-        const saved = localStorage.getItem(STORE_KEY);
+        const raw = localStorage.getItem(STORE_KEY);
+        const saved = raw && LEGACY_KEYS[raw] ? LEGACY_KEYS[raw] : raw;
         if (isKey(saved)) setCat(saved);
       } catch {
-        /* storage blocked: stay on General */
+        /* storage blocked: stay on Appearance */
       }
     }
     const mq = window.matchMedia("(min-width: 1100px)");

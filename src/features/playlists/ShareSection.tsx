@@ -11,6 +11,26 @@ function toCategory(e: unknown): ErrorCategory {
   return typeof e === "string" && Object.hasOwn(CATEGORY_MESSAGES, e) ? (e as ErrorCategory) : "internal";
 }
 
+// One live link per playlist (the server enforces it). The URL holds its token and the server cannot show it again, so
+// this device keeps it to show the same link every time. Kept only in this device's storage, never logged.
+const linkKey = (localId: string) => `lunorx.shareLink.${localId}`;
+function readLink(localId: string): { shareId: string; url: string } | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(linkKey(localId)) ?? "null") as unknown;
+    return v && typeof v === "object" && typeof (v as { url?: unknown }).url === "string" ? (v as { shareId: string; url: string }) : null;
+  } catch {
+    return null;
+  }
+}
+function writeLink(localId: string, value: { shareId: string; url: string } | null) {
+  try {
+    if (value) localStorage.setItem(linkKey(localId), JSON.stringify(value));
+    else localStorage.removeItem(linkKey(localId));
+  } catch {
+    /* storage unavailable: the link shows until this view closes */
+  }
+}
+
 export function ShareSection({
   localId,
   signedIn,
@@ -21,13 +41,13 @@ export function ShareSection({
   onSignIn: () => void;
 }) {
   const [shares, setShares] = useState<ShareDto[] | null>(null);
-  const [link, setLink] = useState<string | null>(null);
+  const [saved, setSaved] = useState<{ shareId: string; url: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setLink(null);
+    setSaved(readLink(localId));
     setCopied(false);
     setError(null);
     if (!signedIn) {
@@ -39,13 +59,19 @@ export function ShareSection({
       .catch((e) => setError(CATEGORY_MESSAGES[toCategory(e)]));
   }, [localId, signedIn]);
 
+  const active = (shares ?? []).find((s) => s.active) ?? null;
+  // The saved URL counts only while its link is the live one; a link replaced or stopped elsewhere is forgotten.
+  const link = active && saved && saved.shareId === active.id ? saved.url : null;
+
   async function create() {
     setBusy(true);
     setError(null);
     setCopied(false);
     try {
       const created = await syncShare(localId);
-      setLink(created.url);
+      const next = { shareId: created.id, url: created.url };
+      writeLink(localId, next);
+      setSaved(next);
       setShares(await syncListShares(localId));
     } catch (e) {
       setError(CATEGORY_MESSAGES[toCategory(e)]);
@@ -53,11 +79,14 @@ export function ShareSection({
     setBusy(false);
   }
 
-  async function revoke(id: string) {
+  async function stop() {
+    if (!active) return;
     setBusy(true);
     setError(null);
     try {
-      await syncRevokeShare(localId, id);
+      await syncRevokeShare(localId, active.id);
+      writeLink(localId, null);
+      setSaved(null);
       setShares(await syncListShares(localId));
     } catch (e) {
       setError(CATEGORY_MESSAGES[toCategory(e)]);
@@ -86,22 +115,20 @@ export function ShareSection({
     );
   }
 
-  const active = (shares ?? []).filter((s) => s.active);
-
   return (
     <section aria-labelledby={`share-${localId}`} className="flex flex-col gap-2">
       <h3 id={`share-${localId}`} className="text-[13px] font-semibold">
         Share
       </h3>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" disabled={busy} onClick={() => void create()}>
-          {busy ? "Working…" : "Create share link"}
-        </Button>
-        <span className="text-[12px] text-secondary-text">
-          {active.length === 0 ? "No active links." : `${active.length} active ${active.length === 1 ? "link" : "links"}.`}
-        </span>
-      </div>
-      {link && (
+      {!active && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="secondary" disabled={busy || shares === null} onClick={() => void create()}>
+            {busy ? "Working…" : "Create share link"}
+          </Button>
+          <span className="text-[12px] text-secondary-text">One link per playlist. Anyone with it can view, not edit.</span>
+        </div>
+      )}
+      {active && link && (
         <div className="flex flex-wrap items-center gap-2">
           <input
             readOnly
@@ -111,20 +138,24 @@ export function ShareSection({
             className="min-w-0 flex-1 rounded-[8px] bg-frost-100 px-3 py-2 text-[12px]"
           />
           <Button onClick={() => void copy()}>{copied ? "Copied" : "Copy link"}</Button>
-          <span className="w-full text-[12px] text-secondary-text">Shown once. Copy it now.</span>
         </div>
       )}
-      {active.length > 0 && (
-        <ul className="flex flex-col gap-1">
-          {active.map((s) => (
-            <li key={s.id} className="flex items-center justify-between gap-2 text-[12px] text-secondary-text">
-              <span>Created {new Date(s.createdAt).toLocaleDateString()}</span>
-              <Button variant="ghost" disabled={busy} onClick={() => void revoke(s.id)} aria-label={`Stop sharing link created ${new Date(s.createdAt).toLocaleDateString()}`}>
-                Stop sharing
-              </Button>
-            </li>
-          ))}
-        </ul>
+      {active && !link && (
+        <p className="text-[12px] text-secondary-text">
+          This playlist has a link made on another device or before this one remembered it. Make a new link to see it
+          here; the old link stops working.
+        </p>
+      )}
+      {active && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[12px] text-secondary-text">Created {new Date(active.createdAt).toLocaleDateString()}</span>
+          <Button variant="ghost" disabled={busy} onClick={() => void create()} title="The current link stops working">
+            New link
+          </Button>
+          <Button variant="ghost" disabled={busy} onClick={() => void stop()}>
+            Stop sharing
+          </Button>
+        </div>
       )}
       {error && (
         <p role="alert" className="text-[12px] text-critical-coral">

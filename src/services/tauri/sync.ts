@@ -64,6 +64,14 @@ export interface LocalPlaylistDto {
 
 export type ResolutionDto = "keepServer" | "keepMine";
 
+/** Where a local playlist stands on the server, from `sync_check_playlists`. */
+export type RemoteState = "notUploaded" | "missingOnServer" | "serverNewer" | "localChanges" | "inSync";
+
+/** Asks the server about every local playlist. Read-only: uploads nothing. Rejects when signed out or offline. */
+export function syncCheckPlaylists(): Promise<{ localId: string; state: RemoteState }[]> {
+  return invoke("sync_check_playlists");
+}
+
 export function syncListLocalPlaylists(): Promise<LocalPlaylistDto[]> {
   return invoke<LocalPlaylistDto[]>("sync_list_local_playlists");
 }

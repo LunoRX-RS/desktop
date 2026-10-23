@@ -3,7 +3,7 @@
 import { SyncAllButton } from "../../components/SyncAllButton";
 import { useSyncAll } from "../../lib/syncAll";
 import { RefreshCw } from "lucide-react";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Button, Screen } from "../../components/ui";
 import {
   syncAddLocalEntry,
@@ -65,7 +65,9 @@ function SyncAllResult() {
   return hasResult ? <SyncAllButton showResult compact /> : null;
 }
 
-export default function SyncPanel() {
+/** `embedded`: rendered inside Settings > Accounts, without its own page title, and without a second sign-in form
+ *  (the account panel above it has one). */
+export default function SyncPanel({ embedded = false }: { embedded?: boolean } = {}) {
   const [status, setStatus] = useState<SyncStatusDto | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ErrorCategory | null>(null);
@@ -183,8 +185,7 @@ export default function SyncPanel() {
 
   if (!status) {
     return (
-      <PageRoot>
-        <Screen id="sync-title" title="Sync" caption="Keep local playlists in step with your LunoRX account.">
+      <Shell embedded={embedded}>
           {error ? (
             <Inset id="sync-failed-title" title="Status">
               <NoteRow tone="bad" role="alert">
@@ -208,8 +209,7 @@ export default function SyncPanel() {
               </Inset>
             </div>
           )}
-        </Screen>
-      </PageRoot>
+      </Shell>
     );
   }
 
@@ -243,8 +243,7 @@ export default function SyncPanel() {
   const tail = target?.unsentEntries ?? 0;
 
   return (
-    <PageRoot>
-      <Screen id="sync-title" title="Sync" caption="Keep local playlists in step with your LunoRX account." actions={header}>
+    <Shell embedded={embedded} actions={header}>
         <div className="flex flex-col gap-8">
           <SyncAllResult />
           {notice && (
@@ -317,7 +316,7 @@ export default function SyncPanel() {
             </Inset>
           )}
 
-          {signedOut && (
+          {signedOut && !embedded && (
             <SignInForm
               idPrefix="sync"
               busy={busy}
@@ -502,6 +501,24 @@ export default function SyncPanel() {
             </details>
           )}
         </div>
+    </Shell>
+  );
+}
+
+// The page frame for the Sync view, or a plain stack when the panel sits inside Settings.
+function Shell({ embedded, actions, children }: { embedded: boolean; actions?: ReactNode; children: ReactNode }) {
+  if (embedded) {
+    return (
+      <section id="settings-sync" tabIndex={-1} aria-label="Sync" className="flex flex-col gap-4 outline-none">
+        {actions && <div className="flex justify-end">{actions}</div>}
+        {children}
+      </section>
+    );
+  }
+  return (
+    <PageRoot>
+      <Screen id="sync-title" title="Sync" caption="Keep local playlists in step with your LunoRX account." actions={actions}>
+        {children}
       </Screen>
     </PageRoot>
   );

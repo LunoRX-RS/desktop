@@ -37,7 +37,7 @@ function Slider({ label, value, min, max, step = 1, onChange, show }: { label: s
   );
 }
 
-/** Settings > Playback > Sound shaping. Edits apply live: changes are sent a moment after the last touch. */
+/** Settings > Audio > Sound shaping. Edits apply live: changes are sent a moment after the last touch. */
 export function AudioEffectsPanel({ value, disabled, onChange }: { value: AudioEffects; disabled: boolean; onChange: (fx: AudioEffects) => void }) {
   const [draft, setDraft] = useState(value);
   const timer = useRef<number | undefined>(undefined);

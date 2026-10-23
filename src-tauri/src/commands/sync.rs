@@ -358,6 +358,25 @@ pub async fn run_share_playlist(
     })
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteStateDto {
+    pub local_id: String,
+    pub state: engine::RemoteState,
+}
+
+/// Compares local playlists with the server's. Read-only; uploading stays a user action.
+pub async fn run_check_playlists(
+    state: &SyncEngineState,
+) -> Result<Vec<RemoteStateDto>, ErrorCategory> {
+    let _net = state.net.lock().await;
+    let states = engine::check_remote(&mut Host::Shared(state)).await?;
+    Ok(states
+        .into_iter()
+        .map(|(local_id, state)| RemoteStateDto { local_id, state })
+        .collect())
+}
+
 pub async fn run_list_shares(
     state: &SyncEngineState,
     local_id: &str,
@@ -570,6 +589,13 @@ pub async fn sync_list_local_playlists(
     state: State<'_, SyncEngineState>,
 ) -> Result<Vec<LocalPlaylistDto>, ErrorCategory> {
     run_list_local_playlists(&state).await
+}
+
+#[tauri::command]
+pub async fn sync_check_playlists(
+    state: State<'_, SyncEngineState>,
+) -> Result<Vec<RemoteStateDto>, ErrorCategory> {
+    run_check_playlists(&state).await
 }
 
 #[tauri::command]

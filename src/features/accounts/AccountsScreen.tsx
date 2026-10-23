@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, Screen } from "../../components/ui";
+import { Button, Screen, Segmented } from "../../components/ui";
 import { useUi } from "../../lib/store";
 import {
+  syncRegister,
+  syncSignIn,
   syncSignOut,
   syncStatus,
   type ErrorCategory,
@@ -11,6 +13,7 @@ import {
 } from "../../services/tauri/sync";
 import { Banner, Inset, NoteRow, PageRoot, SettingRow, SkeletonRows, Status, StatusRow, syncSummary } from "../settings/rows";
 import { CATEGORY_MESSAGES } from "../sync/SyncPanel";
+import { SignInForm } from "./SignInForm";
 
 const SIGN_OUT_REFUSED =
   "You have changes that have not been uploaded. Upload them or discard them in Sync before signing out.";
@@ -20,7 +23,8 @@ function toCategory(e: unknown): ErrorCategory {
   return typeof e === "string" && Object.hasOwn(CATEGORY_MESSAGES, e) ? (e as ErrorCategory) : "internal";
 }
 
-export default function AccountsScreen() {
+/** The LunoRX account rows: sign-in prompt, status and sign out. Shared by the Accounts page and Settings > Accounts. */
+export function AccountPanel() {
   const navigate = useUi((s) => s.navigate);
   const [status, setStatus] = useState<SyncStatusDto | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -40,6 +44,25 @@ export default function AccountsScreen() {
   useEffect(() => {
     void reload();
   }, []);
+
+  const [mode, setMode] = useState<"signIn" | "register">("signIn");
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // Signs in (or creates an account) right here; the panel then shows the signed-in rows.
+  async function signIn(email: string, secret: string, antibot: string[]) {
+    setBusy(true);
+    setFormError(null);
+    setNotice(null);
+    try {
+      if (mode === "register") await syncRegister(email, secret, antibot);
+      else await syncSignIn(email, secret, antibot[0]);
+      setNotice({ warn: false, text: "Signed in." });
+    } catch (err) {
+      setFormError(CATEGORY_MESSAGES[toCategory(err)]);
+    }
+    setBusy(false);
+    await reload();
+  }
 
   async function signOut() {
     setBusy(true);
@@ -64,84 +87,104 @@ export default function AccountsScreen() {
   const errorText = error === null ? null : error === "validation" ? SIGN_OUT_REFUSED : CATEGORY_MESSAGES[error];
 
   return (
+    <div className="flex flex-col gap-8">
+      {notice && (
+        <Banner tone={notice.warn ? "warn" : "ok"} role="status">
+          {notice.text}
+        </Banner>
+      )}
+
+      {status === null && !loadFailed && (
+        <Inset id="accounts-loading-title" title="Account">
+          <SkeletonRows rows={2} />
+        </Inset>
+      )}
+
+      {loadFailed && status === null && (
+        <Inset id="accounts-failed-title" title="Account">
+          <NoteRow tone="bad" role="alert">
+            Could not read account status.
+          </NoteRow>
+          <SettingRow label="Try again">
+            <Button onClick={() => void reload()}>Retry</Button>
+          </SettingRow>
+        </Inset>
+      )}
+
+      {status !== null && !signedIn && (
+        <>
+          {status.pendingWrites > 0 && (
+            <Inset id="accounts-pending-title" title="This device">
+              <NoteRow tone="warn">
+                {status.pendingWrites} unsent {status.pendingWrites === 1 ? "change" : "changes"} on this device.
+                Open Sync to upload or discard them before signing in.
+              </NoteRow>
+              <SettingRow label="Unsent changes">
+                <Button onClick={() => navigate("sync")}>Open Sync</Button>
+              </SettingRow>
+            </Inset>
+          )}
+          <div className="flex flex-col gap-3">
+            <Segmented
+              label="Account action"
+              value={mode}
+              options={[
+                { key: "signIn", label: "Sign in" },
+                { key: "register", label: "Create account" },
+              ]}
+              onChange={(m) => { setFormError(null); setMode(m); }}
+            />
+            <SignInForm
+              idPrefix="accounts-inline"
+              mode={mode}
+              busy={busy}
+              error={formError}
+              blockedReason={status.pendingWrites > 0 ? "Upload or discard the unsent changes in Sync first." : undefined}
+              onSubmit={signIn}
+            />
+          </div>
+        </>
+      )}
+
+      {status !== null && signedIn && summary && (
+        <Inset id="accounts-signed-in-title" title="Account">
+          <StatusRow label="Account" tone="ok" status="Signed in" hint="The status command does not report a user ID." />
+          <StatusRow label="Sync state" tone={summary.tone} status={summary.text} />
+          <SettingRow label="Unsent changes">
+            <Status tone={status.pendingWrites > 0 ? "warn" : "ok"}>
+              {status.pendingWrites === 0 ? "None" : status.pendingWrites}
+            </Status>
+          </SettingRow>
+          {errorText && (
+            <NoteRow tone="bad" id="accounts-signout-error" role="alert">
+              {errorText}
+            </NoteRow>
+          )}
+          <SettingRow label="Sign out" hint={status.pendingWrites > 0 ? "Blocked while changes are unsent. Upload or discard them in Sync first." : "Signs out of the LunoRX backend on this device."}>
+            <Button onClick={() => navigate("sync")}>Open Sync</Button>
+            <Button
+              disabled={busy}
+              onClick={() => void signOut()}
+              aria-describedby={errorText ? "accounts-signout-error" : undefined}
+            >
+              {busy ? "Signing out…" : "Sign out"}
+            </Button>
+          </SettingRow>
+        </Inset>
+      )}
+    </div>
+  );
+}
+
+export default function AccountsScreen() {
+  return (
     <PageRoot>
       <Screen
         id="accounts-title"
         title="Accounts"
         caption="Sign in to the LunoRX backend to sync playlists. This is not a music provider connection."
       >
-        <div className="flex flex-col gap-8">
-          {notice && (
-            <Banner tone={notice.warn ? "warn" : "ok"} role="status">
-              {notice.text}
-            </Banner>
-          )}
-
-          {status === null && !loadFailed && (
-            <Inset id="accounts-loading-title" title="Account">
-              <SkeletonRows rows={2} />
-            </Inset>
-          )}
-
-          {loadFailed && status === null && (
-            <Inset id="accounts-failed-title" title="Account">
-              <NoteRow tone="bad" role="alert">
-                Could not read account status.
-              </NoteRow>
-              <SettingRow label="Try again">
-                <Button onClick={() => void reload()}>Retry</Button>
-              </SettingRow>
-            </Inset>
-          )}
-
-          {status !== null && !signedIn && (
-            <>
-              {status.pendingWrites > 0 && (
-                <Inset id="accounts-pending-title" title="This device">
-                  <NoteRow tone="warn">
-                    {status.pendingWrites} unsent {status.pendingWrites === 1 ? "change" : "changes"} on this device.
-                    Open Sync to upload or discard them before signing in.
-                  </NoteRow>
-                  <SettingRow label="Unsent changes">
-                    <Button onClick={() => navigate("sync")}>Open Sync</Button>
-                  </SettingRow>
-                </Inset>
-              )}
-              <Inset id="accounts-login-title" title="Account">
-                <SettingRow label="Sign in or create an account" hint="Needed to upload and share playlists. Playlists still work without one.">
-                  <Button onClick={() => navigate("login")}>Continue</Button>
-                </SettingRow>
-              </Inset>
-            </>
-          )}
-
-          {status !== null && signedIn && summary && (
-            <Inset id="accounts-signed-in-title" title="Account">
-              <StatusRow label="Account" tone="ok" status="Signed in" hint="The status command does not report a user ID." />
-              <StatusRow label="Sync state" tone={summary.tone} status={summary.text} />
-              <SettingRow label="Unsent changes">
-                <Status tone={status.pendingWrites > 0 ? "warn" : "ok"}>
-                  {status.pendingWrites === 0 ? "None" : status.pendingWrites}
-                </Status>
-              </SettingRow>
-              {errorText && (
-                <NoteRow tone="bad" id="accounts-signout-error" role="alert">
-                  {errorText}
-                </NoteRow>
-              )}
-              <SettingRow label="Sign out" hint={status.pendingWrites > 0 ? "Blocked while changes are unsent. Upload or discard them in Sync first." : "Signs out of the LunoRX backend on this device."}>
-                <Button onClick={() => navigate("sync")}>Open Sync</Button>
-                <Button
-                  disabled={busy}
-                  onClick={() => void signOut()}
-                  aria-describedby={errorText ? "accounts-signout-error" : undefined}
-                >
-                  {busy ? "Signing out…" : "Sign out"}
-                </Button>
-              </SettingRow>
-            </Inset>
-          )}
-        </div>
+        <AccountPanel />
       </Screen>
     </PageRoot>
   );

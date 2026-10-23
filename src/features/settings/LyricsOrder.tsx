@@ -9,7 +9,7 @@ import { loadLyricsSettings, saveLyricsSettings, useLyricsStore } from "../../li
 import { Inset, NoteRow, SettingRow, SkeletonRows } from "./rows";
 
 /**
- * Settings > Playback & audio > Lyrics: the Auto order. Each source can be turned off (nothing is sent to it) and moved with the
+ * Settings > Lyrics: the Auto order. Each source can be turned off (nothing is sent to it) and moved with the
  * buttons or Alt+Up and Alt+Down. Changes show at once and are saved in core; a failed save goes back and offers Retry.
  */
 export function LyricsOrder() {

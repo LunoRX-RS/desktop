@@ -5,7 +5,7 @@ import { Button } from "../../components/ui";
 import { telemetryDelete, telemetryFlush, telemetryGet, telemetrySet, type TelemetryViewDto } from "../../services/tauri/telemetry";
 import { Inset, NoteRow, SettingRow } from "./rows";
 
-/** Settings > General > Usage data. Off by default. Shows exactly what would be sent. */
+/** Settings > Privacy & data > Usage data. Off by default. Shows exactly what would be sent. */
 export function TelemetrySettings() {
   const [view, setView] = useState<TelemetryViewDto | null>(null);
   const [note, setNote] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);

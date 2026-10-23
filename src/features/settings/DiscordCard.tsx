@@ -120,7 +120,7 @@ function Preview({ p }: { p: CardPreview }) {
   );
 }
 
-/** Settings > General > Discord card. Edits a draft; Save sends it to core, which checks every field. */
+/** Settings > Discord > Discord card. Edits a draft; Save sends it to core, which checks every field. */
 export function DiscordCard({ design, onSave }: { design: CardDesign; onSave: (d: CardDesign) => Promise<string | null> }) {
   const [draft, setDraft] = useState(design);
   const [preview, setPreview] = useState<CardPreview | null>(null);

@@ -3,7 +3,7 @@
 import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Button } from "../../components/ui";
 import { FIELD, Inset, NoteRow, SettingRow } from "../settings/rows";
-import { antibotEnabled, useAntibot } from "./antibot";
+import { AntibotError, antibotEnabled, useAntibot } from "./antibot";
 
 // Full-width mode (`bare`): the field fills the row and the placeholder names it; the label stays for screen readers.
 // Defined at module scope so the inputs keep their identity (and focus) across renders.
@@ -73,9 +73,14 @@ export function SignInForm({
       setCheckFailed(false);
       try {
         tokens = await antibot.getTokens(registering ? 2 : 1);
-      } catch {
-        setCheckFailed(true);
-        return;
+      } catch (e) {
+        // The check page could not load (backend unreachable or not set up): send without a token and let the server
+        // decide. A server that requires the check refuses, and that error is shown. A check that loaded but failed
+        // or timed out stays a client-side stop.
+        if (!(e instanceof AntibotError && e.message === "unavailable")) {
+          setCheckFailed(true);
+          return;
+        }
       } finally {
         setChecking(false);
       }

@@ -39,6 +39,7 @@
     "allow-sync-add-local-entry",
     "allow-sync-upload-playlist",
     "allow-sync-list-local-playlists",
+    "allow-sync-check-playlists",
     "allow-sync-playlist-entries",
     "allow-sync-delete-local-playlist",
     "allow-sync-rename-local-playlist",

@@ -301,6 +301,10 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
         onUpload={() => void run("detail", "Uploading…", () => "Uploaded.", () => syncUploadPlaylist(selected.id))}
       />
 
+      {selected.remoteId && !needsUpload(selected) && (
+        <ShareSection localId={selected.id} signedIn={syncState !== "signedOut"} onSignIn={() => onNavigate("login")} />
+      )}
+
       <OfflinePlaylist key={selected.id} playlist={selected} />
 
       {conflict && (
@@ -333,9 +337,6 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
 
       {syncState === "offline" && (
         <StatusNote tone="amber">No connection to the server. Changes stay on this device until it returns.</StatusNote>
-      )}
-      {selected.remoteId && !needsUpload(selected) && (
-        <ShareSection localId={selected.id} signedIn={syncState !== "signedOut"} onSignIn={() => onNavigate("login")} />
       )}
       {syncState === "signedOut" && needsUpload(selected) && (
         <StatusNote tone="blue">
