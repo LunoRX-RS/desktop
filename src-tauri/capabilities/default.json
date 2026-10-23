@@ -31,6 +31,7 @@
     "allow-remote-stop",
     "allow-remote-send",
     "allow-sync-sign-in",
+    "allow-sync-register",
     "allow-sync-sign-out",
     "allow-sync-discard-pending",
     "allow-sync-status",

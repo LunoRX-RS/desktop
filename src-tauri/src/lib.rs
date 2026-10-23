@@ -135,6 +135,7 @@ pub fn run() {
             commands::youtube::youtube_like_push_set,
             commands::youtube::youtube_disconnect,
             commands::sync::sync_sign_in,
+            commands::sync::sync_register,
             commands::sync::sync_sign_out,
             commands::sync::sync_discard_pending,
             commands::sync::sync_status,
