@@ -326,6 +326,34 @@ async fn apply_playlists(
     }
 }
 
+/// Counts of the last liked-songs read, for finding out why an import is shorter than YouTube Music's count.
+/// Written to `youtube-import-diag.json` in the app data folder. It holds numbers and a stop reason only: no ids,
+/// titles, cookies or URLs.
+const DIAG_FILE: &str = "youtube-import-diag.json";
+fn write_liked_diag(app: &AppHandle, import: &Import) {
+    let Ok(dir) = app.path().app_data_dir() else {
+        return;
+    };
+    let s = &import.liked_stats;
+    let value = serde_json::json!({
+        "section": "ytmusic.liked",
+        "readOk": !import.failed.contains(&"likes"),
+        "stop": s.stop,
+        "pages": s.pages,
+        "rows": s.rows,
+        "noId": s.no_id,
+        "otherRows": s.other,
+        "tracks": s.tracks,
+        "kept": s.kept,
+        "at": now_secs(),
+    });
+    let _ = std::fs::create_dir_all(&dir);
+    let _ = std::fs::write(
+        dir.join(DIAG_FILE),
+        serde_json::to_vec_pretty(&value).unwrap_or_default(),
+    );
+}
+
 pub async fn run(app: &AppHandle) -> Result<ImportReport, LibraryError> {
     run_mode(app, Mode::Full).await
 }
@@ -370,6 +398,7 @@ async fn run_inner(app: &AppHandle, mode: Mode) -> Result<ImportReport, LibraryE
     };
     flush_likes(app).await;
     let mut import = fetch(&yt, &known).await;
+    write_liked_diag(app, &import);
     // A like or un-like made here and not yet delivered wins over what YouTube still says.
     let undelivered: BTreeSet<String> =
         outbox_edit(app, |o| o.pending.keys().cloned().collect()).unwrap_or_default();

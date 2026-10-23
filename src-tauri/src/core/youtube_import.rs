@@ -72,6 +72,8 @@ fn video_track(v: innerlight::youtube::Video) -> Option<SavedTrack> {
 #[derive(Default)]
 pub struct Import {
     pub liked: Vec<SavedTrack>,
+    /// How the liked-songs read went, for the diagnostic file. Counts only.
+    pub liked_stats: LikedStats,
     pub history: Vec<SavedTrack>,
     pub playlists: Vec<ImportedPlaylist>,
     /// True when every liked song was read (the list ended before the cap), so a missing one was really unliked.
@@ -111,29 +113,65 @@ fn count_of(text: Option<&str>) -> Option<u64> {
     digits.parse().ok().filter(|_| digits.len() <= 15)
 }
 
-async fn liked(yt: &Yt) -> Result<(Vec<SavedTrack>, bool), LibraryError> {
+/// Counts for one liked-songs read. `stop` says why paging ended: `end` (no next page), `limit`, `repeat` (the same
+/// token came back), `empty_page` (a page with no track rows but a token).
+#[derive(Clone, Debug, Default)]
+pub struct LikedStats {
+    pub pages: u32,
+    pub rows: u64,
+    pub no_id: u64,
+    pub other: u64,
+    pub tracks: u64,
+    pub kept: u64,
+    pub stop: &'static str,
+}
+
+async fn liked(yt: &Yt) -> Result<(Vec<SavedTrack>, bool, LikedStats), LibraryError> {
     let music = yt.music();
-    let first = step(music.saved_tracks()).await?;
+    let (first, tally) = step(music.saved_tracks_tally()).await?;
+    let mut stats = LikedStats {
+        pages: 1,
+        rows: tally.rows as u64,
+        no_id: tally.no_id as u64,
+        other: tally.other as u64,
+        tracks: tally.tracks as u64,
+        ..LikedStats::default()
+    };
     let mut items = first.items;
-    step(extend(
-        &mut items,
-        first.continuation,
-        LIKED_MAX,
-        |t| async move {
-            let page = music.saved_tracks_more(&t).await?;
-            Ok((page.items, page.continuation))
-        },
-    ))
-    .await?;
+    let mut next = first.continuation;
+    let mut last: Option<String> = None;
+    // Same rules as `extend`, plus the reason it stopped.
+    stats.stop = loop {
+        if items.len() >= LIKED_MAX {
+            break "limit";
+        }
+        let Some(token) = next.take() else {
+            break "end";
+        };
+        if last.as_ref() == Some(&token) {
+            break "repeat";
+        }
+        let (page, tally) = step(music.saved_tracks_more_tally(&token)).await?;
+        stats.pages += 1;
+        stats.rows += tally.rows as u64;
+        stats.no_id += tally.no_id as u64;
+        stats.other += tally.other as u64;
+        stats.tracks += tally.tracks as u64;
+        if page.items.is_empty() {
+            break "empty_page";
+        }
+        last = Some(token);
+        items.extend(page.items);
+        next = page.continuation;
+    };
     let complete = items.len() < LIKED_MAX;
-    Ok((
-        items
-            .into_iter()
-            .take(LIKED_MAX)
-            .filter_map(|t| saved_track(t, None))
-            .collect(),
-        complete,
-    ))
+    let kept: Vec<SavedTrack> = items
+        .into_iter()
+        .take(LIKED_MAX)
+        .filter_map(|t| saved_track(t, None))
+        .collect();
+    stats.kept = kept.len() as u64;
+    Ok((kept, complete, stats))
 }
 
 async fn history(yt: &Yt) -> Result<Vec<SavedTrack>, LibraryError> {
@@ -336,9 +374,10 @@ async fn youtube_playlists(
 pub async fn fetch(yt: &Yt, known: &HashMap<String, u64>) -> Import {
     let mut import = Import::default();
     match liked(yt).await {
-        Ok((v, complete)) => {
+        Ok((v, complete, stats)) => {
             import.liked = v;
             import.liked_complete = complete;
+            import.liked_stats = stats;
         }
         Err(_) => import.failed.push("likes"),
     }
