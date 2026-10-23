@@ -83,6 +83,168 @@ impl Loudness {
     pub fn apply(self, mpv: &Mpv) -> libmpv2::Result<()> {
         mpv.set_property("af", self.filter())
     }
+    /// The same filters as `filter`, one per entry, so the effects chain can put its own in front.
+    fn parts(self) -> Vec<&'static str> {
+        let f = self.filter();
+        let inner = f.strip_prefix("lavfi=[").and_then(|f| f.strip_suffix(']'));
+        match self {
+            Self::Off => Vec::new(),
+            Self::Balanced => vec![inner.unwrap_or_default()],
+            Self::Loud => inner.unwrap_or_default().splitn(3, ',').collect(),
+        }
+    }
+}
+
+/// Centre frequencies of the ten equaliser bands, in hertz.
+pub const BAND_HZ: [u32; 10] = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+const GAIN_DB: std::ops::RangeInclusive<i8> = -12..=12;
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum Reverb {
+    #[default]
+    Off,
+    Room,
+    Hall,
+}
+impl Reverb {
+    fn filter(self) -> Option<&'static str> {
+        match self {
+            Self::Off => None,
+            Self::Room => Some("aecho=0.8:0.85:40|70:0.25|0.15"),
+            Self::Hall => Some("aecho=0.8:0.88:60|120|180:0.3|0.2|0.12"),
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum Compressor {
+    #[default]
+    Off,
+    Light,
+    Medium,
+    Heavy,
+}
+impl Compressor {
+    fn filter(self) -> Option<&'static str> {
+        match self {
+            Self::Off => None,
+            Self::Light => {
+                Some("acompressor=threshold=0.25:ratio=2:attack=20:release=250:makeup=1.5")
+            }
+            Self::Medium => {
+                Some("acompressor=threshold=0.15:ratio=4:attack=10:release=200:makeup=2.5")
+            }
+            Self::Heavy => Some("acompressor=threshold=0.08:ratio=8:attack=5:release=150:makeup=4"),
+        }
+    }
+}
+
+/// The user's sound shaping, all done by mpv's own filters. Whole numbers only, so a setting can never put text into a
+/// filter string. `valid` is the range check the command runs before anything is stored.
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields, default)]
+pub struct Effects {
+    /// Master switch: off plays the track untouched without losing the settings.
+    pub enabled: bool,
+    /// Gain before everything else, -12 to 12 dB.
+    pub preamp: i8,
+    /// Ten-band equaliser, -12 to 12 dB per band (see `BAND_HZ`).
+    pub bands: [i8; 10],
+    pub bass: i8,
+    pub treble: i8,
+    /// 0 is mono, 100 leaves the stereo image alone, 200 doubles it.
+    pub stereo_width: u8,
+    /// Headphone crossfeed, 0 (off) to 100.
+    pub crossfeed: u8,
+    pub reverb: Reverb,
+    pub compressor: Compressor,
+    /// Playback speed in percent, 50 to 200. Pitch is kept.
+    pub speed: u8,
+}
+impl Default for Effects {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            preamp: 0,
+            bands: [0; 10],
+            bass: 0,
+            treble: 0,
+            stereo_width: 100,
+            crossfeed: 0,
+            reverb: Reverb::Off,
+            compressor: Compressor::Off,
+            speed: 100,
+        }
+    }
+}
+impl Effects {
+    pub fn valid(&self) -> bool {
+        self.preamp_ok()
+            && self.bands.iter().all(|g| GAIN_DB.contains(g))
+            && GAIN_DB.contains(&self.bass)
+            && GAIN_DB.contains(&self.treble)
+            && self.stereo_width <= 200
+            && self.crossfeed <= 100
+            && (50..=200).contains(&self.speed)
+    }
+    fn preamp_ok(&self) -> bool {
+        GAIN_DB.contains(&self.preamp)
+    }
+    /// The `speed` mpv should play at.
+    pub fn speed_factor(&self) -> f64 {
+        if self.enabled {
+            f64::from(self.speed) / 100.0
+        } else {
+            1.0
+        }
+    }
+    /// Filters in signal order. Empty when nothing is shaped or the master switch is off.
+    fn parts(&self) -> Vec<String> {
+        if !self.enabled {
+            return Vec::new();
+        }
+        let mut p = Vec::new();
+        if self.preamp != 0 {
+            p.push(format!("volume={}dB", self.preamp));
+        }
+        for (hz, g) in BAND_HZ.iter().zip(self.bands) {
+            if g != 0 {
+                p.push(format!("equalizer=f={hz}:t=o:w=1:g={g}"));
+            }
+        }
+        if self.bass != 0 {
+            p.push(format!("bass=g={}", self.bass));
+        }
+        if self.treble != 0 {
+            p.push(format!("treble=g={}", self.treble));
+        }
+        if self.stereo_width != 100 {
+            p.push(format!(
+                "extrastereo=m={:.2}",
+                f64::from(self.stereo_width) / 100.0
+            ));
+        }
+        if self.crossfeed != 0 {
+            p.push(format!(
+                "crossfeed=strength={:.2}",
+                f64::from(self.crossfeed) / 100.0
+            ));
+        }
+        p.extend(self.reverb.filter().map(str::to_owned));
+        p.extend(self.compressor.filter().map(str::to_owned));
+        p
+    }
+    /// True when the settings can raise the level, so a limiter should guard the end of the chain.
+    fn can_boost(&self) -> bool {
+        self.enabled
+            && (self.preamp > 0
+                || self.bass > 0
+                || self.treble > 0
+                || self.bands.iter().any(|g| *g > 0)
+                || self.compressor != Compressor::Off
+                || self.stereo_width > 100)
+    }
 }
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -92,8 +254,30 @@ pub struct AudioSettings {
     pub sample_rate: SampleRate,
     #[serde(default)]
     pub loudness: Loudness,
+    #[serde(default)]
+    pub effects: Effects,
 }
 impl AudioSettings {
+    /// The whole `af` value: the user's effects first, then loudness levelling, then a limiter when anything can boost.
+    pub fn filter_chain(&self) -> String {
+        let mut parts = self.effects.parts();
+        let loud = self.loudness.parts();
+        let limited = loud.iter().any(|f| f.starts_with("alimiter"));
+        parts.extend(loud.into_iter().map(str::to_owned));
+        if self.effects.can_boost() && !limited {
+            parts.push("alimiter=limit=0.95:level=0".into());
+        }
+        if parts.is_empty() {
+            String::new()
+        } else {
+            format!("lavfi=[{}]", parts.join(","))
+        }
+    }
+    /// Filters and speed, applied to the running player. Speed keeps pitch (mpv's scaletempo).
+    pub fn apply_effects(&self, mpv: &Mpv) -> libmpv2::Result<()> {
+        mpv.set_property("af", self.filter_chain())?;
+        mpv.set_property("speed", self.effects.speed_factor())
+    }
     pub fn apply(self, mpv: &Mpv) -> libmpv2::Result<()> {
         mpv.set_property("options/audio-format", self.pcm_format.mpv())?;
         mpv.set_property("options/audio-samplerate", self.sample_rate.hz())
@@ -150,6 +334,7 @@ mod tests {
                     pcm_format,
                     sample_rate,
                     loudness: Loudness::Off,
+                    effects: Effects::default(),
                 }
                 .apply(&mpv)
                 .unwrap();
@@ -212,5 +397,146 @@ mod tests {
             assert_eq!(af.contains("dynaudnorm"), l != Loudness::Off, "{af}");
             assert_eq!(af.contains("alimiter"), l == Loudness::Loud, "{af}");
         }
+    }
+    fn settings(f: impl FnOnce(&mut AudioSettings)) -> AudioSettings {
+        let mut s = AudioSettings::default();
+        f(&mut s);
+        s
+    }
+    #[test]
+    fn no_effects_keep_the_old_loudness_chain_exactly() {
+        for l in [Loudness::Off, Loudness::Balanced, Loudness::Loud] {
+            let s = settings(|s| s.loudness = l);
+            assert_eq!(s.filter_chain(), l.filter());
+        }
+    }
+    #[test]
+    fn effects_build_an_ordered_chain_with_a_limiter_when_they_can_boost() {
+        let s = settings(|s| {
+            s.loudness = Loudness::Off;
+            s.effects.preamp = 3;
+            s.effects.bands[0] = 4;
+            s.effects.bands[9] = -2;
+            s.effects.bass = 5;
+            s.effects.stereo_width = 150;
+            s.effects.reverb = Reverb::Room;
+            s.effects.compressor = Compressor::Light;
+        });
+        let chain = s.filter_chain();
+        let at = |needle: &str| {
+            chain
+                .find(needle)
+                .unwrap_or_else(|| panic!("{needle} in {chain}"))
+        };
+        assert!(at("volume=3dB") < at("equalizer=f=31:t=o:w=1:g=4"));
+        assert!(at("equalizer=f=16000") < at("bass=g=5"));
+        assert!(at("bass=") < at("extrastereo=m=1.50"));
+        assert!(at("extrastereo") < at("aecho"));
+        assert!(at("aecho") < at("acompressor"));
+        assert!(chain.ends_with("alimiter=limit=0.95:level=0]"), "{chain}");
+        let loud = settings(|s| {
+            s.loudness = Loudness::Loud;
+            s.effects.bass = 3;
+        })
+        .filter_chain();
+        assert_eq!(loud.matches("alimiter").count(), 1, "{loud}");
+    }
+    #[test]
+    fn the_master_switch_and_cuts_only_need_no_limiter() {
+        let off = settings(|s| {
+            s.loudness = Loudness::Off;
+            s.effects.enabled = false;
+            s.effects.bass = 9;
+            s.effects.speed = 150;
+        });
+        assert_eq!(off.filter_chain(), "");
+        assert_eq!(off.effects.speed_factor(), 1.0);
+        let cut = settings(|s| {
+            s.loudness = Loudness::Off;
+            s.effects.bands[3] = -6;
+        });
+        assert!(!cut.filter_chain().contains("alimiter"));
+    }
+    #[test]
+    fn effect_ranges_are_enforced_and_unknown_fields_refused() {
+        assert!(Effects::default().valid());
+        for bad in [
+            Effects {
+                preamp: 13,
+                ..Effects::default()
+            },
+            Effects {
+                bands: [0, 0, 0, 0, 0, 0, 0, 0, 0, -13],
+                ..Effects::default()
+            },
+            Effects {
+                stereo_width: 201,
+                ..Effects::default()
+            },
+            Effects {
+                crossfeed: 101,
+                ..Effects::default()
+            },
+            Effects {
+                speed: 49,
+                ..Effects::default()
+            },
+            Effects {
+                speed: 201,
+                ..Effects::default()
+            },
+        ] {
+            assert!(!bad.valid(), "{bad:?}");
+        }
+        let mut v = serde_json::to_value(AudioSettings::default()).unwrap();
+        v["effects"]["evil"] = "lavfi=[x]".into();
+        assert!(serde_json::from_value::<AudioSettings>(v).is_err());
+        let old = serde_json::json!({"quality":"high","pcmFormat":"float32","sampleRate":"auto","loudness":"off"});
+        assert_eq!(
+            serde_json::from_value::<AudioSettings>(old)
+                .unwrap()
+                .effects,
+            Effects::default()
+        );
+    }
+    #[test]
+    fn mpv_accepts_the_built_chain_and_every_effect_filter() {
+        let mpv = Mpv::with_initializer(|init| {
+            init.set_option("config", "no")?;
+            init.set_option("ao", "null")
+        })
+        .unwrap();
+        let s = settings(|s| {
+            s.loudness = Loudness::Loud;
+            s.effects = Effects {
+                preamp: -2,
+                bands: [3, 2, 1, 0, -1, -2, 0, 1, 2, 3],
+                bass: 4,
+                treble: -3,
+                stereo_width: 130,
+                crossfeed: 40,
+                reverb: Reverb::Hall,
+                compressor: Compressor::Heavy,
+                speed: 125,
+                ..Effects::default()
+            };
+        });
+        s.apply_effects(&mpv).unwrap();
+        let af: String = mpv.get_property("af").unwrap();
+        for f in [
+            "equalizer",
+            "bass",
+            "treble",
+            "extrastereo",
+            "crossfeed",
+            "aecho",
+            "acompressor",
+            "alimiter",
+        ] {
+            assert!(af.contains(f), "{f} missing from {af}");
+        }
+        assert!((mpv.get_property::<f64>("speed").unwrap() - 1.25).abs() < 1e-9);
+        AudioSettings::default().apply_effects(&mpv).unwrap();
+        assert_eq!(mpv.get_property::<f64>("speed").unwrap(), 1.0);
     }
 }

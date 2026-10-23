@@ -8,6 +8,7 @@ use crate::{
         sync::SyncEngineState,
         youtube::YouTubeState,
     },
+    core::youtube_import::rate,
     core::{
         library::{LibraryError, SavedTrack},
         youtube_import::{Import, Origin, fetch},
@@ -16,7 +17,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     sync::{
         Mutex,
         atomic::{AtomicBool, Ordering},
@@ -94,6 +95,112 @@ fn save_memory(app: &AppHandle, memory: &Memory) {
         && let Ok(bytes) = serde_json::to_vec(memory)
     {
         let _ = std::fs::write(path, bytes);
+    }
+}
+
+/// Likes and un-likes made here that YouTube has not heard yet. The file is the queue: a failed or offline send stays until
+/// a later pass delivers it, and the pull side skips these ids so it cannot undo them in the meantime.
+#[derive(Serialize, Deserialize, Default, Clone)]
+#[serde(rename_all = "camelCase", default)]
+struct Outbox {
+    enabled: bool,
+    pending: BTreeMap<String, bool>,
+}
+const OUTBOX_FILE: &str = "youtube-likes-out.json";
+const OUTBOX_MAX: usize = 500;
+/// Guards read-modify-write of the outbox file.
+static OUTBOX: Mutex<()> = Mutex::new(());
+static SENDING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+fn outbox_edit<T>(app: &AppHandle, change: impl FnOnce(&mut Outbox) -> T) -> Option<T> {
+    let path = app.path().app_data_dir().ok()?.join(OUTBOX_FILE);
+    let _guard = OUTBOX.lock().unwrap_or_else(|e| e.into_inner());
+    let mut outbox: Outbox = std::fs::read(&path)
+        .ok()
+        .filter(|b| b.len() <= 256 * 1024)
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or_default();
+    let before = outbox.clone();
+    let out = change(&mut outbox);
+    if outbox.enabled != before.enabled || outbox.pending != before.pending {
+        let _ = std::fs::create_dir_all(path.parent()?);
+        std::fs::write(&path, serde_json::to_vec(&outbox).ok()?).ok()?;
+    }
+    Some(out)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LikePushDto {
+    pub enabled: bool,
+    pub pending: usize,
+}
+pub fn like_push_state(app: &AppHandle) -> LikePushDto {
+    outbox_edit(app, |o| LikePushDto {
+        enabled: o.enabled,
+        pending: o.pending.len(),
+    })
+    .unwrap_or(LikePushDto {
+        enabled: false,
+        pending: 0,
+    })
+}
+/// Turning it off also drops what was waiting: the user chose not to write to the account.
+pub fn set_like_push(app: &AppHandle, enabled: bool) -> LikePushDto {
+    outbox_edit(app, |o| {
+        o.enabled = enabled;
+        if !enabled {
+            o.pending.clear();
+        }
+    });
+    if enabled {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move { flush_likes(&app).await });
+    }
+    like_push_state(app)
+}
+
+/// Called after a like or un-like is saved here. Does nothing unless the user turned sending on and the id is a video id.
+pub fn push_like(app: &AppHandle, video_id: &str, liked: bool) {
+    if !crate::core::playback::extract::valid_id(video_id) {
+        return;
+    }
+    let queued = outbox_edit(app, |o| {
+        if !o.enabled || (o.pending.len() >= OUTBOX_MAX && !o.pending.contains_key(video_id)) {
+            return false;
+        }
+        o.pending.insert(video_id.to_owned(), liked);
+        true
+    })
+    .unwrap_or(false);
+    if queued {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move { flush_likes(&app).await });
+    }
+}
+
+/// Sends the waiting likes one at a time. A change made again while one was in flight stays queued for the next round.
+async fn flush_likes(app: &AppHandle) {
+    let _one_at_a_time = SENDING.lock().await;
+    let youtube = app.state::<YouTubeState>();
+    let Some(pipe) = youtube.pipe.clone().filter(|_| youtube.connected()) else {
+        return;
+    };
+    let waiting: Vec<(String, bool)> = outbox_edit(app, |o| {
+        o.enabled
+            .then(|| o.pending.iter().map(|(k, v)| (k.clone(), *v)).collect())
+    })
+    .flatten()
+    .unwrap_or_default();
+    for (id, liked) in waiting {
+        if rate(&pipe, &id, liked).await.is_err() {
+            return; // offline or signed out: keep the rest for the next pass
+        }
+        outbox_edit(app, |o| {
+            if o.pending.get(&id) == Some(&liked) {
+                o.pending.remove(&id);
+            }
+        });
     }
 }
 
@@ -242,7 +349,14 @@ async fn run_inner(app: &AppHandle, mode: Mode) -> Result<ImportReport, LibraryE
     } else {
         HashMap::new()
     };
-    let import = fetch(&pipe, &known).await;
+    flush_likes(app).await;
+    let mut import = fetch(&pipe, &known).await;
+    // A like or un-like made here and not yet delivered wins over what YouTube still says.
+    let undelivered: BTreeSet<String> =
+        outbox_edit(app, |o| o.pending.keys().cloned().collect()).unwrap_or_default();
+    import
+        .liked
+        .retain(|t| !undelivered.contains(&t.provider_track_id));
     let mut memory = load_memory(app);
     let mut report = ImportReport {
         failed: import.failed.clone(),
@@ -261,7 +375,7 @@ async fn run_inner(app: &AppHandle, mode: Mode) -> Result<ImportReport, LibraryE
             memory
                 .liked_ids
                 .iter()
-                .filter(|id| !incoming.contains(*id))
+                .filter(|id| !incoming.contains(*id) && !undelivered.contains(*id))
                 .cloned()
                 .collect()
         } else {

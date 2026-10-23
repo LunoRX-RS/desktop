@@ -1,5 +1,5 @@
 //! Discord Rich Presence settings. The presence itself is driven by the player, see `platform::discord`.
-use crate::platform::discord::{self, Settings, Status};
+use crate::platform::discord::{self, Design, Settings, Status};
 use serde::{Deserialize, Serialize};
 use tauri::WebviewWindow;
 
@@ -11,6 +11,7 @@ pub struct DiscordDto {
     /// The built-in Application ID used when `client_id` is empty.
     pub default_client_id: &'static str,
     pub status: Status,
+    pub design: Design,
 }
 
 #[derive(Deserialize)]
@@ -18,6 +19,9 @@ pub struct DiscordDto {
 pub struct DiscordArgs {
     pub enabled: bool,
     pub client_id: String,
+    /// Left out by older callers; the saved design is kept then.
+    #[serde(default)]
+    pub design: Option<Design>,
 }
 
 fn main(window: &WebviewWindow) -> Result<(), &'static str> {
@@ -37,6 +41,7 @@ pub fn discord_settings_get(window: WebviewWindow) -> Result<DiscordDto, &'stati
         client_id: s.client_id,
         default_client_id: discord::DEFAULT_CLIENT_ID,
         status,
+        design: s.design,
     })
 }
 
@@ -44,8 +49,23 @@ pub fn discord_settings_get(window: WebviewWindow) -> Result<DiscordDto, &'stati
 #[tauri::command]
 pub fn discord_settings_set(window: WebviewWindow, args: DiscordArgs) -> Result<(), &'static str> {
     main(&window)?;
+    let design = match args.design {
+        Some(d) => d,
+        None => discord::settings().0.design,
+    };
     discord::apply(Settings {
         enabled: args.enabled,
         client_id: args.client_id,
+        design,
     })
+}
+
+/// The Rich Presence payload `design` would send for the song playing now (or a sample). Nothing is saved or sent to Discord.
+#[tauri::command]
+pub fn discord_preview(
+    window: WebviewWindow,
+    design: Design,
+) -> Result<serde_json::Value, &'static str> {
+    main(&window)?;
+    discord::preview(design)
 }

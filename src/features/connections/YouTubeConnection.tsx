@@ -4,8 +4,9 @@ import type { UnlistenFn } from "@tauri-apps/api/event";
 import { Button } from "../../components/ui";
 import { usePlayback } from "../../lib/playback";
 import { importSummary, useImport } from "../../lib/youtubeImport";
+import { Switch } from "../../components/Lyrics";
 import { youtubeConnect, youtubeConnectFinish, youtubeConnectionStatus, youtubeDisconnect, youtubeImport,
-  subscribeYouTubeConnection, type YouTubeConnectionStatus } from "../../services/tauri/youtube";
+  subscribeYouTubeConnection, youtubeLikePushGet, youtubeLikePushSet, type LikePush, type YouTubeConnectionStatus } from "../../services/tauri/youtube";
 
 const LABELS: Record<YouTubeConnectionStatus, string> = {
   restoring: "Restoring your YouTube session…",
@@ -30,6 +31,11 @@ export function YouTubeConnection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const imp = useImport();
+  const [push, setPush] = useState<LikePush | null>(null);
+  useEffect(() => { youtubeLikePushGet().then(setPush, () => setPush(null)); }, [status]);
+  async function togglePush(on: boolean) {
+    try { setPush(await youtubeLikePushSet(on)); } catch { setError("Could not change this setting."); }
+  }
   async function importNow() {
     setError("");
     try { await youtubeImport(); }
@@ -72,6 +78,18 @@ export function YouTubeConnection() {
           <Button variant="ghost" disabled={busy} onClick={() => void run(disconnect)}>{status === "connecting" ? "Cancel" : "Disconnect"}</Button>
         )}
       </div>
+      {status === "connected" && push && (
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-3">
+            <Switch on={push.enabled} onChange={(on) => void togglePush(on)} name="Send my likes to YouTube">{push.enabled ? "Likes sync both ways" : "Likes are read only"}</Switch>
+          </div>
+          <p className="text-secondary-text">
+            {push.enabled
+              ? `Liking or un-liking a YouTube song here also does it on your account.${push.pending ? ` ${push.pending} waiting to be sent.` : ""}`
+              : "Off: likes you make here stay on this device. Turn on to also like and un-like on your YouTube account."}
+          </p>
+        </div>
+      )}
       {status === "connected" && (
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="secondary" disabled={imp.state === "running"} onClick={() => void importNow()}>

@@ -51,8 +51,8 @@ fn every_discord_handler_is_in_app_manifest_and_allowed() {
     let handlers = discord_handlers(&lib);
     assert_eq!(
         handlers.len(),
-        2,
-        "expected 2 discord handlers in generate_handler!, found {handlers:?}"
+        3,
+        "expected 3 discord handlers in generate_handler!, found {handlers:?}"
     );
 
     let mut missing = Vec::new();

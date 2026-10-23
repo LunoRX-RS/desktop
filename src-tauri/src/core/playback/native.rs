@@ -225,16 +225,17 @@ fn run(
     audio: AudioControl,
 ) {
     let mut revision = 0;
-    let mut applied_loudness = None;
+    let mut applied_audio = None;
     let mut pending: Option<(Request, Instant)> = None;
     let mut last_report = Instant::now();
     let mut buffering = false;
     let (mut last_position, mut last_duration) = (0, 0);
     loop {
         // Settings change from another thread; apply at once and again after any reset.
-        let loudness = audio.settings().loudness;
-        if applied_loudness != Some(loudness) && loudness.apply(&mpv).is_ok() {
-            applied_loudness = Some(loudness);
+        let shaping = audio.settings();
+        let key = (shaping.loudness, shaping.effects);
+        if applied_audio != Some(key) && shaping.apply_effects(&mpv).is_ok() {
+            applied_audio = Some(key);
         }
         match commands.try_recv() {
             Ok(request) => {

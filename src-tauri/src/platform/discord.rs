@@ -33,6 +33,163 @@ pub struct Settings {
     pub enabled: bool,
     /// An Application ID of the user's own, replacing the default. Empty uses `DEFAULT_CLIENT_ID`.
     pub client_id: String,
+    /// How the card looks: text templates, images, clock, buttons and the user's own image catalog.
+    pub design: Design,
+}
+
+/// One image in the user's own catalog: a name to pick it by, and where Discord finds it.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Debug)]
+pub struct CatalogEntry {
+    pub name: String,
+    /// An `https://` image URL, or the key of an Art Asset uploaded to the Application ID's Rich Presence page.
+    pub value: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Debug)]
+pub struct CardButton {
+    pub label: String,
+    /// An `https://` link, or `{track_url}` for the playing video.
+    pub url: String,
+}
+
+/// The user's card design. Every text field is a template: `{title}`, `{artist}` (first), `{artists}`, `{status}` and `{app}`.
+/// Images are `cover`, `logo`, `none` or `catalog:<name>`. `timestamps` is `bar`, `elapsed` or `off`.
+/// `status_display` is what Discord names the card in the member list: `app`, `artist` or `title`.
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Debug)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Design {
+    pub details: String,
+    pub state: String,
+    pub paused_state: String,
+    pub large_text: String,
+    pub small_text: String,
+    pub paused_small_text: String,
+    pub large_image: String,
+    pub small_image: String,
+    pub timestamps: String,
+    pub status_display: String,
+    pub tidy_title: bool,
+    pub listen_button: bool,
+    pub app_button: bool,
+    pub buttons: Vec<CardButton>,
+    pub catalog: Vec<CatalogEntry>,
+}
+
+impl Default for Design {
+    fn default() -> Self {
+        Self {
+            details: "{title}".into(),
+            state: "{artists}".into(),
+            paused_state: "Paused · {artists}".into(),
+            large_text: "on {app}".into(),
+            small_text: "{app}".into(),
+            paused_small_text: "{app} - paused".into(),
+            large_image: "cover".into(),
+            small_image: "logo".into(),
+            timestamps: "bar".into(),
+            status_display: "artist".into(),
+            tidy_title: true,
+            listen_button: true,
+            app_button: true,
+            buttons: Vec::new(),
+            catalog: Vec::new(),
+        }
+    }
+}
+
+const MAX_CATALOG: usize = 12;
+const MAX_CUSTOM_BUTTONS: usize = 2;
+const MAX_TEXT: usize = 128;
+const TRACK_URL_TOKEN: &str = "{track_url}";
+
+fn catalog_name(n: &str) -> bool {
+    (1..=24).contains(&n.len())
+        && n.bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'-')
+}
+
+/// An Art Asset key: lowercase letters, digits and underscores, as the Developer Portal stores them.
+fn asset_key(v: &str) -> bool {
+    (1..=32).contains(&v.len())
+        && v.bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+}
+
+impl Design {
+    /// Trims and checks everything the user typed. `Err` names the field.
+    pub fn clean(mut self) -> Result<Self, &'static str> {
+        for (t, field) in [
+            (&mut self.details, "details"),
+            (&mut self.state, "state"),
+            (&mut self.paused_state, "paused text"),
+            (&mut self.large_text, "image text"),
+            (&mut self.small_text, "badge text"),
+            (&mut self.paused_small_text, "paused badge text"),
+        ] {
+            *t = t.trim().to_owned();
+            if t.chars().count() > MAX_TEXT || t.chars().any(char::is_control) {
+                return Err(field);
+            }
+        }
+        if !["bar", "elapsed", "off"].contains(&self.timestamps.as_str()) {
+            return Err("clock");
+        }
+        if !["app", "artist", "title"].contains(&self.status_display.as_str()) {
+            return Err("status line");
+        }
+        if self.catalog.len() > MAX_CATALOG {
+            return Err("catalog");
+        }
+        let mut seen = std::collections::HashSet::new();
+        for e in &mut self.catalog {
+            e.name = e.name.trim().to_owned();
+            e.value = e.value.trim().to_owned();
+            if !catalog_name(&e.name) || !seen.insert(e.name.clone()) {
+                return Err("catalog name");
+            }
+            if !(https(&e.value) || asset_key(&e.value)) {
+                return Err("catalog image");
+            }
+        }
+        for (img, field) in [
+            (&self.large_image, "large image"),
+            (&self.small_image, "small image"),
+        ] {
+            let ok = matches!(img.as_str(), "cover" | "logo" | "none")
+                || img
+                    .strip_prefix("catalog:")
+                    .is_some_and(|n| self.catalog.iter().any(|e| e.name == n));
+            // The big picture cannot be empty: Discord shows no card image without one.
+            if !ok || (field == "large image" && img == "none") {
+                return Err(field);
+            }
+        }
+        if self.buttons.len() > MAX_CUSTOM_BUTTONS {
+            return Err("buttons");
+        }
+        for b in &mut self.buttons {
+            b.label = b.label.trim().to_owned();
+            b.url = b.url.trim().to_owned();
+            let label = b.label.chars().count();
+            if !(1..=32).contains(&label)
+                || !(b.url == TRACK_URL_TOKEN || (https(&b.url) && b.url.len() <= 512))
+            {
+                return Err("button");
+            }
+        }
+        Ok(self)
+    }
+
+    fn image(&self, which: &str, cover: Option<&str>) -> Option<String> {
+        match which {
+            "cover" => cover.map(str::to_owned),
+            "logo" => Some(LOGO_ASSET.to_owned()),
+            other => other
+                .strip_prefix("catalog:")
+                .and_then(|n| self.catalog.iter().find(|e| e.name == n))
+                .map(|e| e.value.clone()),
+        }
+    }
 }
 
 impl Settings {
@@ -79,7 +236,7 @@ struct Snapshot {
 }
 
 enum Msg {
-    Settings(Settings),
+    Settings(Box<Settings>),
     Track(Option<Snapshot>),
 }
 
@@ -88,6 +245,8 @@ struct Shared {
     status: Mutex<Status>,
     settings: Mutex<Settings>,
     path: Option<PathBuf>,
+    /// The latest track the player offered, so the Settings preview can show the real song.
+    last: Mutex<Option<Snapshot>>,
 }
 static SHARED: OnceLock<Shared> = OnceLock::new();
 
@@ -152,35 +311,113 @@ fn tidy_title(title: &str) -> String {
     }
 }
 
+/// Fills the `{...}` tokens of one template. Unknown braces stay as typed.
+fn render(template: &str, s: &Snapshot, title: &str) -> String {
+    template
+        .replace("{title}", title)
+        .replace("{artists}", &s.artists.join(", "))
+        .replace("{artist}", s.artists.first().map_or("", String::as_str))
+        .replace(
+            "{status}",
+            if s.play == Play::Paused {
+                "paused"
+            } else {
+                "playing"
+            },
+        )
+        .replace("{app}", "LunoRX")
+}
+
+/// A text line for Discord, or `None` when the template is empty so the line is left out.
+fn text_line(template: &str, s: &Snapshot, title: &str, fallback: &str) -> Option<String> {
+    (!template.trim().is_empty()).then(|| line(&render(template, s, title), fallback))
+}
+
 /// `now_secs` is injected so the timestamps can be tested.
-fn activity(s: &Snapshot, now_secs: i64) -> Value {
+fn activity(s: &Snapshot, d: &Design, now_secs: i64) -> Value {
+    let title = if d.tidy_title {
+        tidy_title(&s.title)
+    } else {
+        s.title.trim().to_owned()
+    };
+    let paused = s.play == Play::Paused;
     let mut a = json!({
         "type": 2,
-        "details": line(&tidy_title(&s.title), "Unknown title"),
-        "state": if s.play == Play::Paused { "Paused".to_owned() } else { line(&s.artists.join(", "), "Unknown artist") },
+        "status_display_type": match d.status_display.as_str() { "app" => 0, "title" => 2, _ => 1 },
     });
-    if s.play == Play::Playing && s.duration_ms > 0 {
-        let start = now_secs - (s.position_ms / 1000) as i64;
-        a["timestamps"] = json!({ "start": start, "end": start + (s.duration_ms / 1000) as i64 });
+    if let Some(t) = text_line(&d.details, s, &title, "Unknown title") {
+        a["details"] = json!(t);
     }
-    // The cover is the big picture, with the logo as the corner badge. Without a cover the logo is the big picture.
+    let state = if paused && !d.paused_state.trim().is_empty() {
+        &d.paused_state
+    } else {
+        &d.state
+    };
+    if let Some(t) = text_line(state, s, &title, "Unknown artist") {
+        a["state"] = json!(t);
+    }
+    let video = crate::core::playback::extract::valid_id(&s.track_id)
+        .then(|| format!("https://www.youtube.com/watch?v={}", s.track_id));
+    // The title is a link to the video.
+    if let Some(url) = &video {
+        a["details_url"] = json!(url);
+    }
+    if !paused && s.duration_ms > 0 && d.timestamps != "off" {
+        let start = now_secs - (s.position_ms / 1000) as i64;
+        a["timestamps"] = if d.timestamps == "elapsed" {
+            json!({ "start": start })
+        } else {
+            json!({ "start": start, "end": start + (s.duration_ms / 1000) as i64 })
+        };
+    }
+    // The big picture falls back to the logo so a card never goes without one.
     let cover = s.artwork.as_deref().filter(|u| https(u));
-    let mut assets = json!({
-        "large_image": cover.unwrap_or(LOGO_ASSET),
+    let large = d
+        .image(&d.large_image, cover)
+        .unwrap_or_else(|| LOGO_ASSET.to_owned());
+    let mut assets = json!({ "large_image": large });
+    if let Some(t) = text_line(&d.large_text, s, &title, "LunoRX") {
         // On a "Listening" card Discord shows this as the third line, under the artist.
-        "large_text": "on LunoRX",
-        "small_text": if s.play == Play::Paused { "LunoRX - paused" } else { "LunoRX" },
-    });
-    if cover.is_some() {
-        assets["small_image"] = json!(LOGO_ASSET);
+        assets["large_text"] = json!(t);
+    }
+    // A badge that repeats the big picture adds nothing, so it is left out.
+    if let Some(small) = d.image(&d.small_image, cover).filter(|v| *v != large) {
+        assets["small_image"] = json!(small);
+        let badge = if paused && !d.paused_small_text.trim().is_empty() {
+            &d.paused_small_text
+        } else {
+            &d.small_text
+        };
+        if let Some(t) = text_line(badge, s, &title, "LunoRX") {
+            assets["small_text"] = json!(t);
+        }
     }
     a["assets"] = assets;
     let mut buttons = Vec::new();
-    if crate::core::playback::extract::valid_id(&s.track_id) {
-        buttons.push(json!({ "label": "Listen on YouTube", "url": format!("https://www.youtube.com/watch?v={}", s.track_id) }));
+    if let (true, Some(url)) = (d.listen_button, &video) {
+        buttons.push(json!({ "label": "Listen on YouTube", "url": url }));
     }
-    buttons.push(json!({ "label": "Get LunoRX", "url": REPO_URL }));
-    a["buttons"] = Value::Array(buttons);
+    if d.app_button {
+        buttons.push(json!({ "label": "Get LunoRX", "url": REPO_URL }));
+    }
+    for b in &d.buttons {
+        match (b.url == TRACK_URL_TOKEN, &video) {
+            (true, None) => {}
+            (true, Some(url)) => buttons.push(json!({ "label": b.label, "url": url })),
+            (false, _) => buttons.push(json!({ "label": b.label, "url": b.url })),
+        }
+    }
+    // Discord shows at most two buttons; the user's own come first.
+    let custom = d.buttons.len().min(buttons.len());
+    let keep: Vec<Value> = buttons
+        .split_off(buttons.len() - custom)
+        .into_iter()
+        .chain(buttons)
+        .take(2)
+        .collect();
+    if !keep.is_empty() {
+        a["buttons"] = Value::Array(keep);
+    }
     a
 }
 
@@ -285,6 +522,7 @@ fn worker(rx: mpsc::Receiver<Msg>, initial: Settings) {
     loop {
         match rx.recv_timeout(Duration::from_millis(1000)) {
             Ok(Msg::Settings(s)) => {
+                let s = *s;
                 if s != settings {
                     if let Some(mut l) = link.take() {
                         l.set(None);
@@ -344,7 +582,7 @@ fn worker(rx: mpsc::Receiver<Msg>, initial: Settings) {
             continue;
         }
         let ok = match &want {
-            Some(w) => l.set(Some(activity(w, now))),
+            Some(w) => l.set(Some(activity(w, &settings.design, now))),
             None => l.set(None),
         };
         last_send = Instant::now();
@@ -386,6 +624,7 @@ pub fn start(dir: Option<PathBuf>) {
         status: Mutex::new(Status::Off),
         settings: Mutex::new(settings),
         path,
+        last: Mutex::new(None),
     };
     if SHARED.set(shared).is_ok() {
         let _ = std::thread::Builder::new()
@@ -409,6 +648,7 @@ pub fn apply(new: Settings) -> Result<(), &'static str> {
     let clean = Settings {
         enabled: new.enabled,
         client_id: new.client_id.trim().to_owned(),
+        design: new.design.clean()?,
     };
     if !clean.client_id.is_empty() && !valid_client_id(&clean.client_id) {
         return Err("invalid application id");
@@ -420,21 +660,13 @@ pub fn apply(new: Settings) -> Result<(), &'static str> {
     if let (Some(path), Ok(bytes)) = (&sh.path, serde_json::to_vec(&clean)) {
         let _ = std::fs::write(path, bytes);
     }
-    let _ = sh.tx.send(Msg::Settings(clean));
+    let _ = sh.tx.send(Msg::Settings(Box::new(clean)));
     Ok(())
 }
 
 /// Offers the player's latest state. Cheap: it only hands a snapshot to the worker, which decides whether Discord needs an update.
 pub fn offer(dto: &PlayerProgressDto) {
     let Some(sh) = SHARED.get() else { return };
-    if !sh
-        .settings
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .enabled
-    {
-        return;
-    }
     let play = match dto.player.state {
         PlaybackStateDto::Playing | PlaybackStateDto::Buffering => Some(Play::Playing),
         PlaybackStateDto::Paused => Some(Play::Paused),
@@ -452,7 +684,33 @@ pub fn offer(dto: &PlayerProgressDto) {
         }),
         _ => None,
     };
-    let _ = sh.tx.send(Msg::Track(snapshot));
+    *sh.last.lock().unwrap_or_else(|e| e.into_inner()) = snapshot.clone();
+    if sh
+        .settings
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .enabled
+    {
+        let _ = sh.tx.send(Msg::Track(snapshot));
+    }
+}
+
+/// The card `design` would show for the song playing now, or for a sample song when nothing plays.
+pub fn preview(design: Design) -> Result<Value, &'static str> {
+    let design = design.clean()?;
+    let last = SHARED
+        .get()
+        .and_then(|sh| sh.last.lock().unwrap_or_else(|e| e.into_inner()).clone());
+    let sample = Snapshot {
+        track_id: "dQw4w9WgXcQ".into(),
+        title: "Your song title".into(),
+        artists: vec!["Artist One".into(), "Artist Two".into()],
+        artwork: None,
+        play: Play::Playing,
+        position_ms: 45_000,
+        duration_ms: 212_000,
+    };
+    Ok(activity(&last.unwrap_or(sample), &design, unix_now()))
 }
 
 #[cfg(test)]
@@ -500,7 +758,11 @@ mod tests {
             seen
         });
         let mut link = Link::over(Box::new(ours), "123456789012345678").expect("READY");
-        assert!(link.set(Some(activity(&snap(Play::Playing), 100))));
+        assert!(link.set(Some(activity(
+            &snap(Play::Playing),
+            &Design::default(),
+            100
+        ))));
         assert!(link.set(None));
         let seen = fake.join().unwrap();
         assert_eq!(seen[0]["cmd"], "SET_ACTIVITY");
@@ -533,6 +795,7 @@ mod tests {
         let mut s = Settings {
             enabled: true,
             client_id: String::new(),
+            design: Design::default(),
         };
         assert_eq!(s.effective_client_id(), DEFAULT_CLIENT_ID);
         s.client_id = "123456789012345678".into();
@@ -571,7 +834,7 @@ mod tests {
 
     #[test]
     fn playing_activity_has_listening_type_times_and_a_link() {
-        let a = activity(&snap(Play::Playing), 1_000_000);
+        let a = activity(&snap(Play::Playing), &Design::default(), 1_000_000);
         assert_eq!(a["type"], 2);
         assert_eq!(a["details"], "BU");
         assert_eq!(a["state"], "SURIYA MQT, P6ICK");
@@ -580,6 +843,11 @@ mod tests {
         assert_eq!(
             a["assets"]["large_image"],
             "https://i.ytimg.com/vi/aqz-KE-bpKQ/hqdefault.jpg"
+        );
+        assert_eq!(a["status_display_type"], 1);
+        assert_eq!(
+            a["details_url"],
+            "https://www.youtube.com/watch?v=aqz-KE-bpKQ"
         );
         assert_eq!(
             a["buttons"][0]["url"],
@@ -593,16 +861,164 @@ mod tests {
         s.title = "x".into();
         s.artwork = Some("http://insecure.example/a.jpg".into());
         s.track_id = "not an id".into();
-        let a = activity(&s, 5);
-        assert_eq!(a["state"], "Paused");
+        let a = activity(&s, &Design::default(), 5);
+        assert_eq!(a["state"], "Paused · SURIYA MQT, P6ICK");
         assert!(a.get("timestamps").is_none());
         assert_eq!(a["details"], "Unknown title");
         // No usable cover: the logo is the big picture, and there is no corner badge on top of it.
         assert_eq!(a["assets"]["large_image"], LOGO_ASSET);
         assert!(a["assets"].get("small_image").is_none());
-        assert_eq!(a["assets"]["small_text"], "LunoRX - paused");
+        // A badge text with no badge picture would show nothing, so it is left out too.
+        assert!(a["assets"].get("small_text").is_none());
+        let with_cover = activity(&snap(Play::Paused), &Design::default(), 5);
+        assert_eq!(with_cover["assets"]["small_text"], "LunoRX - paused");
         // No valid video id: only the link to the app remains.
         assert_eq!(a["buttons"].as_array().unwrap().len(), 1);
         assert_eq!(a["buttons"][0]["label"], "Get LunoRX");
+    }
+
+    fn design(f: impl FnOnce(&mut Design)) -> Design {
+        let mut d = Design::default();
+        f(&mut d);
+        d
+    }
+
+    #[test]
+    fn a_custom_design_changes_text_images_clock_and_buttons() {
+        let d = design(|d| {
+            d.details = "{artist} - {title}".into();
+            d.state = "".into();
+            d.large_image = "catalog:mine".into();
+            d.catalog = vec![CatalogEntry {
+                name: "mine".into(),
+                value: "my_art".into(),
+            }];
+            d.small_image = "cover".into();
+            d.timestamps = "elapsed".into();
+            d.status_display = "title".into();
+            d.listen_button = false;
+            d.buttons = vec![CardButton {
+                label: "My site".into(),
+                url: "https://example.com".into(),
+            }];
+        });
+        let a = activity(&snap(Play::Playing), &d.clean().unwrap(), 1_000);
+        assert_eq!(a["details"], "SURIYA MQT - BU");
+        assert!(
+            a.get("state").is_none(),
+            "an empty template leaves the line out"
+        );
+        assert_eq!(a["assets"]["large_image"], "my_art");
+        assert_eq!(
+            a["assets"]["small_image"],
+            "https://i.ytimg.com/vi/aqz-KE-bpKQ/hqdefault.jpg"
+        );
+        assert_eq!(a["timestamps"], json!({ "start": 970 }));
+        assert_eq!(a["status_display_type"], 2);
+        let labels: Vec<_> = a["buttons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| b["label"].as_str().unwrap())
+            .collect();
+        assert_eq!(labels, ["My site", "Get LunoRX"]);
+    }
+
+    #[test]
+    fn at_most_two_buttons_and_custom_ones_win() {
+        let d = design(|d| {
+            d.buttons = vec![
+                CardButton {
+                    label: "One".into(),
+                    url: "{track_url}".into(),
+                },
+                CardButton {
+                    label: "Two".into(),
+                    url: "https://example.com".into(),
+                },
+            ];
+        });
+        let a = activity(&snap(Play::Playing), &d.clean().unwrap(), 5);
+        let labels: Vec<_> = a["buttons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| b["label"].as_str().unwrap())
+            .collect();
+        assert_eq!(labels, ["One", "Two"]);
+        assert_eq!(
+            a["buttons"][0]["url"],
+            "https://www.youtube.com/watch?v=aqz-KE-bpKQ"
+        );
+    }
+
+    #[test]
+    fn a_design_is_checked_before_it_is_saved() {
+        assert!(Design::default().clean().is_ok());
+        assert_eq!(
+            design(|d| d.timestamps = "x".into()).clean().unwrap_err(),
+            "clock"
+        );
+        assert_eq!(
+            design(|d| d.large_image = "none".into())
+                .clean()
+                .unwrap_err(),
+            "large image"
+        );
+        assert_eq!(
+            design(|d| d.large_image = "catalog:missing".into())
+                .clean()
+                .unwrap_err(),
+            "large image"
+        );
+        assert_eq!(
+            design(|d| d.details = "a".repeat(129)).clean().unwrap_err(),
+            "details"
+        );
+        assert_eq!(
+            design(|d| d.catalog = vec![CatalogEntry {
+                name: "Bad Name".into(),
+                value: "x".into()
+            }])
+            .clean()
+            .unwrap_err(),
+            "catalog name"
+        );
+        assert_eq!(
+            design(|d| d.catalog = vec![CatalogEntry {
+                name: "a".into(),
+                value: "http://insecure".into()
+            }])
+            .clean()
+            .unwrap_err(),
+            "catalog image"
+        );
+        assert_eq!(
+            design(|d| d.buttons = vec![CardButton {
+                label: "x".into(),
+                url: "javascript:alert(1)".into()
+            }])
+            .clean()
+            .unwrap_err(),
+            "button"
+        );
+        assert_eq!(
+            design(|d| d.buttons = vec![
+                CardButton {
+                    label: "x".into(),
+                    url: "{track_url}".into()
+                };
+                3
+            ])
+            .clean()
+            .unwrap_err(),
+            "buttons"
+        );
+    }
+
+    #[test]
+    fn old_settings_files_without_a_design_still_load_with_the_default_look() {
+        let s: Settings = serde_json::from_str(r#"{"enabled":true,"clientId":""}"#).unwrap();
+        assert_eq!(s.design, Design::default());
     }
 }

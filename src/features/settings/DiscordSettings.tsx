@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Switch } from "../../components/Lyrics";
 import { discordSettingsGet, discordSettingsSet, type DiscordSettings as Dto, type DiscordStatus } from "../../services/tauri/discord";
+import { DiscordCard } from "./DiscordCard";
 import { FIELD, Inset, NoteRow, SettingRow } from "./rows";
 
 const STATUS: Record<DiscordStatus, string> = {
@@ -29,10 +30,15 @@ export function DiscordSettings() {
     try { await discordSettingsSet(enabled, clientId); } catch { setError("That is not a valid Application ID. It is 17 to 20 digits."); }
     await read();
   }
+  async function saveDesign(design: Dto["design"]): Promise<string | null> {
+    try { await discordSettingsSet(settings?.enabled ?? false, id.trim(), design); await read(); return null; }
+    catch (e) { return String(e); }
+  }
   if (!settings) return null;
   const custom = id.trim() !== "";
   const valid = !custom || /^\d{17,20}$/.test(id.trim());
   return (
+    <>
     <Inset id="settings-discord" title="Discord">
       <SettingRow label="Show what I'm listening to" hint="Sends the track title, artists, cover and a YouTube link to your Discord app, which shows them to people who can see your profile.">
         <Switch on={settings.enabled} onChange={(on) => void save(on, id)} name="Show what I'm listening to on Discord">{settings.enabled ? "On" : "Off"}</Switch>
@@ -46,5 +52,7 @@ export function DiscordSettings() {
       </NoteRow>
       {error && <NoteRow tone="bad" role="alert">{error}</NoteRow>}
     </Inset>
+    <DiscordCard design={settings.design} onSave={saveDesign} />
+    </>
   );
 }

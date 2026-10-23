@@ -3,6 +3,7 @@
 import { loadCustomFonts } from "../../lib/textStyle";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
+import { applySavedAudio } from "../../lib/audioSettings";
 import { initHistory } from "../../lib/history";
 import { initTelemetry, track } from "../../lib/telemetry";
 import { hydrateRecentSearches } from "../../lib/store";
@@ -112,6 +113,7 @@ export default function AppShell() {
     void refreshLikes();
     const stopImport = initYouTubeImport();
     applySavedMode();
+    void applySavedAudio();
     initAppStyle();
     // Warm the first screens while the window is still settling: both feeds, and Explore's first topic.
     const warm = () => { void loadFeed("home"); void loadFeed("explore", "charts"); };

@@ -1,6 +1,7 @@
 //! Reads the signed-in user's YouTube Music and YouTube collections: liked songs and videos, saved playlists,
 //! Watch later and recent history.
-//! Read-only: nothing is written back to YouTube. Each section fails on its own, so a partial import still lands.
+//! Reading never changes the account. The one write is `rate`, a like or un-like the user did here, sent only when they turned that on.
+//! Each section fails on its own, so a partial import still lands.
 use super::library::{LibraryError, SavedTrack, saved_track};
 use rustypipe::client::RustyPipe;
 use std::{collections::HashMap, time::Duration};
@@ -81,6 +82,23 @@ async fn step<T>(
         .await
         .map_err(|_| LibraryError::Unavailable)?
         .map_err(|_| LibraryError::Unavailable)
+}
+
+/// Likes or un-likes one video on the signed-in account (`like/like`, `like/removelike`), as the YouTube site does.
+/// Needs the session cookie; rustypipe has no call for it, so this is the raw endpoint. `Err` means nothing was changed.
+pub async fn rate(pipe: &RustyPipe, video_id: &str, like: bool) -> Result<(), LibraryError> {
+    if !super::playback::extract::valid_id(video_id) {
+        return Err(LibraryError::Validation);
+    }
+    let endpoint = if like { "like/like" } else { "like/removelike" };
+    let body = serde_json::json!({ "target": { "videoId": video_id } });
+    step(pipe.query().authenticated().raw(
+        rustypipe::client::ClientType::DesktopMusic,
+        endpoint,
+        &body,
+    ))
+    .await
+    .map(|_| ())
 }
 
 async fn liked(pipe: &RustyPipe) -> Result<(Vec<SavedTrack>, bool), LibraryError> {
@@ -315,4 +333,20 @@ pub async fn fetch(pipe: &RustyPipe, known: &HashMap<String, u64>) -> Import {
         Err(_) => import.failed.push("ytHistory"),
     }
     import
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn rate_refuses_a_bad_video_id_before_any_request() {
+        let pipe = RustyPipe::new();
+        for bad in ["", "short", "has space!!", "../../etc/pa"] {
+            assert!(matches!(
+                rate(&pipe, bad, true).await,
+                Err(LibraryError::Validation)
+            ));
+        }
+    }
 }

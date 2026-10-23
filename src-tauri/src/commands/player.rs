@@ -1525,6 +1525,9 @@ pub fn player_set_audio_settings(
     if !state.available {
         return Err(PlayerError::new(PlayerErrorCategory::UnsupportedCapability));
     }
+    if !settings.effects.valid() {
+        return Err(invalid());
+    }
     *state
         .audio
         .settings

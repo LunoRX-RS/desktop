@@ -424,6 +424,29 @@ pub async fn youtube_import(
     crate::commands::youtube_import::run(&app).await
 }
 
+/// Whether likes made here are also sent to the signed-in YouTube account, and how many are still waiting to be sent.
+#[tauri::command]
+pub fn youtube_like_push_get(
+    app: AppHandle,
+    window: WebviewWindow,
+) -> Result<crate::commands::youtube_import::LikePushDto, YouTubeError> {
+    main_only(&window)?;
+    Ok(crate::commands::youtube_import::like_push_state(&app))
+}
+
+/// Off by default: turning it on lets this app like and un-like songs on the user's YouTube account.
+#[tauri::command]
+pub fn youtube_like_push_set(
+    app: AppHandle,
+    window: WebviewWindow,
+    enabled: bool,
+) -> Result<crate::commands::youtube_import::LikePushDto, YouTubeError> {
+    main_only(&window)?;
+    Ok(crate::commands::youtube_import::set_like_push(
+        &app, enabled,
+    ))
+}
+
 #[tauri::command]
 pub async fn youtube_disconnect(
     app: AppHandle,

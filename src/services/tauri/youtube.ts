@@ -21,3 +21,8 @@ export function youtubeImport(): Promise<ImportReport> { return invoke("youtube_
 export function subscribeYouTubeImport(callback: (event: ImportEvent) => void): Promise<UnlistenFn> {
   return listen<ImportEvent>("core://youtube/import", (event) => callback(event.payload));
 }
+
+/** Whether likes made in LunoRX are also sent to the signed-in YouTube account, and how many still wait to be sent. */
+export interface LikePush { enabled: boolean; pending: number }
+export function youtubeLikePushGet(): Promise<LikePush> { return invoke("youtube_like_push_get"); }
+export function youtubeLikePushSet(enabled: boolean): Promise<LikePush> { return invoke("youtube_like_push_set", { enabled }); }

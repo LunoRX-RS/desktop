@@ -1,4 +1,5 @@
 "use client";
+import { SyncAllButton } from "../SyncAllButton";
 import { useLibrary } from "../../lib/library";
 import { playTrack as playSavedTrack } from "../../lib/playback";
 
@@ -634,6 +635,7 @@ export default function Sidebar() {
                 <span aria-hidden="true" className={cx("absolute -right-1 -top-1 size-2 rounded-full", status.dot)} />
               </span>
             </button>
+            <SyncAllButton compact />
             <span role="status" className="sr-only">{playbackLabel}</span>
             <IconButton label="Connections" aria-current={view === "connections" ? "page" : undefined} onClick={() => navigate("connections")} className={cx("size-9", iconBtnActive("connections"))}>
               <Cable size={18} />
@@ -657,6 +659,7 @@ export default function Sidebar() {
                   <span className="truncate">{status.text}</span>
                 </div>
               )}
+              <SyncAllButton compact />
               <IconButton label="Connections" aria-current={view === "connections" ? "page" : undefined} onClick={() => navigate("connections")} className={cx("size-9", iconBtnActive("connections"))}>
                 <Cable size={18} />
               </IconButton>

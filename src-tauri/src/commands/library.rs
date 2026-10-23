@@ -74,7 +74,13 @@ pub fn library_set_like(
     liked: bool,
 ) -> Result<Vec<SavedTrack>, LibraryError> {
     main(&window)?;
+    let youtube_id = (track.provider == crate::core::domain::ProviderId::YouTube)
+        .then(|| track.provider_track_id.clone());
     let result = state.with(|library| library.set_like(track, liked))?;
+    // Sent to the YouTube account only when the user turned that on; it never delays or fails the local like.
+    if let Some(id) = youtube_id {
+        crate::commands::youtube_import::push_like(&app, &id, liked);
+    }
     let _ = app.emit_to("main", "core://library/changed", ());
     Ok(result)
 }

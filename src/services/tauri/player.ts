@@ -182,7 +182,25 @@ export interface AudioSettings {
   pcmFormat: "int16" | "int32" | "float32";
   sampleRate: "auto" | "hz44100" | "hz48000" | "hz96000" | "hz192000";
   loudness: "off" | "balanced" | "loud";
+  effects: AudioEffects;
 }
+/** Sound shaping done by mpv's filters. Gains are whole dB, -12 to 12. */
+export interface AudioEffects {
+  enabled: boolean;
+  preamp: number;
+  /** 31, 62, 125, 250, 500 Hz, then 1, 2, 4, 8, 16 kHz. */
+  bands: number[];
+  bass: number;
+  treble: number;
+  /** 0 mono, 100 unchanged, 200 doubled. */
+  stereoWidth: number;
+  crossfeed: number;
+  reverb: "off" | "room" | "hall";
+  compressor: "off" | "light" | "medium" | "heavy";
+  /** Percent, 50 to 200; pitch is kept. */
+  speed: number;
+}
+export const FLAT_EFFECTS: AudioEffects = { enabled: true, preamp: 0, bands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], bass: 0, treble: 0, stereoWidth: 100, crossfeed: 0, reverb: "off", compressor: "off", speed: 100 };
 export interface AudioSettingsDto {
   settings: AudioSettings;
   available: boolean;

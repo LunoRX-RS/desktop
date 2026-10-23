@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { Button } from "../../components/ui";
 import { playerAudioSettings, playerSetAudioSettings, type AudioSettings, type AudioSettingsDto } from "../../services/tauri/player";
+import { saveAudioSettings } from "../../lib/audioSettings";
+import { AudioEffectsPanel } from "./AudioEffects";
 import { setSleepTimer, useSleepTimer } from "../../lib/sleepTimer";
 import { FIELD, Inset, NoteRow, SettingRow } from "./rows";
 
@@ -22,7 +24,7 @@ export function AudioSettingsPanel() {
   }, []);
   async function update(settings: AudioSettings) {
     setBusy(true); setError(false);
-    try { setValue(await playerSetAudioSettings(settings)); } catch { setError(true); }
+    try { const next = await playerSetAudioSettings(settings); setValue(next); saveAudioSettings(next.settings); } catch { setError(true); }
     finally { setBusy(false); }
   }
   async function refresh() {
@@ -33,7 +35,8 @@ export function AudioSettingsPanel() {
   const endsAt = useSleepTimer((t) => t.endsAt);
   const disabled = busy || !value?.available;
   const output = value?.output;
-  return <Inset id="settings-audio" title="Audio quality and output">
+  return <>
+  <Inset id="settings-audio" title="Audio quality and output">
     <SettingRow label="Stream quality" htmlFor="audio-quality" hint="YouTube target bitrate. Uses the lowest available stream if none meets the limit.">
       <select id="audio-quality" className={FIELD} disabled={disabled} value={value?.settings.quality ?? "high"} onChange={e => value && update({ ...value.settings, quality: e.target.value as AudioSettings["quality"] })}>
         <option value="low">Low · up to 64 kbps</option><option value="normal">Normal · up to 128 kbps</option><option value="high">High · best available</option>
@@ -64,7 +67,9 @@ export function AudioSettingsPanel() {
       <span>{output?.format ? `${output.driver ?? "Audio"} · ${output.format} · ${output.sampleRate ?? "?"} Hz` : "No active output"}</span>
       <Button disabled={busy} onClick={refresh}>Refresh</Button>
     </SettingRow>
-    <NoteRow tone="off">Loudness changes apply right away. Other settings apply when you load the next track. Saved for this app session. Compressed sources remain compressed quality.</NoteRow>
+    <NoteRow tone="off">Loudness changes apply right away. Other settings apply when you load the next track. Saved on this device. Compressed sources remain compressed quality.</NoteRow>
     {error && <NoteRow tone="bad" role="alert">Audio settings unavailable. Try Refresh.</NoteRow>}
-  </Inset>;
+  </Inset>
+  {value && <AudioEffectsPanel value={value.settings.effects} disabled={busy || !value.available} onChange={(effects) => void update({ ...value.settings, effects })} />}
+  </>;
 }
