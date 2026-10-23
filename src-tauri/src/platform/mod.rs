@@ -44,3 +44,19 @@ pub fn install(_app: &tauri::AppHandle) {}
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn poke() {}
+
+/// WebKitGTK on a Wayland compositor schedules frames from the compositor's frame callbacks. On hybrid-GPU laptops
+/// (Intel plus NVIDIA, outputs split across the two cards) those callbacks stop arriving for the app window, so the page
+/// stops repainting while its scripts keep running: the lyrics stay still, the time stays put and clicks seem dead.
+/// `WEBKIT_FORCE_VBLANK_TIMER` makes WebKit pace frames with its own timer instead, and keeps GPU compositing. The user's own
+/// setting wins. Call this first thing in `main`, before any thread exists, because it edits the process environment.
+pub fn prepare_webview_environment() {
+    #[cfg(target_os = "linux")]
+    {
+        let wayland = std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty());
+        if wayland && std::env::var_os("WEBKIT_FORCE_VBLANK_TIMER").is_none() {
+            // SAFETY: called from `run` before Tauri or any other thread starts, so nothing reads the environment concurrently.
+            unsafe { std::env::set_var("WEBKIT_FORCE_VBLANK_TIMER", "1") };
+        }
+    }
+}
