@@ -6,6 +6,7 @@ use super::{
     engine::PlaybackEngine,
     extract::valid_id,
     state::PlaybackState,
+    taste::{Candidate, Profile, Vibe, sequence},
 };
 use crate::core::{
     domain::{ProviderId, TrackReference},
@@ -24,6 +25,8 @@ pub struct AutoplayStatus {
     pub queue: Vec<OfflineTrack>,
     pub repeat: &'static str,
     pub radio: bool,
+    /// How closely related tracks stick to what plays: "same", "balanced" or "explore".
+    pub vibe: &'static str,
     #[serde(skip)]
     history: VecDeque<String>,
     /// Tracks already left, newest last; backs the Previous command.
@@ -44,6 +47,7 @@ impl Default for AutoplayStatus {
             queue: Vec::new(),
             repeat: "off",
             radio: true,
+            vibe: "balanced",
             history: VecDeque::new(),
             back: Vec::new(),
             context: Vec::new(),
@@ -58,21 +62,30 @@ impl AutoplayStatus {
             back: std::mem::take(&mut self.back),
             repeat: self.repeat,
             radio: self.radio,
+            vibe: self.vibe,
             ..Default::default()
         };
     }
 }
-/// Sets repeat ("off" | "all" | "one") and autoplay. Anything else is refused.
-pub fn set_mode(state: &Status, repeat: &str, radio: bool) -> bool {
+/// Sets repeat ("off" | "all" | "one"), autoplay and, when given, the vibe ("same" | "balanced" | "explore"). Anything else is refused.
+pub fn set_mode(state: &Status, repeat: &str, radio: bool, vibe: Option<&str>) -> bool {
     let repeat: &'static str = match repeat {
         "off" => "off",
         "all" => "all",
         "one" => "one",
         _ => return false,
     };
+    let vibe = match vibe.map(Vibe::parse) {
+        Some(None) => return false,
+        Some(Some(v)) => Some(v.as_str()),
+        None => None,
+    };
     if let Ok(mut s) = state.lock() {
         s.repeat = repeat;
         s.radio = radio;
+        if let Some(v) = vibe {
+            s.vibe = v;
+        }
         return true;
     }
     false
@@ -202,6 +215,10 @@ async fn session(
     state: Status,
 ) {
     let mut history = state.lock().map(|s| s.history.clone()).unwrap_or_default();
+    let mut profile = Profile::default();
+    let mut observed: Option<String> = None;
+    let mut planned_vibe: Option<&'static str> = None;
+    let vibe_of = |state: &Status| state.lock().map(|s| s.vibe).unwrap_or("balanced");
     let mode = |state: &Status| {
         state
             .lock()
@@ -213,6 +230,12 @@ async fn session(
         let Some(current) = current else { return };
         let (repeat, radio) = mode(&state);
         let seed = current.provider_track_id.clone();
+        // What is playing joins the session's taste (once, even if the ending is planned again after a mode change).
+        if observed.as_deref() != Some(seed.as_str()) {
+            profile.fade(PROFILE_KEEP);
+            profile.observe(&offline_of(&current), 1.0);
+            observed = Some(seed.clone());
+        }
         remember(&mut history, seed.clone());
         if let Ok(mut status) = state.lock() {
             status.history = history.clone();
@@ -223,9 +246,33 @@ async fn session(
             .lock()
             .map(|s| (s.list, s.context.clone()))
             .unwrap_or_default();
+        // A new vibe applies to the songs after this one: the related part of the queue is asked for again. A list the user
+        // started (a playlist or album) is left as it is.
+        let vibe = vibe_of(&state);
+        if planned_vibe.is_some_and(|v| v != vibe) && !list {
+            queue.clear();
+        }
+        planned_vibe = Some(vibe);
         // A playlist or album plays through first; related tracks come in only once it is used up.
         if radio && repeat != "one" && (queue.is_empty() || (!list && queue.len() < 10)) {
-            queue = related(&yt, &seed, &history, queue).await;
+            let recent = state
+                .lock()
+                .map(|s| {
+                    s.back
+                        .iter()
+                        .rev()
+                        .take(RECENT_RADIOS)
+                        .map(|t| t.provider_track_id.clone())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            let ctx = RadioContext {
+                profile: &profile,
+                vibe: Vibe::parse(vibe).unwrap_or(Vibe::Balanced),
+                recent,
+                current: offline_of(&current),
+            };
+            queue = related(&yt, &seed, &history, queue, &ctx).await;
         }
         if queue.is_empty() && repeat == "all" && !context.is_empty() {
             queue = context.iter().skip(1).cloned().collect();
@@ -263,7 +310,7 @@ async fn session(
         loop {
             reports.borrow_and_update();
             // The user changed repeat or autoplay while this track plays: plan the ending again.
-            if mode(&state) != (repeat, radio) {
+            if mode(&state) != (repeat, radio) || vibe_of(&state) != vibe {
                 continue 'outer;
             }
             let mut player = engine.lock().await;
@@ -312,61 +359,167 @@ fn append(
         }
     }
 }
-/// Bounded radio pagination; returns partial results when the source is exhausted or unavailable.
-/// The radio answer has no next-page handle, so each further page is the radio of the last queued track not used as a seed yet.
+/// How much of the session's taste remains after each new song (0.8 keeps about five songs in view).
+const PROFILE_KEEP: f32 = 0.8;
+/// How many of the songs played just before this one also get their radio asked, to see which songs sit in the same neighbourhood.
+const RECENT_RADIOS: usize = 2;
+/// A song that came only from another song's radio is placed after this many of the playing song's own.
+const OTHER_RADIO_RANK: usize = 30;
+/// When the radios of the playing song and its predecessors give fewer songs than this, the best of them are asked too.
+const ENOUGH_CANDIDATES: usize = 60;
+
+/// What the ranking knows about the session.
+pub struct RadioContext<'a> {
+    pub profile: &'a Profile,
+    pub vibe: Vibe,
+    /// Ids of the songs played just before, newest first.
+    pub recent: Vec<String>,
+    pub current: OfflineTrack,
+}
+
+/// A radio's songs in order, each with whether it is a video (an upload, a lyric video) rather than an official audio track.
+type RadioPage = Vec<(OfflineTrack, bool)>;
+
+async fn radio(yt: &Yt, id: &str, timeout: Duration) -> Option<RadioPage> {
+    let music = yt.music();
+    let Ok(Ok(page)) = tokio::time::timeout(timeout, music.radio(id)).await else {
+        return None;
+    };
+    Some(
+        page.queue
+            .into_iter()
+            .map(|t| {
+                let video = t.kind == innerlight::music::TrackKind::Video;
+                let track = OfflineTrack {
+                    provider: "YouTube".into(),
+                    id: t.id,
+                    title: t.title,
+                    artists: t.artists.into_iter().map(|a| a.name).collect(),
+                    artwork_url: t
+                        .thumbnails
+                        .into_iter()
+                        .max_by_key(|c| c.width)
+                        .and_then(|c| super::track_info::artwork_url(&c.url)),
+                    duration_ms: t.duration_ms.and_then(|d| i64::try_from(d).ok()),
+                };
+                (track, video)
+            })
+            .collect(),
+    )
+}
+
+/// Merges the radios into candidates: the playing song's radio gives the order, the others give votes.
+fn candidates_from(
+    primary: RadioPage,
+    others: &[RadioPage],
+    skip: impl Fn(&OfflineTrack) -> bool,
+) -> Vec<Candidate> {
+    let mut by_id: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut out: Vec<Candidate> = Vec::new();
+    for (rank, (track, video)) in primary.into_iter().enumerate() {
+        if skip(&track) || by_id.contains_key(&track.id) {
+            continue;
+        }
+        by_id.insert(track.id.clone(), out.len());
+        out.push(Candidate {
+            track,
+            rank,
+            votes: 1,
+            video,
+        });
+    }
+    for page in others {
+        let mut seen_here = std::collections::HashSet::new();
+        for (i, (track, video)) in page.iter().enumerate() {
+            if skip(track) || !seen_here.insert(track.id.clone()) {
+                continue;
+            }
+            match by_id.get(&track.id) {
+                Some(&at) => out[at].votes += 1,
+                None => {
+                    by_id.insert(track.id.clone(), out.len());
+                    out.push(Candidate {
+                        track: track.clone(),
+                        rank: OTHER_RADIO_RANK + i,
+                        votes: 1,
+                        video: *video,
+                    });
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Adds related songs to the queue, in an order that keeps the session's mood. Returns what was queued when the source is
+/// unavailable (nothing new is better than a wrong turn).
+///
+/// The radio answer has no next-page handle. Instead of walking on from the last song queued (each step drifts a little
+/// further), the playing song's radio and the radios of the songs just before it are read together, and a song that
+/// several of them list counts for more. Only if that is too few, the radios of the best-fitting songs are read as well.
 pub async fn related(
     yt: &Yt,
     seed: &str,
     history: &VecDeque<String>,
     mut queue: Vec<OfflineTrack>,
+    ctx: &RadioContext<'_>,
 ) -> Vec<OfflineTrack> {
     queue.truncate(QUEUE_SIZE);
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
-    let music = yt.music();
-    let Ok(Ok(mut page)) = tokio::time::timeout(Duration::from_secs(14), music.radio(seed)).await
-    else {
-        return queue;
-    };
-    let mut seeds = std::collections::HashSet::from([seed.to_owned()]);
-    for page_index in 0..5 {
-        let items = std::mem::take(&mut page.queue)
-            .into_iter()
-            .map(|t| OfflineTrack {
-                provider: "YouTube".into(),
-                id: t.id,
-                title: t.title,
-                artists: t.artists.into_iter().map(|a| a.name).collect(),
-                artwork_url: t
-                    .thumbnails
-                    .into_iter()
-                    .max_by_key(|c| c.width)
-                    .and_then(|c| super::track_info::artwork_url(&c.url)),
-                duration_ms: t.duration_ms.and_then(|d| i64::try_from(d).ok()),
-            });
-        append(&mut queue, items, history);
-        if queue.len() >= QUEUE_SIZE || page_index == 4 {
-            break;
+    let started = tokio::time::Instant::now();
+    let recent: Vec<&String> = ctx
+        .recent
+        .iter()
+        .filter(|id| valid_id(id) && id.as_str() != seed)
+        .collect();
+    let (primary, a, b) = tokio::join!(
+        radio(yt, seed, Duration::from_secs(14)),
+        async {
+            match recent.first() {
+                Some(id) => radio(yt, id, Duration::from_secs(14)).await,
+                None => None,
+            }
+        },
+        async {
+            match recent.get(1) {
+                Some(id) => radio(yt, id, Duration::from_secs(14)).await,
+                None => None,
+            }
+        },
+    );
+    let Some(primary) = primary else { return queue };
+    let mut others: Vec<RadioPage> = [a, b].into_iter().flatten().collect();
+    let queued: std::collections::HashSet<String> = queue.iter().map(|t| t.id.clone()).collect();
+    let skip =
+        |t: &OfflineTrack| t.id == seed || queued.contains(&t.id) || !eligible(&t.id, history);
+    let mut candidates = candidates_from(primary.clone(), &others, skip);
+    let room = QUEUE_SIZE.saturating_sub(queue.len());
+    if candidates.len() < ENOUGH_CANDIDATES.min(room) && started.elapsed() < Duration::from_secs(10)
+    {
+        // Too few: ask the radios of the songs that fit best so far, once, and vote again.
+        let best = sequence(
+            ctx.profile,
+            ctx.vibe,
+            candidates.clone(),
+            1 + others.len(),
+            Some(&ctx.current),
+            2,
+        );
+        for track in best {
+            if let Some(page) = radio(yt, &track.id, Duration::from_secs(10)).await {
+                others.push(page);
+            }
         }
-        let remaining = deadline
-            .saturating_duration_since(tokio::time::Instant::now())
-            .min(Duration::from_secs(10));
-        if remaining.is_zero() {
-            break;
-        }
-        let Some(seed) = queue
-            .iter()
-            .rev()
-            .find(|t| !seeds.contains(&t.id))
-            .map(|t| t.id.clone())
-        else {
-            break;
-        };
-        seeds.insert(seed.clone());
-        match tokio::time::timeout(remaining, music.radio(&seed)).await {
-            Ok(Ok(next)) => page = next,
-            _ => break,
-        }
+        candidates = candidates_from(primary, &others, skip);
     }
+    let picked = sequence(
+        ctx.profile,
+        ctx.vibe,
+        candidates,
+        1 + others.len(),
+        queue.last().or(Some(&ctx.current)),
+        room,
+    );
+    append(&mut queue, picked, history);
     queue
 }
 fn reference(next: &OfflineTrack) -> Result<TrackReference, ()> {
@@ -483,8 +636,8 @@ mod tests {
     #[test]
     fn mode_is_validated_and_survives_a_manual_load() {
         let state: Status = Default::default();
-        assert!(!set_mode(&state, "forever", true));
-        assert!(set_mode(&state, "all", false));
+        assert!(!set_mode(&state, "forever", true, None));
+        assert!(set_mode(&state, "all", false, None));
         state.lock().unwrap().reset();
         let s = state.lock().unwrap();
         assert_eq!((s.repeat, s.radio), ("all", false));
@@ -495,7 +648,7 @@ mod tests {
         let first = reference(&track("aqz-KE-bpKQ")).unwrap();
         set_context(&state, &first, &[track("r-G2pKr2_n8")]);
         assert!(restart_context(&state).is_none(), "repeat is off");
-        assert!(set_mode(&state, "all", true));
+        assert!(set_mode(&state, "all", true, None));
         let again = restart_context(&state).unwrap();
         assert_eq!(again.provider_track_id, "aqz-KE-bpKQ");
         let queue = state.lock().unwrap().queue.clone();
@@ -636,5 +789,63 @@ mod tests {
         }
         assert_eq!(history.len(), 100);
         assert!(eligible("r-G2pKr2_n8", &history));
+    }
+    #[test]
+    fn candidates_keep_the_playing_songs_order_and_count_votes() {
+        let page = |ids: &[&str]| -> RadioPage {
+            ids.iter()
+                .map(|id| {
+                    (
+                        {
+                            let mut t = next();
+                            t.id = format!("{id:0>11}");
+                            t
+                        },
+                        false,
+                    )
+                })
+                .collect()
+        };
+        let id = |short: &str| format!("{short:0>11}");
+        let primary = page(&["a", "b", "c", "seed"]);
+        let others = [page(&["c", "d"]), page(&["c", "a", "c"])];
+        let skip = |t: &OfflineTrack| t.id == id("seed");
+        let found = candidates_from(primary, &others, skip);
+        let by = |short: &str| found.iter().find(|c| c.track.id == id(short)).unwrap();
+        assert_eq!(found.len(), 4, "the playing song itself is left out");
+        assert_eq!((by("a").rank, by("a").votes), (0, 2));
+        assert_eq!((by("b").rank, by("b").votes), (1, 1));
+        assert_eq!(
+            (by("c").rank, by("c").votes),
+            (2, 3),
+            "listed twice in one radio still counts once"
+        );
+        assert_eq!(
+            (by("d").rank, by("d").votes),
+            (OTHER_RADIO_RANK + 1, 1),
+            "only seen in another radio: long tail"
+        );
+    }
+    #[test]
+    fn the_vibe_is_validated_and_kept_across_a_manual_load() {
+        let state = Status::default();
+        assert_eq!(state.lock().unwrap().vibe, "balanced");
+        assert!(
+            !set_mode(&state, "off", true, Some("wild")),
+            "unknown vibe is refused"
+        );
+        assert_eq!(state.lock().unwrap().vibe, "balanced");
+        assert!(set_mode(&state, "off", true, Some("same")));
+        assert!(
+            set_mode(&state, "all", true, None),
+            "no vibe leaves it as it is"
+        );
+        assert_eq!(state.lock().unwrap().vibe, "same");
+        state.lock().unwrap().reset();
+        assert_eq!(
+            state.lock().unwrap().vibe,
+            "same",
+            "a manual load keeps the user's choice"
+        );
     }
 }

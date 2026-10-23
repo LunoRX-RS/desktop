@@ -8,6 +8,7 @@ pub mod lyrics;
 pub mod native;
 mod proxy;
 pub mod state;
+pub mod taste;
 pub mod track_info;
 
 pub mod cache;

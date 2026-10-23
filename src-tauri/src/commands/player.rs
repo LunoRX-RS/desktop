@@ -914,6 +914,9 @@ pub struct PlayerModeArgs {
     /// "off", "all" or "one".
     pub repeat: String,
     pub autoplay: bool,
+    /// "same", "balanced" or "explore"; left as it is when absent.
+    #[serde(default)]
+    pub vibe: Option<String>,
 }
 
 /// Repeat and autoplay choices. They apply to the current track's ending and to every later track.
@@ -927,6 +930,7 @@ pub async fn player_set_mode(
         &state.autoplay_status,
         &args.repeat,
         args.autoplay,
+        args.vibe.as_deref(),
     ) {
         return Err(invalid());
     }
