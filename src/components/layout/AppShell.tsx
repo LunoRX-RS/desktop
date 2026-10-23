@@ -157,7 +157,7 @@ export default function AppShell() {
       </a>
       <div className="flex h-dvh flex-col bg-night-canvas">
         <TopBar />
-        <div className="flex min-h-0 flex-1">
+        <div className="glass flex min-h-0 flex-1">
           <Sidebar />
           <div className="mr-3 mb-3 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-hairline-strong bg-night-canvas">
             {libraryError && <div role="alert" className="mx-8 mt-2 mb-3 flex shrink-0 items-center justify-between gap-4 rounded-lg bg-frost-200 px-4 py-2 text-[13px] text-secondary-text"><p>{libraryError}</p><Button className="shrink-0" onClick={() => void refreshLikes()}>Retry likes</Button></div>}
