@@ -18,9 +18,10 @@ const FOLLOW_AT = 0.32;
 const FOLLOW_PAUSE_MS = 4000;
 // Matches the mask in globals.css (.ln-lyr-scroll): lines inside the top or bottom fade count as off screen.
 const FADE = 0.22;
-// Smooth scrolls start at most this often; the latest target wins. A target further than 1.5 viewports away jumps.
-const SCROLL_GAP_MS = 260;
+// A target further than 1.5 viewports away jumps instead of gliding.
 const JUMP_VIEWPORTS = 1.5;
+// Spring stiffness (rad/s) of the follow scroll. Higher is snappier; 8 to 11 reads as smooth.
+const SPRING_W = 9;
 const SCROLL_KEYS = new Set(["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", "Tab"]);
 
 const reducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -168,24 +169,39 @@ export function SyncedLyrics({ lines: given, offsetMs = 0, source, attribution, 
   const [followPaused, setFollowPaused] = useState(false);
   const [offscreen, setOffscreen] = useState(false);
 
-  const lastSmooth = useRef(0);
-  const coalesce = useRef(0);
-  const scrollNow = useCallback((smooth: boolean) => {
+  // One spring runs at a time. A new line only moves its target, so the speed carries over and rapid changes glide instead of restarting.
+  const spring = useRef({ raf: 0, y: 0, v: 0, last: 0 });
+  const targetTop = useCallback(() => {
+    const b = box.current;
+    const el = b?.querySelector<HTMLElement>('[aria-current="true"]');
+    return b ? Math.max(0, el ? el.offsetTop + el.offsetHeight / 2 - b.clientHeight * FOLLOW_AT : 0) : 0;
+  }, []);
+  const stopSpring = useCallback(() => { window.cancelAnimationFrame(spring.current.raf); spring.current.raf = 0; }, []);
+  const scrollToActive = useCallback((smooth: boolean) => {
     const b = box.current;
     if (!b) return;
-    const el = b.querySelector<HTMLElement>('[aria-current="true"]');
-    const top = Math.max(0, el ? el.offsetTop + el.offsetHeight / 2 - b.clientHeight * FOLLOW_AT : 0);
-    const near = Math.abs(top - b.scrollTop) < b.clientHeight * JUMP_VIEWPORTS;
-    if (smooth) lastSmooth.current = performance.now();
-    b.scrollTo({ top, behavior: smooth && near && !reducedMotion() ? "smooth" : "auto" });
-  }, []);
-  // Rapid line changes (or a seek through many lines) must not queue smooth scrolls: one per SCROLL_GAP_MS, aimed at the latest target.
-  const scrollToActive = useCallback((smooth: boolean) => {
-    window.clearTimeout(coalesce.current);
-    const wait = lastSmooth.current + SCROLL_GAP_MS - performance.now();
-    if (smooth && wait > 0) coalesce.current = window.setTimeout(() => scrollNow(true), wait);
-    else scrollNow(smooth);
-  }, [scrollNow]);
+    const s = spring.current;
+    const top = targetTop();
+    if (!smooth || reducedMotion() || Math.abs(top - b.scrollTop) > b.clientHeight * JUMP_VIEWPORTS) {
+      stopSpring();
+      b.scrollTo({ top, behavior: "auto" });
+      return;
+    }
+    if (s.raf) return;
+    s.y = b.scrollTop; s.v = 0; s.last = performance.now();
+    const step = (now: number) => {
+      const dt = Math.min((now - s.last) / 1000, 1 / 30);
+      s.last = now;
+      const to = targetTop();
+      // Critically damped: no overshoot, settles in about half a second.
+      s.v += (SPRING_W * SPRING_W * (to - s.y) - 2 * SPRING_W * s.v) * dt;
+      s.y += s.v * dt;
+      const done = Math.abs(to - s.y) < 0.5 && Math.abs(s.v) < 4;
+      b.scrollTop = done ? to : s.y;
+      s.raf = done ? 0 : window.requestAnimationFrame(step);
+    };
+    s.raf = window.requestAnimationFrame(step);
+  }, [targetTop, stopSpring]);
 
   const measure = useCallback(() => {
     const b = box.current?.getBoundingClientRect();
@@ -203,12 +219,13 @@ export function SyncedLyrics({ lines: given, offsetMs = 0, source, attribution, 
 
   const userScrolled = useCallback(() => {
     paused.current = true;
+    stopSpring();
     setFollowPaused(true);
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(follow, FOLLOW_PAUSE_MS);
-  }, [follow]);
+  }, [follow, stopSpring]);
 
-  useEffect(() => () => { window.clearTimeout(timer.current); window.clearTimeout(coalesce.current); }, []);
+  useEffect(() => () => { window.clearTimeout(timer.current); stopSpring(); }, [stopSpring]);
 
   useEffect(() => {
     if (!paused.current) scrollToActive(placed.current);

@@ -11,6 +11,7 @@ import { useUi } from "../../lib/store";
 import { usePlayback, togglePlayback, stopPlayback, seekPlayback, setPlaybackVolume, initLastPlayed, resumeLast, clearResume } from "../../lib/playback";
 import { formatDuration } from "../../lib/media";
 import { IconButton, Scrubber } from "../ui";
+import { DevicesButton } from "./Devices";
 
 export function PlaybackEvents() {
   const trackId = usePlayback((s) => (s.requested ?? s.track)?.providerTrackId);
@@ -89,6 +90,7 @@ export function NativePlayerBar() {
       </div>
       <div className="flex w-[20%] items-center justify-end gap-2 text-secondary-text">
         <IconButton label="Show lyrics" onClick={() => { useUi.getState().setLyrics(true); useUi.getState().setNowPlaying(true); }}><MicVocal size={17} /></IconButton>
+        <DevicesButton />
         <IconButton label="Queue" active={queueOpen} aria-pressed={queueOpen} onClick={() => useUi.getState().toggleQueue()}><ListMusic size={17} /></IconButton>
         <IconButton label="Open Now Playing" onClick={() => useUi.getState().setNowPlaying(true)}><Maximize2 size={17} /></IconButton>
         <Volume2 size={16} aria-hidden="true" />

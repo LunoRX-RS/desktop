@@ -76,7 +76,17 @@ async function run(action: () => Promise<PlayerStateDto>) {
   finally { usePlayback.setState({ busy: false }); }
 }
 
+// While this device controls another one, a track the user picks plays there. The redirect returns true when it took the track.
+let redirect: ((track: LoadedTrack) => boolean) | null = null;
+export function setPlayRedirect(fn: ((track: LoadedTrack) => boolean) | null) { redirect = fn; }
+
 export async function playTrack(track: LoadedTrack, fromQueue = false, following: LoadedTrack[] = []) {
+  if (redirect?.(track)) return;
+  return playTrackHere(track, fromQueue, following);
+}
+
+/** Always plays on this device, even while controlling another. */
+export async function playTrackHere(track: LoadedTrack, fromQueue = false, following: LoadedTrack[] = []) {
   if (usePlayback.getState().busy) return;
   useUi.setState({ playing: false });
   usePlayback.setState({ requested: { ...track }, positionMs: 0, durationMs: 0, resume: null });

@@ -8,4 +8,5 @@ pub mod engine;
 pub mod local_store;
 pub mod persist;
 pub mod queue;
+pub mod remote;
 pub mod settings;

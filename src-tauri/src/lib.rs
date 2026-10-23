@@ -103,6 +103,7 @@ pub fn run() {
                 eprintln!("sync engine unavailable: {kind:?}");
             }
             app.manage(commands::sync::SyncEngineState::new(engine));
+            app.manage(commands::remote::RemoteState::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -149,6 +150,9 @@ pub fn run() {
             commands::telemetry::telemetry_record,
             commands::telemetry::telemetry_flush,
             commands::telemetry::telemetry_delete,
+            commands::remote::remote_start,
+            commands::remote::remote_stop,
+            commands::remote::remote_send,
             commands::stats::stats_local,
             commands::stats::stats_report,
             commands::stats::stats_clear_local,

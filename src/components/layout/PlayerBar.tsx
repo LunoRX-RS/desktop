@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Airplay,
   Heart,
   ListMusic,
   Maximize2,
@@ -24,11 +23,15 @@ import { IconButton, Scrubber } from "../ui";
 import { Crossfade, PopOnTrue } from "../Motion";
 import { usePlayback } from "../../lib/playback";
 import { NativePlayerBar } from "./NativePlayer";
+import { DevicesButton, RemotePlayerBar } from "./Devices";
+import { useRemote } from "../../lib/remote";
 
 // Thin translucent bar. Everything here is a demo control: no audio is produced.
 export default function PlayerBar() {
   const s = useUi();
   const native = usePlayback((p) => p.requested !== null || p.track !== null || p.resume !== null || p.busy || p.error !== null);
+  const driving = useRemote((r) => r.target !== null);
+  if (driving) return <RemotePlayerBar />;
   if (native) return <NativePlayerBar />;
   const track = s.queue[s.index];
   const dur = track?.durationSec ?? 0;
@@ -115,9 +118,7 @@ export default function PlayerBar() {
         <IconButton label="Queue (demo)" active={s.queueOpen} aria-pressed={s.queueOpen} onClick={s.toggleQueue}>
           <ListMusic size={16} />
         </IconButton>
-        <IconButton label="Output device: none connected (demo)" disabled>
-          <Airplay size={16} />
-        </IconButton>
+        <DevicesButton />
         <div className="ml-2 flex items-center gap-1.5 text-secondary-text">
           <VolumeIcon size={16} aria-hidden="true" />
           <Scrubber label="Volume (demo, no audio)" max={100} value={s.volume} onChange={s.setVolume} className="w-24" />

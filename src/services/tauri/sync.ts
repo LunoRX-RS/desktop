@@ -78,12 +78,20 @@ export function syncFlushPending(): Promise<number> {
   return invoke<number>("sync_flush_pending");
 }
 
-export function syncSignIn(email: string, password: string): Promise<SignedInDto> {
-  return invoke<SignedInDto>("sync_sign_in", { email, password });
+/** Fired after sign-in or sign-out so the remote-control link can start or stop. */
+export const ACCOUNT_CHANGED = "lunorx:account-changed";
+const accountChanged = () => window.dispatchEvent(new Event(ACCOUNT_CHANGED));
+
+export async function syncSignIn(email: string, password: string): Promise<SignedInDto> {
+  const done = await invoke<SignedInDto>("sync_sign_in", { email, password });
+  accountChanged();
+  return done;
 }
 
-export function syncSignOut(): Promise<SignOutDto> {
-  return invoke<SignOutDto>("sync_sign_out");
+export async function syncSignOut(): Promise<SignOutDto> {
+  const done = await invoke<SignOutDto>("sync_sign_out");
+  accountChanged();
+  return done;
 }
 
 // Returns how many queued writes were dropped.
