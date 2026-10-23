@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Search, User } from "lucide-react";
 import { useUi } from "../../lib/store";
+import { usePlatform } from "../../lib/platform";
 import { IconButton, cx } from "../ui";
 
 // Window title bar, drawn by the app: a frosted strip with a soft fade into the page (no border). The macOS traffic
@@ -10,8 +10,7 @@ import { IconButton, cx } from "../ui";
 // Empty areas drag the window.
 export default function TopBar() {
   const { back, forward, goBack, goForward, setPalette, navigate, view } = useUi();
-  const [mac, setMac] = useState(false);
-  useEffect(() => setMac(/Mac/i.test(navigator.userAgent)), []);
+  const mac = usePlatform() === "mac";
   const side = mac ? "w-[184px]" : "w-24";
   return (
     <header

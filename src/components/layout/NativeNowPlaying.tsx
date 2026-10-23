@@ -20,6 +20,7 @@ import { readLyricsLayout, writeLyricsLayout, type LyricsLayout } from "../../li
 import { FxText } from "../FxText";
 import { useZoneStyle } from "../../lib/textStyle";
 import { useFullscreen } from "../../lib/windowFullscreen";
+import { useDragRegion, usePlatform } from "../../lib/platform";
 import { LyricMaker } from "../LyricMaker";
 import { mineSource, useMyLrc, useMyLrcStore } from "../../lib/myLrc";
 import { track as trackUse } from "../../lib/telemetry";
@@ -227,12 +228,14 @@ export function NativeNowPlaying() {
       </div>
     </div>
   );
-  // The traffic lights overlay the top-left (always windowed, on hover in full screen); keep content clear of them.
-  const inset = "pl-[100px]";
+  // On macOS the traffic lights overlay the top-left (always windowed, on hover in full screen); keep content clear of them.
+  // Elsewhere the window manager draws its own title bar and owns dragging.
+  const inset = usePlatform() === "mac" ? "pl-[100px]" : "pl-8";
+  const dragRegion = useDragRegion();
   const topRegion = full ? (
     <div className="absolute inset-0">
       {lyrics("full")}
-      <div data-tauri-drag-region className="absolute inset-x-0 top-0 h-11" />
+      <div {...dragRegion} className="absolute inset-x-0 top-0 h-11" />
       <div className={cx("pointer-events-none absolute left-0 top-0 z-10 pr-6", inset)}>
         {/* 44px row so the cover and text centre on the traffic lights (tauri.conf.json trafficLightPosition y:16 + 6). */}
         <div className="pointer-events-auto flex h-14 items-center gap-3.5 mt-5">
@@ -250,7 +253,7 @@ export function NativeNowPlaying() {
     </div>
   ) : (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div data-tauri-drag-region className={cx("flex h-[60px] shrink-0 items-center", inset)}></div>
+      <div {...dragRegion} className={cx("flex h-[60px] shrink-0 items-center", inset)}></div>
       {lyricsOpen ? (
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,420px)_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] items-center gap-14">
           {bigInfo}

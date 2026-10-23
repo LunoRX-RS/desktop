@@ -1020,6 +1020,15 @@ dialog.lx-np[data-np-layout="page"] { --np-scrim: 0.5; }
 .ln-np-stage[data-idle="true"] .ln-np-chrome:not(:has(:focus-visible)) { opacity: 0; pointer-events: none; }
 .ln-np-stage[data-idle="true"][data-layout="full"] { cursor: none; }
 .ln-np-stage[data-idle="true"][data-layout="full"] * { cursor: none; }
+/* Linux (WebKitGTK, often on Wayland tiling compositors): a hidden cursor can stay hidden and read as a dead mouse, and the stacked
+   blurs, backdrop filter and animated mask in this one top-layer dialog are heavy enough to stall the compositor. Keep the cursor
+   and drop the costly effects; the look stays close because the dim and scrim carry the depth. */
+html[data-platform="linux"] .ln-np-stage[data-idle="true"][data-layout="full"],
+html[data-platform="linux"] .ln-np-stage[data-idle="true"][data-layout="full"] * { cursor: auto; }
+html[data-platform="linux"] .ln-native-ambient { filter: blur(40px) saturate(1.5); }
+html[data-platform="linux"] .ln-np-pill { background: var(--color-elevated-deep); -webkit-backdrop-filter: none; backdrop-filter: none; }
+html[data-platform="linux"] .ln-lyr-region[data-layout="full"] .ln-lyr-scroll { transition: none; }
+html[data-platform="linux"] .ln-lyr-item > .ln-lyr-line { filter: none; }
 .ln-np-pill {
   display: flex;
   flex-direction: column;

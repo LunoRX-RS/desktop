@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
 import { applySavedAudio } from "../../lib/audioSettings";
 import { initHistory } from "../../lib/history";
+import { detectPlatform } from "../../lib/platform";
 import { initTelemetry, track } from "../../lib/telemetry";
 import { hydrateRecentSearches } from "../../lib/store";
 import { useUi } from "../../lib/store";
@@ -107,6 +108,8 @@ export default function AppShell() {
   const reduce = useReducedMotion();
   const [mounted, setMounted] = useState(false);
   useEffect(() => { void loadCustomFonts(); }, []);
+  // CSS hook for per-OS rendering differences (globals.css: html[data-platform="linux"]).
+  useEffect(() => { document.documentElement.dataset.platform = detectPlatform(); }, []);
   useEffect(() => {
     setMounted(true);
     hydrateRecentSearches();
