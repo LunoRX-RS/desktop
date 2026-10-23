@@ -499,6 +499,47 @@ svg.lucide {
 }
 @media (prefers-reduced-transparency: reduce) {
   .ln-native-ambient { display: none; }
+  .ln-login-wall-mask { display: none; }
+}
+
+/* Sign-in gate: a tilted wall of generated covers on the right, fading into the canvas behind the form. Static:
+   the tiles rise once on open (lx-stagger) and nothing loops. Hidden under reduced transparency (rule above).
+   The fade mask sits on a flat wrapper, not on the 3D-transformed grid: with the mask on the grid the wall was nearly
+   invisible in the macOS webview, though Chromium drew it. */
+.ln-login-wall-mask {
+  position: absolute;
+  inset: 0;
+  -webkit-mask-image: linear-gradient(to left, #000 35%, transparent 80%);
+  mask-image: linear-gradient(to left, #000 35%, transparent 80%);
+}
+.ln-login-wall {
+  position: absolute;
+  top: -18%;
+  right: -12%;
+  width: min(1180px, 82vw);
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 18px;
+  transform: perspective(1800px) rotateY(-18deg) rotateX(8deg) rotate(-9deg);
+  transform-origin: 100% 40%;
+  opacity: 0.85;
+}
+.ln-login-wall > * { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45); }
+.ln-login-shade {
+  background:
+    linear-gradient(90deg, var(--color-night-canvas) 0%, rgba(0, 0, 0, 0.88) 34%, rgba(0, 0, 0, 0.38) 66%, rgba(0, 0, 0, 0.24) 100%),
+    linear-gradient(to top, rgba(0, 0, 0, 0.7) 0%, transparent 38%);
+}
+/* Narrow window: the wall becomes a band across the top that fades down into the canvas behind the form. */
+@media (max-width: 899px) {
+  .ln-login-wall-mask {
+    -webkit-mask-image: linear-gradient(to bottom, #000 18%, transparent 55%);
+    mask-image: linear-gradient(to bottom, #000 18%, transparent 55%);
+  }
+  .ln-login-wall { top: -22%; right: -30%; width: 150vw; opacity: 0.75; }
+  .ln-login-shade {
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.25) 0%, rgba(0, 0, 0, 0.7) 30%, var(--color-night-canvas) 52%);
+  }
 }
 
 /* settings-connections-accounts-sync-player */

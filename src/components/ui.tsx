@@ -24,18 +24,26 @@ const VARIANT: Record<ButtonVariant, string> = {
   ghost: "text-secondary-text hover:bg-frost-100 hover:text-primary-text",
 };
 
+// `large` is DESIGN.md button-large: 44px tall, 12px radius, 24px padding.
+const SIZE = {
+  default: "h-8 rounded-[8px] px-3.5 text-[13px]",
+  large: "h-11 rounded-[12px] px-6 text-[14px]",
+} as const;
+
 export function Button({
   variant = "secondary",
+  size = "default",
   className,
   children,
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: keyof typeof SIZE }) {
   return (
     <button
       type="button"
       {...rest}
       className={cx(
-        "inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] px-3.5 text-[13px] font-medium lx-press disabled:pointer-events-none disabled:opacity-40",
+        "inline-flex items-center justify-center gap-1.5 font-medium lx-press disabled:pointer-events-none disabled:opacity-40",
+        SIZE[size],
         VARIANT[variant],
         className,
       )}

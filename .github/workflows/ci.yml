@@ -128,6 +128,32 @@ jobs:
           components: rustfmt, clippy
           targets: x86_64-pc-windows-msvc
 
+      # cargo test links against libmpv (LNK1181 'mpv.lib' without it). Same source and import library as release.yml.
+      - name: Get libmpv (Windows)
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $release = gh api repos/zhongfly/mpv-winbuild/releases/latest | ConvertFrom-Json
+          $asset = $release.assets | Where-Object { $_.name -match '^mpv-dev-x86_64-\d' } | Select-Object -First 1
+          if (-not $asset) { throw "No mpv-dev-x86_64 asset in the latest mpv-winbuild release" }
+          gh release download $release.tag_name --repo zhongfly/mpv-winbuild --pattern $asset.name --dir mpv-dev
+          7z x "mpv-dev/$($asset.name)" -ompv-dev/x
+          "MPV_DEV_DIR=$((Resolve-Path mpv-dev/x).Path)" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Make the MSVC import library
+        shell: pwsh
+        run: |
+          $exports = dumpbin /exports "$env:MPV_DEV_DIR\libmpv-2.dll" | ForEach-Object { if ($_ -match '^\s+\d+\s+[0-9A-F]+\s+[0-9A-F]{8}\s+(mpv_\S+)') { $Matches[1] } }
+          if (-not $exports) { throw "No mpv_* exports found in libmpv-2.dll" }
+          "EXPORTS`n" + ($exports -join "`n") | Out-File -Encoding ascii "$env:MPV_DEV_DIR\mpv.def"
+          lib /def:"$env:MPV_DEV_DIR\mpv.def" /name:libmpv-2.dll /out:"$env:MPV_DEV_DIR\mpv.lib" /MACHINE:X64
+          "RUSTFLAGS=-L native=$env:MPV_DEV_DIR" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          # The test binaries load libmpv-2.dll at start.
+          $env:MPV_DEV_DIR | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri

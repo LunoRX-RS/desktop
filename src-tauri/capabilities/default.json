@@ -89,6 +89,9 @@
       "allow": [
         {
           "url": "https://www.youtube.com/*"
+        },
+        {
+          "url": "https://lunorx.xyz/*"
         }
       ]
     },

@@ -13,10 +13,16 @@ export function SignInForm({
   busy,
   blockedReason,
   error,
+  hideTitle = false,
+  fullWidthSubmit = false,
   onSubmit,
 }: {
   idPrefix: string;
   mode?: "signIn" | "register";
+  /** The page heading already names the action, so the group title is read by screen readers only. */
+  hideTitle?: boolean;
+  /** A full-width large submit button under the fields, instead of the "LunoRX account" row inside the group. */
+  fullWidthSubmit?: boolean;
   busy: boolean;
   blockedReason?: string;
   error: string | null;
@@ -66,17 +72,22 @@ export function SignInForm({
     void onSubmit(email.trim(), secret, tokens);
   }
 
+  const submitLabel = registering
+    ? busy || checking ? "Creating account…" : "Create account"
+    : busy || checking ? "Signing in…" : "Sign in";
+
   const describe = (own: string | undefined, ownId: string) =>
     [own ? ownId : "", error ? errId : ""].filter(Boolean).join(" ") || undefined;
 
   return (
     <form onSubmit={submit} noValidate aria-busy={busy || checking}>
-      <Inset id={`${idPrefix}-title`} title={registering ? "Create account" : "Sign in"}>
+      <Inset id={`${idPrefix}-title`} title={registering ? "Create account" : "Sign in"} hideTitle={hideTitle}>
         <SettingRow label="Email" htmlFor={eId}>
           <input
             ref={emailRef}
             id={eId}
             type="email"
+            placeholder="name@example.com"
             autoComplete="username"
             value={email}
             disabled={busy}
@@ -96,6 +107,7 @@ export function SignInForm({
             ref={passwordRef}
             id={pId}
             type="password"
+            placeholder={registering ? "12 to 128 characters" : "Your password"}
             autoComplete={registering ? "new-password" : "current-password"}
             value={password}
             disabled={busy}
@@ -121,16 +133,37 @@ export function SignInForm({
           </NoteRow>
         )}
         {antibot.frame && <div className="flex justify-end px-4 pb-2">{antibot.frame}</div>}
-        <SettingRow
-          label="LunoRX account"
-          hint={blockedReason ?? (registering ? "Creates a LunoRX account and signs you in." : "Press Enter to sign in.")}
-          hintId={`${idPrefix}-hint`}
-        >
-          <Button type="submit" variant="primary" disabled={busy || checking || !!blockedReason} aria-describedby={`${idPrefix}-hint`}>
-            {registering ? (busy || checking ? "Creating account…" : "Create account") : busy || checking ? "Signing in…" : "Sign in"}
-          </Button>
-        </SettingRow>
+        {!fullWidthSubmit && (
+          <SettingRow
+            label="LunoRX account"
+            hint={blockedReason ?? (registering ? "Creates a LunoRX account and signs you in." : "Press Enter to sign in.")}
+            hintId={`${idPrefix}-hint`}
+          >
+            <Button type="submit" variant="primary" disabled={busy || checking || !!blockedReason} aria-describedby={`${idPrefix}-hint`}>
+              {submitLabel}
+            </Button>
+          </SettingRow>
+        )}
       </Inset>
+      {fullWidthSubmit && (
+        <div className="mt-4 flex flex-col gap-2">
+          <Button
+            type="submit"
+            variant="primary"
+            size="large"
+            className="w-full"
+            disabled={busy || checking || !!blockedReason}
+            aria-describedby={blockedReason ? `${idPrefix}-hint` : undefined}
+          >
+            {submitLabel}
+          </Button>
+          {blockedReason && (
+            <p id={`${idPrefix}-hint`} className="px-4 text-[12px] leading-4 text-secondary-text">
+              {blockedReason}
+            </p>
+          )}
+        </div>
+      )}
     </form>
   );
 }

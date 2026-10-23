@@ -1,6 +1,10 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Moon } from "lucide-react";
+import { openUrl } from "@tauri-apps/plugin-opener";
+import { AMBIENT_BG, Art } from "../../components/Art";
 import { Button } from "../../components/ui";
+import type { Tone } from "../../lib/media";
 import { syncRegister, syncSignIn, syncStatus, type ErrorCategory } from "../../services/tauri/sync";
 import { CATEGORY_MESSAGES } from "../sync/SyncPanel";
 import { SignInForm } from "./SignInForm";
@@ -12,6 +16,39 @@ const REGISTER_REFUSED_SIGNIN =
 // Remembered on this device: after "Continue without an account" the gate stays hidden on later launches. Signing in
 // from the Accounts page still works at any time.
 const SKIP_KEY = "lunorx.loginSkipped";
+
+// The cover wall: generated artwork, one composition per seed, so it reads as a library and no two tiles match.
+const TONES: Tone[] = ["violet", "slate", "rose", "amber", "moss", "ink"];
+const COVERS = Array.from({ length: 30 }, (_, i) => ({ seed: `lunor-gate-${i}`, tone: TONES[(i * 7) % TONES.length] }));
+
+// Legal pages live on the website. Build-time overridable; the opener capability allows https://lunorx.xyz/* only,
+// so a different host also needs adding to src-tauri/capabilities/default.json.
+const TERMS_URL = process.env.NEXT_PUBLIC_TERMS_URL?.trim() || "https://lunorx.xyz/terms";
+const PRIVACY_URL = process.env.NEXT_PUBLIC_PRIVACY_URL?.trim() || "https://lunorx.xyz/privacy";
+
+// Opens in the system browser, never inside the app's webview.
+function LegalLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      title={href}
+      onClick={(e) => {
+        e.preventDefault();
+        openUrl(href).catch(() => window.open(href, "_blank", "noopener"));
+      }}
+      className="rounded-[4px] underline decoration-hairline-strong underline-offset-[3px] transition-colors hover:text-primary-text hover:decoration-current"
+    >
+      {children}
+    </a>
+  );
+}
+
+const MODES = [
+  { key: "signIn", label: "Sign in" },
+  { key: "register", label: "Create account" },
+] as const;
 
 function readSkipped(): boolean {
   try {
@@ -35,7 +72,12 @@ function toCategory(e: unknown): ErrorCategory {
   return typeof e === "string" && Object.hasOwn(CATEGORY_MESSAGES, e) ? (e as ErrorCategory) : "internal";
 }
 
-/** Full-window sign-in shown at launch while the LunoRX account is signed out. Skippable. */
+/**
+ * Full-window sign-in shown at launch while the LunoRX account is signed out. Skippable.
+ * Artwork leads: a tilted wall of covers fills the right (a band across the top in a narrow window) and fades into the
+ * canvas; everything the user acts on sits in one column on the dark side, with no card around it. The window's empty
+ * space is a drag region.
+ */
 export function LoginGate() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -75,33 +117,81 @@ export function LoginGate() {
     setOpen(false);
   }
 
+  const registering = mode === "register";
+
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center overflow-y-auto bg-night-canvas p-6">
-      <section role="dialog" aria-modal="true" aria-labelledby="login-gate-title" className="glass-solid flex w-full max-w-[420px] flex-col gap-6 rounded-[16px] p-8">
-        <header className="flex flex-col gap-2">
-          <h1 id="login-gate-title" className="font-display text-[28px] leading-9 font-bold tracking-[-0.02em]">Sign in to LunoRX</h1>
-          <p className="text-[14px] leading-[20px] text-secondary-text">
-            Sync your playlists, likes and listening stats across your devices. You can also use LunoRX without an account.
-          </p>
-        </header>
-        <SignInForm
-          idPrefix="login-gate"
-          mode={mode}
-          busy={busy}
-          error={error}
-          onSubmit={submit}
-        />
-        <div className="flex flex-col items-center gap-1">
-          <Button
-            variant="ghost"
-            disabled={busy}
-            onClick={() => { setError(null); setMode(mode === "signIn" ? "register" : "signIn"); }}
-          >
-            {mode === "signIn" ? "Create an account" : "I already have an account"}
-          </Button>
-          <Button variant="ghost" disabled={busy} onClick={continueWithoutAccount}>Continue without an account</Button>
+    <div data-tauri-drag-region className="fixed inset-0 z-[90] overflow-y-auto bg-night-canvas">
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className={`absolute inset-0 ${AMBIENT_BG.violet}`} />
+        <div className="ln-login-wall-mask">
+          <div className="ln-login-wall lx-stagger">
+            {COVERS.map((c) => (
+              <Art key={c.seed} seed={c.seed} tone={c.tone} grain={false} className="aspect-square w-full" />
+            ))}
+          </div>
         </div>
-      </section>
+        <div className="ln-login-shade absolute inset-0" />
+      </div>
+
+      <div data-tauri-drag-region className="relative flex min-h-full flex-col px-6 pt-14 pb-8 min-[900px]:px-[76px]">
+        <div className="flex items-center gap-2 text-primary-text">
+          <Moon size={18} aria-hidden="true" fill="currentColor" fillOpacity={0.9} className="shrink-0" />
+          <span className="text-[14px] leading-5 font-semibold tracking-[-0.01em]">LunoRX</span>
+        </div>
+
+        {/* Narrow: pushed below the cover band. Wide: centred in the window height. */}
+        <main
+          aria-labelledby="login-gate-title"
+          className="lx-enter mt-[22vh] mb-auto flex w-full max-w-[420px] flex-col min-[900px]:my-auto min-[900px]:py-8"
+        >
+          <h1 id="login-gate-title" className="text-[40px] leading-[44px] font-bold tracking-[-0.025em] text-balance text-primary-text">
+            {registering ? "Create your LunoRX account" : "Sign in to LunoRX"}
+          </h1>
+          <p className="mt-3 max-w-[36ch] text-[17px] leading-[24px] text-primary-text/80">
+            Sync your playlists, likes and listening stats across your devices.
+          </p>
+
+          {/* Mode switch: two equal 40px segments on a Frost 200 track, the chosen one raised on Frost 300 (DESIGN.md segmented). */}
+          <div role="radiogroup" aria-label="Account action" className="mt-8 grid grid-cols-2 gap-1 rounded-[12px] bg-frost-200 p-1">
+            {MODES.map((m) => (
+              <button
+                key={m.key}
+                type="button"
+                role="radio"
+                aria-checked={mode === m.key}
+                disabled={busy}
+                onClick={() => { setError(null); setMode(m.key); }}
+                className={`lx-press h-10 rounded-[9px] text-[14px] font-semibold transition-colors disabled:opacity-40 ${
+                  mode === m.key ? "bg-frost-300 text-primary-text" : "text-secondary-text hover:text-primary-text"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-5">
+            <SignInForm idPrefix="login-gate" mode={mode} busy={busy} error={error} hideTitle fullWidthSubmit onSubmit={submit} />
+          </div>
+
+
+          {/* The way out, kept in the same column so it is found without hunting the corners of the window. */}
+          <div className="mt-8 flex flex-col gap-3 border-t border-hairline pt-6">
+            <Button variant="secondary" size="large" disabled={busy} className="w-full" onClick={continueWithoutAccount}>
+              Continue without an account
+            </Button>
+            <p className="px-4 text-[13px] leading-[18px] text-secondary-text">
+              Playlists stay on this device without an account. An account adds sync and sharing.
+            </p>
+          </div>
+
+          <nav aria-label="Legal" className="mt-6 flex flex-wrap items-center gap-x-1.5 px-4 text-[13px] leading-[18px] text-secondary-text">
+            <LegalLink href={TERMS_URL}>Terms of Service</LegalLink>
+            <span aria-hidden="true">·</span>
+            <LegalLink href={PRIVACY_URL}>Privacy Policy</LegalLink>
+          </nav>
+        </main>
+      </div>
     </div>
   );
 }
