@@ -1,11 +1,93 @@
 "use client";
 import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Check, Copy, Plus, Trash2 } from "lucide-react";
 import { Button } from "../../components/ui";
+import { Tip } from "../../components/Tip";
 import { discordPreview, PRESETS, type CardDesign, type CardPreview } from "../../services/tauri/discord";
 import { FIELD, Inset, NoteRow, SettingRow } from "./rows";
 
-const TOKENS = ["{title}", "{artist}", "{artists}", "{status}", "{app}"];
+// The fill-ins a text line can use. `sample` is what they would show for a song playing right now.
+const FILLINS: { token: string; name: string; what: string; sample: string; where?: string }[] = [
+	{ token: "{title}", name: "Song title", what: "The name of the song that is playing. “Clean up titles” can trim hashtags and emoji first.", sample: "Fame is a Gun" },
+	{ token: "{artist}", name: "First artist", what: "Only the first artist of the song.", sample: "Addison Rae" },
+	{ token: "{artists}", name: "All artists", what: "Every artist of the song, separated by commas.", sample: "Billie Eilish, Justin Bieber" },
+	{ token: "{status}", name: "Play state", what: "The word “playing”, or “paused” while the song is paused.", sample: "playing" },
+	{ token: "{app}", name: "App name", what: "The name of this app.", sample: "LunoRX" },
+	{ token: "{track_url}", name: "Song link", what: "The YouTube link of the playing video. Only works as a button link, not in text lines.", sample: "https://www.youtube.com/watch?v=…", where: "Button links only" },
+];
+
+async function copyText(text: string): Promise<boolean> {
+	try {
+		await navigator.clipboard.writeText(text);
+		return true;
+	} catch {
+		// Some webviews block the async clipboard; a hidden field and the old command still work from a click.
+		const box = document.createElement("textarea");
+		box.value = text;
+		box.setAttribute("readonly", "");
+		box.style.position = "fixed";
+		box.style.opacity = "0";
+		document.body.appendChild(box);
+		box.select();
+		const ok = document.execCommand("copy");
+		box.remove();
+		return ok;
+	}
+}
+
+/** One fill-in as a chip. Hover or focus explains it; a click copies it so it can be pasted into any field. */
+function FillIn({ token, name, what, sample, where }: (typeof FILLINS)[number]) {
+	const [copied, setCopied] = useState(false);
+	useEffect(() => {
+		if (!copied) return;
+		const t = window.setTimeout(() => setCopied(false), 1600);
+		return () => window.clearTimeout(t);
+	}, [copied]);
+	return (
+		<Tip
+			content={
+				<div className="flex flex-col gap-2 text-[12px] leading-[17px]">
+					<div className="flex items-center justify-between gap-3">
+						<span className="font-semibold text-primary-text">{name}</span>
+						<code className="rounded-[6px] bg-frost-300 px-1.5 py-0.5 font-mono text-[11px] text-primary-text">{token}</code>
+					</div>
+					<p className="text-secondary-text">{what}</p>
+					<p className="rounded-[8px] bg-frost-200 px-2 py-1.5 text-secondary-text">
+						<span className="text-tertiary-text">Shows as </span>
+						<span className="text-primary-text">{sample}</span>
+					</p>
+					{where && <p className="text-caution-amber">{where}</p>}
+					<p className="flex items-center gap-1.5 border-t border-hairline pt-2 text-[11px] font-medium text-primary-text">
+						{copied ? <Check size={12} aria-hidden="true" /> : <Copy size={12} aria-hidden="true" />}
+						{copied ? "Copied to the clipboard" : "Click to copy"}
+					</p>
+				</div>
+			}
+		>
+			<button
+				type="button"
+				onClick={() => void copyText(token).then((ok) => setCopied(ok))}
+				aria-label={`${name}, ${token}. ${what} Press to copy.`}
+				className="inline-flex items-center gap-1.5 rounded-[8px] bg-frost-200 px-2.5 py-1 font-mono text-[12px] text-primary-text transition-colors hover:bg-frost-300 focus-visible:bg-frost-300"
+			>
+				{copied ? <Check size={12} aria-hidden="true" /> : null}
+				{token}
+			</button>
+		</Tip>
+	);
+}
+
+function FillIns() {
+	return (
+		<SettingRow label="Fill-ins" hint="Type these into any text line and Discord shows the real value. Hover one to see what it does; click to copy it." stack>
+			<div className="flex flex-wrap gap-2">
+				{FILLINS.map((f) => (
+					<FillIn key={f.token} {...f} />
+				))}
+			</div>
+		</SettingRow>
+	);
+}
 const FIELD_NAMES: Record<string, string> = { details: "First line", state: "Second line", "paused text": "Paused line", "image text": "Image text", "badge text": "Badge text", "paused badge text": "Paused badge text", "catalog name": "Catalog name (a-z, 0-9, _ or -; unique)", "catalog image": "Catalog image (https link or asset key)", "large image": "Big picture", "small image": "Badge picture", button: "Button (label up to 32 characters, https link)", buttons: "Buttons (at most 2)", catalog: "Catalog (at most 12)", clock: "Clock", "status line": "Status line" };
 // The app's CSP only lets these hosts load pictures, so any other image is named instead of drawn. Discord still shows it.
 const PREVIEW_HOSTS = [/^i\.ytimg\.com$/, /^yt3\.ggpht\.com$/, /\.googleusercontent\.com$/];
@@ -73,7 +155,8 @@ export function DiscordCard({ design, onSave }: { design: CardDesign; onSave: (d
           <option value="">Choose a preset…</option>{PRESETS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
         </select>
       </SettingRow>
-      {text("details", "First line", `Fill-ins: ${TOKENS.join(" ")}. Leave empty to hide the line.`)}
+      <FillIns />
+      {text("details", "First line", "Leave empty to hide the line.")}
       {text("state", "Second line")}
       {text("pausedState", "Second line while paused")}
       {text("largeText", "Text under the lines")}

@@ -39,7 +39,7 @@ export default function PlayerBar() {
   const VolumeIcon = s.volume === 0 ? VolumeX : s.volume < 50 ? Volume1 : Volume2;
 
   return (
-    <footer aria-label="Player (demo)" className="glass-bar flex h-[var(--height-player)] shrink-0 items-center gap-4 border-t border-hairline px-4">
+    <footer aria-label="Player (demo)" className="glass flex h-[var(--height-player)] shrink-0 items-center gap-4 px-4">
       {/* Track */}
       <div className="flex w-[30%] min-w-0 items-center gap-3">
         {track ? (

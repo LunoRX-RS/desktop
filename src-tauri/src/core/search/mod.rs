@@ -1,9 +1,11 @@
 //! Search engine core (Phase 3). Submodules and re-exports are added per task.
+pub mod cache;
 pub mod cancel;
 pub mod engine;
 pub mod hit;
 pub mod provider;
 pub mod quota;
+pub mod rank;
 pub mod request;
 pub mod response;
 pub mod youtube;

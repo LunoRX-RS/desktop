@@ -1,5 +1,5 @@
 import { ArtistLinks, LikeButton } from "../../components/LibraryActions";
-import { CircleSlash, Play, TriangleAlert } from "lucide-react";
+import { BadgeCheck, CircleSlash, Play, TriangleAlert } from "lucide-react";
 import type { SearchHitDto, SourceGroupDto } from "../../services/tauri/search";
 import { AddToPlaylist } from "./AddToPlaylist";
 import { OpenOnYouTube } from "./OpenOnYouTube";
@@ -31,7 +31,7 @@ export function ResultRow({ hit, large = false, onRemove, onMoveUp, onMoveDown, 
       data-result-row
       tabIndex={-1}
       role="group"
-      aria-label={`${hit.title} by ${artists}, ${origin}`}
+      aria-label={`${hit.title} by ${artists}, ${origin}${hit.official ? ", official" : ""}`}
       {...menuHandlers(menu.build, menu.load)}
       className={cx(
         "lx-reveal-host flex items-center gap-3 rounded-[8px] px-2 transition-colors duration-150 hover:bg-frost-200 focus-within:bg-frost-200",
@@ -60,6 +60,7 @@ export function ResultRow({ hit, large = false, onRemove, onMoveUp, onMoveDown, 
       <div className="min-w-0 flex-1">
         <p className={cx("truncate font-semibold", large ? "font-display text-[22px] leading-7 tracking-[-0.015em]" : "text-[13px] leading-[18px]")} title={hit.title}>
           {hit.title} <span className="ml-2 inline-flex items-center gap-1.5 rounded-full bg-frost-200 px-2 py-0.5 align-middle text-[10px] font-medium text-secondary-text"><ProviderMark source={origin} />{origin}</span>
+          {hit.official && <span className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-frost-300 px-2 py-0.5 align-middle text-[10px] font-medium text-primary-text"><BadgeCheck size={11} aria-hidden="true" />Official</span>}
         </p>
         <p className="truncate text-[13px] leading-[18px] text-secondary-text" title={`${artists}, ${origin}`}>
           <ArtistLinks track={hit} />

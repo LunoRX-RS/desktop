@@ -19,7 +19,7 @@ const TONES: Record<Tone, { Icon: LucideIcon; cls: string }> = {
 // Page frame. data-pg lets globals.css cancel the legacy .lx-scope styling while a view is still wrapped in it.
 export function PageRoot({ children }: { children: ReactNode }) {
   return (
-    <div data-pg className="flex max-w-[760px] flex-col gap-8">
+    <div data-pg className="flex flex-col gap-8">
       {children}
     </div>
   );

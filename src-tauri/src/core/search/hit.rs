@@ -33,6 +33,9 @@ pub struct SearchHit {
     pub(crate) artist_refs: Vec<ArtistRef>,
     pub(crate) artwork_url: Option<String>,
     pub(crate) duration_ms: Option<u64>,
+    /// Set by ranking: an official release or a verified artist's own upload that matches the query.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub(crate) official: bool,
 }
 
 impl SearchHit {
@@ -59,6 +62,7 @@ impl SearchHit {
             artist_refs: Vec::new(),
             artwork_url: None,
             duration_ms: None,
+            official: false,
         })
     }
 
@@ -97,6 +101,10 @@ impl SearchHit {
     pub fn duration_ms(&self) -> Option<u64> {
         self.duration_ms
     }
+
+    pub fn official(&self) -> bool {
+        self.official
+    }
 }
 
 // Deserialize target: TryFrom runs new() so JSON cannot bypass validation.
@@ -113,6 +121,8 @@ struct SearchHitWire {
     artist_refs: Vec<ArtistRef>,
     artwork_url: Option<String>,
     duration_ms: Option<u64>,
+    #[serde(default)]
+    official: bool,
 }
 
 impl TryFrom<SearchHitWire> for SearchHit {
@@ -130,6 +140,7 @@ impl TryFrom<SearchHitWire> for SearchHit {
         h.artist_refs = w.artist_refs;
         h.artwork_url = w.artwork_url;
         h.duration_ms = w.duration_ms;
+        h.official = w.official;
         Ok(h)
     }
 }

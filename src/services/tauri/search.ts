@@ -22,6 +22,8 @@ export interface SearchHitDto {
   artistRefs?: ArtistRef[];
   artworkUrl: string | null;
   durationMs: number | null;
+  /** An official release or a verified artist's own upload that matches the query; ranked first. */
+  official?: boolean;
 }
 
 export type SourceGroupDto =
