@@ -113,8 +113,8 @@ export default function SyncPanel() {
     return failed;
   }
 
-  async function signIn(email: string, secret: string) {
-    await run(() => syncSignIn(email, secret));
+  async function signIn(email: string, secret: string, antibot: string[]) {
+    await run(() => syncSignIn(email, secret, antibot[0]));
   }
 
   async function signOut() {

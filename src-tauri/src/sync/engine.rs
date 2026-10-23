@@ -19,6 +19,7 @@ use super::credentials::TokenStore;
 use super::local_store::{LocalEntry, LocalPlaylist, LocalStore, UploadStep};
 use super::persist;
 use super::queue::{OfflineQueue, QueueError};
+use super::settings::{share_base, share_link};
 use crate::commands::sync::{Checkout, SyncEngineState};
 
 /// The only error strings the sync layer exposes.
@@ -401,7 +402,16 @@ fn auth_category(e: &AuthError) -> ErrorCategory {
     }
 }
 
-/// Signs in. Refused while writes are queued: they belong to the previous account and must not be replayed onto a new one.
+/// Queues the antibot tokens the next register/login calls send, replacing leftovers. An empty list clears them.
+pub(crate) async fn set_antibot(
+    h: &mut Host<'_>,
+    tokens: Vec<String>,
+) -> Result<(), ErrorCategory> {
+    let api = h.step(|e| Ok(e.api.clone())).await?;
+    api.set_antibot(tokens);
+    Ok(())
+}
+
 /// Creates an account, then signs in with it. The backend answers a registration the same way whether or not the email
 /// exists, so a wrong password on an existing account shows as the sign-in failure, not as "already registered".
 pub(crate) async fn register(
@@ -421,6 +431,7 @@ pub(crate) async fn register(
     sign_in(h, email, password).await
 }
 
+/// Signs in. Refused while writes are queued: they belong to the previous account and must not be replayed onto a new one.
 pub(crate) async fn sign_in(
     h: &mut Host<'_>,
     email: &str,
@@ -684,9 +695,11 @@ pub(crate) async fn share(h: &mut Host<'_>, local_id: &str) -> Result<ShareLink,
         .create_share(&token, &remote)
         .await
         .map_err(|e| category(&e))?;
+    // The link is the website's page, not the API. A bad configured base is an internal error, not a wrong link.
+    let url = share_link(&share_base(), &created.token).ok_or(ErrorCategory::Internal)?;
     Ok(ShareLink {
         id: created.id,
-        url: api.share_url(&created.token),
+        url,
     })
 }
 

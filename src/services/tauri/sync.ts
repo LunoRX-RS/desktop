@@ -83,8 +83,9 @@ export const ACCOUNT_CHANGED = "lunorx:account-changed";
 const accountChanged = () => window.dispatchEvent(new Event(ACCOUNT_CHANGED));
 
 /** Creates an account and signs in with it. Rejects with "validation" for a bad email or a password outside 12 to 128 bytes. */
-export async function syncRegister(email: string, password: string): Promise<SignedInDto> {
-  const done = await invoke<SignedInDto>("sync_register", { email, password });
+export async function syncRegister(email: string, password: string, antibot: string[] = []): Promise<SignedInDto> {
+  // Turnstile tokens are single use: [0] is for creating the account, [1] for the sign-in that follows.
+  const done = await invoke<SignedInDto>("sync_register", { email, password, registerToken: antibot[0], loginToken: antibot[1] });
   accountChanged();
   return done;
 }
@@ -114,8 +115,8 @@ export function syncRevokeShare(localId: string, shareId: string): Promise<void>
   return invoke<void>("sync_revoke_share", { localId, shareId });
 }
 
-export async function syncSignIn(email: string, password: string): Promise<SignedInDto> {
-  const done = await invoke<SignedInDto>("sync_sign_in", { email, password });
+export async function syncSignIn(email: string, password: string, antibotToken?: string): Promise<SignedInDto> {
+  const done = await invoke<SignedInDto>("sync_sign_in", { email, password, token: antibotToken });
   accountChanged();
   return done;
 }

@@ -823,7 +823,7 @@ async fn requests_carry_no_credentials_and_only_public_metadata() {
                 && !head.contains("authorization")
                 && !head.contains("x-api-key")
         );
-        assert!(head.contains("user-agent: LunoRX/"));
+        assert!(head.contains("user-agent: lunorx/"));
     }
     server.stop();
     let server = mock(0, |_| ("200 OK", lp_body("Song", 5))).await;

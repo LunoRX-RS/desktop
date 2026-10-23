@@ -1,5 +1,7 @@
 //! Typed HTTP client for the backend sync API (`/api/v1`, see backend/openapi.yaml).
 
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
 use serde::de::DeserializeOwned;
@@ -253,6 +255,9 @@ fn decode<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, SyncError> {
 pub struct ApiClient {
     base: String,
     http: reqwest::Client,
+    /// Cloudflare Turnstile tokens for the next register/login calls, in order. A token is single use, so each
+    /// call takes one. Empty: the call is sent without one (the server then must have the antibot check off).
+    antibot: Arc<StdMutex<VecDeque<String>>>,
 }
 
 /// Bounds every backend call so a stalled connection cannot hold the sync engine indefinitely.
@@ -288,7 +293,20 @@ impl ApiClient {
         Ok(Self {
             base,
             http: build_http(CONNECT_TIMEOUT, REQUEST_TIMEOUT)?,
+            antibot: Arc::default(),
         })
+    }
+
+    /// Hands the next register/login calls their antibot tokens, replacing any left over.
+    pub fn set_antibot(&self, tokens: Vec<String>) {
+        *self.antibot.lock().unwrap_or_else(|e| e.into_inner()) = tokens.into();
+    }
+
+    fn next_antibot(&self) -> Option<String> {
+        self.antibot
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .pop_front()
     }
 
     fn url(&self, path: &str) -> String {
@@ -318,11 +336,17 @@ impl ApiClient {
         struct Body<'a> {
             email: &'a str,
             password: &'a str,
+            #[serde(rename = "turnstileToken", skip_serializing_if = "Option::is_none")]
+            turnstile_token: Option<String>,
         }
         let req = self
             .http
             .post(self.url("/api/v1/auth/register"))
-            .json(&Body { email, password });
+            .json(&Body {
+                email,
+                password,
+                turnstile_token: self.next_antibot(),
+            });
         self.send(req).await.map(|_| ())
     }
 
@@ -331,11 +355,14 @@ impl ApiClient {
         struct Body<'a> {
             email: &'a str,
             password: &'a str,
+            #[serde(rename = "turnstileToken", skip_serializing_if = "Option::is_none")]
+            turnstile_token: Option<String>,
         }
-        let req = self
-            .http
-            .post(self.url("/api/v1/auth/login"))
-            .json(&Body { email, password });
+        let req = self.http.post(self.url("/api/v1/auth/login")).json(&Body {
+            email,
+            password,
+            turnstile_token: self.next_antibot(),
+        });
         decode(&self.send(req).await?)
     }
 
@@ -428,11 +455,6 @@ impl ApiClient {
             .delete(self.url(&format!("/api/v1/playlists/{id}/shares/{share}")))
             .bearer_auth(token);
         self.send(req).await.map(|_| ())
-    }
-
-    /// The public URL a recipient opens; contains the share token, so it is shown to the user and never logged.
-    pub fn share_url(&self, share_token: &str) -> String {
-        self.url(&format!("/api/v1/shared/{share_token}"))
     }
 
     pub async fn list_playlists(&self, token: &str) -> Result<Vec<Playlist>, SyncError> {
@@ -704,6 +726,7 @@ mod tests {
         let api = ApiClient {
             base: base.clone(),
             http: build_http(Duration::from_millis(200), Duration::from_millis(300)).unwrap(),
+            antibot: Arc::default(),
         };
         let started = std::time::Instant::now();
         let err = api.get_session(TOKEN).await.unwrap_err();
@@ -762,6 +785,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn antibot_tokens_are_sent_once_each_in_order_and_never_reused() {
+        let body = format!(r#"{{"token":"{TOKEN}","expiresAt":"2026-11-18T00:00:00Z"}}"#);
+        let s = stub(raw("200 OK", "", &body)).await;
+        let api = client(&s.base);
+        api.set_antibot(vec!["first".into(), "second".into()]);
+        api.login("a@example.test", "pw").await.unwrap();
+        assert_eq!(json(&s.last().body)["turnstileToken"], "first");
+        api.login("a@example.test", "pw").await.unwrap();
+        assert_eq!(json(&s.last().body)["turnstileToken"], "second");
+        api.login("a@example.test", "pw").await.unwrap();
+        assert!(json(&s.last().body).get("turnstileToken").is_none());
+    }
+
+    #[tokio::test]
     async fn register_posts_credentials_without_a_token() {
         let s = stub(raw(
             "201 Created",
@@ -809,15 +846,6 @@ mod tests {
             format!("/api/v1/playlists/{PLAYLIST}/shares/{ENTRY}")
         );
         assert_eq!(req.auth, Some(format!("Bearer {TOKEN}")));
-    }
-
-    #[tokio::test]
-    async fn share_url_points_at_the_shared_endpoint() {
-        let c = client("https://backend.example.test");
-        assert_eq!(
-            c.share_url("tok"),
-            "https://backend.example.test/api/v1/shared/tok"
-        );
     }
 
     #[tokio::test]
