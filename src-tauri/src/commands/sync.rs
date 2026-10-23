@@ -168,6 +168,20 @@ pub async fn run_sign_in(
     })
 }
 
+/// Creates an account and signs in with it. Same guard and network gate as sign-in.
+pub async fn run_register(
+    state: &SyncEngineState,
+    email: &str,
+    password: &str,
+) -> Result<SignedInDto, ErrorCategory> {
+    let _net = state.net.lock().await;
+    let user = engine::register(&mut Host::Shared(state), email, password).await?;
+    Ok(SignedInDto {
+        user_id: user.user_id,
+        expires_at: user.expires_at,
+    })
+}
+
 pub async fn run_sign_out(state: &SyncEngineState) -> Result<SignOutDto, ErrorCategory> {
     let _net = state.net.lock().await;
     let warning = engine::sign_out(&mut Host::Shared(state)).await?;
@@ -386,6 +400,15 @@ pub async fn sync_sign_in(
     password: String,
 ) -> Result<SignedInDto, ErrorCategory> {
     run_sign_in(&state, &email, &password).await
+}
+
+#[tauri::command]
+pub async fn sync_register(
+    state: State<'_, SyncEngineState>,
+    email: String,
+    password: String,
+) -> Result<SignedInDto, ErrorCategory> {
+    run_register(&state, &email, &password).await
 }
 
 #[tauri::command]

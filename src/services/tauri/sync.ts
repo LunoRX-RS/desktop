@@ -88,6 +88,13 @@ export async function syncSignIn(email: string, password: string): Promise<Signe
   return done;
 }
 
+/** Creates an account, then signs in with it. `unauthenticated` after a successful create means the sign-in step refused. */
+export async function syncRegister(email: string, password: string): Promise<SignedInDto> {
+  const done = await invoke<SignedInDto>("sync_register", { email, password });
+  accountChanged();
+  return done;
+}
+
 export async function syncSignOut(): Promise<SignOutDto> {
   const done = await invoke<SignOutDto>("sync_sign_out");
   accountChanged();

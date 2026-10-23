@@ -401,6 +401,35 @@ fn auth_category(e: &AuthError) -> ErrorCategory {
     }
 }
 
+/// The same limits the server enforces: a usable email and a password of 12 to 128 bytes. Checked before any request.
+pub(crate) fn check_new_credentials(email: &str, password: &str) -> Result<(), ErrorCategory> {
+    let email = email.trim();
+    let ok = !email.is_empty()
+        && email.len() <= 254
+        && email.contains('@')
+        && (12..=128).contains(&password.len());
+    if ok {
+        Ok(())
+    } else {
+        Err(ErrorCategory::Validation)
+    }
+}
+
+/// Creates the account, then signs in with it. Refused while writes are queued, like sign-in. If the account exists
+/// already the sign-in step fails with `Unauthenticated`; the caller says so.
+pub(crate) async fn register(
+    h: &mut Host<'_>,
+    email: &str,
+    password: &str,
+) -> Result<SignedInUser, ErrorCategory> {
+    check_new_credentials(email, password)?;
+    let api = h.step(|e| Ok(e.api.clone())).await?;
+    api.register(email.trim(), password)
+        .await
+        .map_err(|e| category(&e))?;
+    sign_in(h, email.trim(), password).await
+}
+
 /// Signs in. Refused while writes are queued: they belong to the previous account and must not be replayed onto a new one.
 pub(crate) async fn sign_in(
     h: &mut Host<'_>,
@@ -2574,5 +2603,36 @@ mod tests {
         assert_eq!(e.status().await.state, SyncState::Synced);
         assert!(e.store.refresh_marks().is_empty());
         assert_eq!(s.lines(), ["POST /api/v1/auth/login HTTP/1.1".to_string()]);
+    }
+}
+
+#[cfg(test)]
+mod register_checks {
+    use super::*;
+
+    #[test]
+    fn new_credentials_follow_the_server_limits() {
+        assert!(check_new_credentials("me@example.com", "twelve chars!").is_ok());
+        assert!(check_new_credentials("  me@example.com  ", "x".repeat(128).as_str()).is_ok());
+        for (email, password) in [
+            ("", "twelve chars!"),
+            ("no-at-sign", "twelve chars!"),
+            ("me@example.com", "short"),
+            ("me@example.com", "x".repeat(129).as_str()),
+            // The limit counts bytes: 11 Thai characters are 33 bytes, so they pass.
+            ("me@example.com", "ก".repeat(11).as_str()),
+        ] {
+            let got = check_new_credentials(email, password);
+            if password.len() >= 12 && password.len() <= 128 && email.contains('@') {
+                assert!(got.is_ok(), "{email} {}", password.len());
+            } else {
+                assert_eq!(
+                    got,
+                    Err(ErrorCategory::Validation),
+                    "{email} {}",
+                    password.len()
+                );
+            }
+        }
     }
 }

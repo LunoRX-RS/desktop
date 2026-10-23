@@ -23,6 +23,7 @@ import PlaylistEditor from "../../features/playlists/PlaylistEditor";
 import PlayerScreen from "../../features/player/PlayerScreen";
 import ConnectionsScreen from "../../features/connections/ConnectionsScreen";
 import AccountsScreen from "../../features/accounts/AccountsScreen";
+import { LoginGate } from "../../features/accounts/LoginGate";
 import SettingsScreen from "../../features/settings/SettingsScreen";
 import StatsScreen from "../../features/stats/StatsScreen";
 import SyncPanel from "../../features/sync/SyncPanel";
@@ -142,6 +143,7 @@ export default function AppShell() {
   return (
     <MotionConfig reducedMotion="user">
       <PlaybackEvents />
+      <LoginGate />
       <a
         href="#main-content"
         className="glass-solid sr-only top-2 left-2 z-[60] rounded-[8px] px-3 py-2 text-[13px] focus:not-sr-only focus:fixed focus:inline-flex focus:min-h-8 focus:items-center"

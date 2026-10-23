@@ -296,6 +296,21 @@ impl ApiClient {
         }
     }
 
+    /// Creates an account. The server answers the same 201 for a new and an already-registered email, and never a
+    /// token, so a success here only means "the request was accepted"; the caller signs in next.
+    pub async fn register(&self, email: &str, password: &str) -> Result<(), SyncError> {
+        #[derive(Serialize)]
+        struct Body<'a> {
+            email: &'a str,
+            password: &'a str,
+        }
+        let req = self
+            .http
+            .post(self.url("/api/v1/auth/register"))
+            .json(&Body { email, password });
+        self.send(req).await.map(|_| ())
+    }
+
     pub async fn login(&self, email: &str, password: &str) -> Result<LoginResponse, SyncError> {
         #[derive(Serialize)]
         struct Body<'a> {

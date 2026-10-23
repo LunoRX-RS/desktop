@@ -71,6 +71,7 @@ fn main() {
             "youtube_like_push_set",
             "youtube_disconnect",
             "sync_sign_in",
+            "sync_register",
             "sync_sign_out",
             "sync_discard_pending",
             "sync_status",
