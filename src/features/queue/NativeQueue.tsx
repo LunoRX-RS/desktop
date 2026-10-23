@@ -1,14 +1,14 @@
 "use client";
 
-import { ArrowDown, ArrowUp, ListMusic, Loader2, X } from "lucide-react";
+import { GripVertical, ListMusic, Loader2, X } from "lucide-react";
 import { playerQueueEdit } from "../../services/tauri/player";
 import { usePlayback, playTrack } from "../../lib/playback";
 import { useUi } from "../../lib/store";
 import { TrackCover } from "../../components/TrackCover";
 import { LikeButton } from "../../components/LibraryActions";
 import { formatDuration } from "../../lib/media";
-import { Button, EmptyState, IconButton } from "../../components/ui";
-import { useState } from "react";
+import { Button, EmptyState, IconButton, cx } from "../../components/ui";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { addToPlaylist } from "../../lib/playlistActions";
 import { syncCreateLocalPlaylist } from "../../services/tauri/sync";
 
@@ -31,6 +31,49 @@ export default function NativeQueue() {
   const next = s.autoplay;
   const upcoming = next.queue ?? [];
   const [saved, setSaved] = useState<"" | "saving" | "done" | "failed">("");
+  // Reordering by dragging the handle of a row. The pointer is captured by the handle, so the drag keeps working outside it.
+  const list = useRef<HTMLOListElement>(null);
+  const rows = useRef<(HTMLLIElement | null)[]>([]);
+  const startY = useRef(0);
+  const [drag, setDrag] = useState<{ from: number; over: number; dy: number } | null>(null);
+  // One move at a time: a second press before the list has caught up would send the same indices against the old order.
+  const moving = useRef(false);
+  const order = upcoming.map((u) => u.id).join(",");
+  useEffect(() => { moving.current = false; }, [order]);
+  const move = (from: number, to: number) => {
+    if (moving.current || to < 0 || to >= upcoming.length || to === from) return;
+    moving.current = true;
+    void playerQueueEdit({ op: "move", from, to }).catch(() => { moving.current = false; });
+    window.setTimeout(() => { moving.current = false; }, 600); // a move that changed nothing never updates the order
+  };
+  function rowUnder(clientY: number): number {
+    const ol = list.current;
+    if (!ol) return 0;
+    const y = clientY - ol.getBoundingClientRect().top + ol.offsetTop; // same offset parent as the rows
+    let over = 0;
+    rows.current.forEach((li, i) => {
+      if (li && y >= li.offsetTop) over = i;
+    });
+    return Math.min(over, upcoming.length - 1);
+  }
+  function onHandleDown(e: ReactPointerEvent<HTMLButtonElement>, from: number) {
+    if (e.button !== 0) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    startY.current = e.clientY;
+    setDrag({ from, over: from, dy: 0 });
+  }
+  function onHandleMove(e: ReactPointerEvent<HTMLButtonElement>) {
+    if (drag) setDrag({ ...drag, over: rowUnder(e.clientY), dy: e.clientY - startY.current });
+  }
+  function onHandleUp(e: ReactPointerEvent<HTMLButtonElement>) {
+    if (drag) move(drag.from, rowUnder(e.clientY)); // where the pointer was let go, not the last move event
+    setDrag(null);
+  }
+  function onHandleKey(e: ReactKeyboardEvent<HTMLButtonElement>, index: number) {
+    if (e.key === "ArrowUp") { e.preventDefault(); move(index, index - 1); }
+    else if (e.key === "ArrowDown") { e.preventDefault(); move(index, index + 1); }
+    else if (e.key === "Escape" && drag) { e.preventDefault(); e.stopPropagation(); setDrag(null); }
+  }
   const toHit = (item: (typeof upcoming)[number]) => ({ provider: item.provider, source: "YouTube Music" as const, providerTrackId: item.id, canonicalUrl: `https://www.youtube.com/watch?v=${item.id}`, title: item.title, artists: item.artists, artworkUrl: item.artworkUrl, durationMs: item.durationMs });
   async function saveQueue() {
     if (!track) return;
@@ -84,11 +127,23 @@ export default function NativeQueue() {
       <section aria-labelledby="queue-next" className="flex flex-col gap-1">
         <h3 id="queue-next" className="px-2 text-[13px] leading-[18px] font-semibold text-secondary-text">Up next</h3>
         {next.state === "finding" && <p role="status" className="flex items-center gap-2 px-2 py-2 text-[13px] text-secondary-text"><Loader2 size={16} className="lx-spin" aria-hidden="true" />Finding up to 50 related songs…</p>}
-        {upcoming.length > 0 ? <ol aria-label="Autoplay playlist" className="flex flex-col">
+        {upcoming.length > 0 ? <ol ref={list} aria-label="Autoplay playlist" className="flex flex-col">
           {upcoming.map((item, index) => {
             const hit = { provider: item.provider, source: "YouTube Music" as const, providerTrackId: item.id, canonicalUrl: `https://www.youtube.com/watch?v=${item.id}`, title: item.title, artists: item.artists, artworkUrl: item.artworkUrl, durationMs: item.durationMs };
-            return <li key={item.id} className="grid min-h-16 grid-cols-[24px_40px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 hover:bg-frost-200 focus-within:bg-frost-200">
-              <span className="text-[12px] tabular-nums text-secondary-text">{index + 1}</span>
+            const dragging = drag?.from === index;
+            const target = drag && drag.over === index && drag.from !== index ? (drag.over < drag.from ? "top" : "bottom") : null;
+            return <li key={item.id} ref={(el) => { rows.current[index] = el; }}
+              style={dragging ? { transform: `translateY(${drag.dy}px)` } : undefined}
+              className={cx("group/row grid min-h-16 grid-cols-[24px_40px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 hover:bg-frost-200 focus-within:bg-frost-200",
+                dragging && "relative z-10 bg-frost-300 opacity-90 shadow-[0_8px_24px_rgba(0,0,0,0.5)]",
+                target === "top" && "shadow-[inset_0_2px_0_var(--color-lumen-lavender)]", target === "bottom" && "shadow-[inset_0_-2px_0_var(--color-lumen-lavender)]")}>
+              <button type="button" aria-label={`Move ${item.title}. Drag it, or press the up and down arrow keys.`}
+                onPointerDown={(e) => onHandleDown(e, index)} onPointerMove={onHandleMove} onPointerUp={onHandleUp} onPointerCancel={() => setDrag(null)}
+                onKeyDown={(e) => onHandleKey(e, index)}
+                className="group/h flex size-6 cursor-grab touch-none items-center justify-center rounded text-secondary-text select-none active:cursor-grabbing">
+                <span className="text-[12px] tabular-nums group-hover/row:hidden group-focus-visible/h:hidden">{index + 1}</span>
+                <GripVertical size={14} aria-hidden="true" className="hidden group-hover/row:block group-focus-visible/h:block" />
+              </button>
               <button type="button" disabled={s.busy} onClick={() => void playTrack(hit, true)} aria-label={`Play ${item.title} from autoplay queue`} className="rounded-md disabled:opacity-40"><TrackCover url={item.artworkUrl} videoId={item.id} className="size-10" /></button>
               <button type="button" disabled={s.busy} onClick={() => void playTrack(hit, true)} className="min-w-0 rounded-md text-left disabled:opacity-40">
                 <p className="truncate text-[13px] font-semibold" title={item.title}>{item.title}</p>
@@ -97,8 +152,6 @@ export default function NativeQueue() {
               </button>
               <div className="flex items-center gap-1">
                 <span className="text-[11px] tabular-nums text-secondary-text">{item.durationMs != null ? formatDuration(item.durationMs / 1000) : ""}</span>
-                <IconButton label={`Move ${item.title} up`} disabled={index === 0} onClick={() => void playerQueueEdit({ op: "move", from: index, to: index - 1 }).catch(() => {})} className="size-7"><ArrowUp size={14} /></IconButton>
-                <IconButton label={`Move ${item.title} down`} disabled={index === upcoming.length - 1} onClick={() => void playerQueueEdit({ op: "move", from: index, to: index + 1 }).catch(() => {})} className="size-7"><ArrowDown size={14} /></IconButton>
                 <IconButton label={`Remove ${item.title} from the queue`} onClick={() => void playerQueueEdit({ op: "remove", id: item.id }).catch(() => {})} className="size-7"><X size={14} /></IconButton>
                 <LikeButton track={hit} />
               </div>

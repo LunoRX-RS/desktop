@@ -33,8 +33,7 @@ import TopBar from "./TopBar";
 import PlayerBar from "./PlayerBar";
 import NowPlaying from "./NowPlaying";
 import CommandPalette from "./CommandPalette";
-import QueueScreen from "../../features/queue/QueueScreen";
-import NativeQueue from "../../features/queue/NativeQueue";
+import { QueuePanel } from "./QueuePanel";
 import { PlaybackEvents } from "./NativePlayer";
 import { usePlayback, togglePlayback } from "../../lib/playback";
 import { DUR, tween } from "../../lib/motion";
@@ -101,7 +100,6 @@ function ViewFrame({ mounted, children }: { mounted: boolean; children: ReactNod
 }
 
 export default function AppShell() {
-  const reduce = useReducedMotion();
   const [mounted, setMounted] = useState(false);
   useEffect(() => { void loadCustomFonts(); }, []);
   // CSS hook for per-OS rendering differences (globals.css: html[data-platform="linux"]).
@@ -126,7 +124,7 @@ export default function AppShell() {
   const view = useUi((s) => s.view);
   const selectedPlaylistId = useUi((s) => s.selectedPlaylistId);
   const queueOpen = useUi((s) => s.queueOpen);
-  const nativeQueue = usePlayback((p) => p.requested !== null || p.track !== null || p.resume !== null);
+  const nowPlayingOpen = useUi((s) => s.nowPlayingOpen);
   const navigate = useUi((s) => s.navigate);
   const setSelectedPlaylist = useUi((s) => s.setSelectedPlaylist);
   useGlobalKeys();
@@ -155,7 +153,7 @@ export default function AppShell() {
         <TopBar />
         <div className="glass flex min-h-0 flex-1">
           <Sidebar />
-          <div className="mr-3 mb-3 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-hairline-strong bg-night-canvas">
+          <div className="mr-3 mb-3 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] bg-night-canvas">
             {libraryError && <div role="alert" className="mx-8 mt-2 mb-3 flex shrink-0 items-center justify-between gap-4 rounded-lg bg-frost-200 px-4 py-2 text-[13px] text-secondary-text"><p>{libraryError}</p><Button className="shrink-0" onClick={() => void refreshLikes()}>Retry likes</Button></div>}
             <main ref={mainRef} id="main-content" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto outline-none">
               <div className="mx-auto w-full max-w-content px-8 pt-4 pb-16">
@@ -186,21 +184,7 @@ export default function AppShell() {
         </div>
         <PlayerBar />
       </div>
-      <AnimatePresence>
-        {queueOpen && (
-          <motion.aside
-            key="queue"
-            aria-label={nativeQueue ? "Queue" : "Queue (demo)"}
-            initial={{ opacity: 0, scale: reduce ? 1 : 0.97 }}
-            animate={{ opacity: 1, scale: 1, transition: tween(0.18) }}
-            exit={{ opacity: 0, scale: reduce ? 1 : 0.97, transition: tween(DUR.exit) }}
-            style={{ transformOrigin: "100% 100%" }}
-            className="glass-solid fixed top-[var(--height-topbar)] right-4 bottom-[calc(var(--height-player)+12px)] z-[45] w-[min(440px,calc(100vw-32px))] overflow-y-auto rounded-[12px] p-3 shadow-[0_16px_48px_rgba(0,0,0,0.5)]"
-          >
-            {nativeQueue ? <NativeQueue /> : <QueueScreen />}
-          </motion.aside>
-        )}
-      </AnimatePresence>
+      <AnimatePresence>{queueOpen && !nowPlayingOpen && <QueuePanel />}</AnimatePresence>
       <NowPlaying />
       <CommandPalette />
       <ContextMenuHost />
