@@ -70,6 +70,11 @@
     "createUpdaterArtifacts": true
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["lunorx"]
+      }
+    },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNEQ0ZBMUIyOUI5NDZFNDAKUldSQWJwU2JzcUhQUFhIQWlTVVM0TnFqVVl1WVU4YXdxMFJzZ0VFSUt1M3BvUnR4RE1uZC9abm0K",
       "endpoints": [

@@ -2,6 +2,7 @@
 
 import { loadCustomFonts } from "../../lib/textStyle";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
 import { applySavedAudio } from "../../lib/audioSettings";
 import { initHistory } from "../../lib/history";
@@ -29,6 +30,8 @@ import LoginPage from "../../features/accounts/LoginPage";
 import { LoginGate } from "../../features/accounts/LoginGate";
 import SettingsScreen from "../../features/settings/SettingsScreen";
 import StatsScreen from "../../features/stats/StatsScreen";
+import SharedScreen from "../../features/shared/SharedScreen";
+import { SHARE_OPEN_EVENT, sharedLinkTake } from "../../services/tauri/share";
 import SyncPanel from "../../features/sync/SyncPanel";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
@@ -128,6 +131,21 @@ export default function AppShell() {
   const queueOpen = useUi((s) => s.queueOpen);
   const nowPlayingOpen = useUi((s) => s.nowPlayingOpen);
   const navigate = useUi((s) => s.navigate);
+  const openShared = useUi((s) => s.openShared);
+  // Share links open the shared-playlist view: live events, plus a link that arrived before this window listened.
+  useEffect(() => {
+    let active = true;
+    let unlisten: UnlistenFn | undefined;
+    void listen<string>(SHARE_OPEN_EVENT, (event) => openShared(event.payload)).then((fn) => {
+      if (active) unlisten = fn;
+      else fn();
+    });
+    void sharedLinkTake().then((token) => { if (token && active) openShared(token); }).catch(() => {});
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, [openShared]);
   const setSelectedPlaylist = useUi((s) => s.setSelectedPlaylist);
   useGlobalKeys();
   useEffect(() => initHistory(), []);
@@ -179,6 +197,7 @@ export default function AppShell() {
                     {view === "login" && <LoginPage />}
                     {view === "settings" && <SettingsScreen />}
                     {view === "stats" && <StatsScreen />}
+                    {view === "shared" && <SharedScreen />}
                     {view === "sync" && <div className="lx-scope"><SyncPanel /></div>}
                   </ViewFrame>
                 </AnimatePresence>

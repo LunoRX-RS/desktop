@@ -312,6 +312,17 @@ impl SyncEngine {
         self.commit()
     }
 
+    pub fn set_description(
+        &mut self,
+        local_id: &str,
+        description: Option<&str>,
+    ) -> Result<(), ErrorCategory> {
+        self.store
+            .set_description(local_id, description)
+            .map_err(|e| category(&e))?;
+        self.commit()
+    }
+
     pub fn move_entry(
         &mut self,
         local_id: &str,

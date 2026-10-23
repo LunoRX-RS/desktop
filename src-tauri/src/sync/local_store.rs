@@ -350,6 +350,29 @@ impl LocalStore {
         Ok(())
     }
 
+    /// Sets or clears the description of a playlist that is not on the server. An uploaded one is refused for now:
+    /// changing it there needs a queued update with a version check, like entries have.
+    pub fn set_description(
+        &mut self,
+        local_id: &str,
+        description: Option<&str>,
+    ) -> Result<(), SyncError> {
+        let description = description.map(str::trim).filter(|d| !d.is_empty());
+        if description.is_some_and(|d| d.chars().count() > DESCRIPTION_MAX) {
+            return Err(SyncError::Local(
+                "description must be at most 2000 characters",
+            ));
+        }
+        let pl = self.find_mut(local_id)?;
+        if pl.remote_id.is_some() {
+            return Err(SyncError::Local(
+                "an uploaded playlist's description cannot be changed yet",
+            ));
+        }
+        pl.description = description.map(str::to_string);
+        Ok(())
+    }
+
     /// Moves entries[from] so it ends up at `to`. Only for a playlist that is not on the server, since the server
     /// keeps its own order.
     pub fn move_entry(&mut self, local_id: &str, from: usize, to: usize) -> Result<(), SyncError> {
@@ -646,6 +669,27 @@ mod tests {
 
     fn client(base: &str) -> ApiClient {
         ApiClient::new(base).unwrap()
+    }
+
+    #[test]
+    fn a_local_description_is_trimmed_cleared_and_bounded_and_an_uploaded_one_is_refused() {
+        let mut store = LocalStore::default();
+        let id = store.create_local("P", None).unwrap();
+        store.set_description(&id, Some("  my notes \n")).unwrap();
+        assert_eq!(
+            store.playlists()[0].description.as_deref(),
+            Some("my notes")
+        );
+        store.set_description(&id, Some("   ")).unwrap();
+        assert_eq!(store.playlists()[0].description, None);
+        store.set_description(&id, Some("x")).unwrap();
+        store.set_description(&id, None).unwrap();
+        assert_eq!(store.playlists()[0].description, None);
+        assert!(store.set_description(&id, Some(&"a".repeat(2001))).is_err());
+        assert!(store.set_description(&id, Some(&"ก".repeat(2000))).is_ok());
+        assert!(store.set_description("missing", Some("x")).is_err());
+        store.find_mut(&id).unwrap().remote_id = Some("r".into());
+        assert!(store.set_description(&id, Some("y")).is_err());
     }
 
     /// Spotify entry carrying ids only (the only shape the backend accepts for Spotify).

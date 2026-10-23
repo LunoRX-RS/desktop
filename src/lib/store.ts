@@ -18,6 +18,7 @@ export type View =
   | "settings"
   | "sync"
   | "stats"
+  | "shared"
   | "artist"
   | "album";
 
@@ -41,6 +42,8 @@ interface UiState {
   lyricsOpen: boolean;
   queueOpen: boolean;
   selectedPlaylistId: string | null;
+  /** The token of the shared playlist on the "shared" view. */
+  sharedToken: string | null;
   libraryTab: LibraryTab;
   likedOnly: boolean;
   query: string;
@@ -58,6 +61,7 @@ interface UiState {
   liked: Record<string, true>;
 
   navigate: (view: View) => void;
+  openShared: (token: string) => void;
   goBack: () => void;
   goForward: () => void;
   openLibrary: (tab: LibraryTab, likedOnly?: boolean) => void;
@@ -107,6 +111,7 @@ export const useUi = create<UiState>()((set, get) => ({
   lyricsOpen: false,
   queueOpen: false,
   selectedPlaylistId: null,
+  sharedToken: null,
   libraryTab: "playlists",
   likedOnly: false,
   query: "",
@@ -123,6 +128,10 @@ export const useUi = create<UiState>()((set, get) => ({
   repeat: "off",
   liked: {},
 
+  openShared: (token) => {
+    set({ sharedToken: token });
+    get().navigate("shared");
+  },
   navigate: (view) => {
     const { view: current, back } = get();
     if (view === current) return;
