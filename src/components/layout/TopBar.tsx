@@ -5,7 +5,7 @@ import { useUi } from "../../lib/store";
 import { usePlatform } from "../../lib/platform";
 import { IconButton, cx } from "../ui";
 
-// Window title bar, drawn by the app: a frosted strip with a soft fade into the page (no border). The macOS traffic
+// Window title bar, drawn by the app: the same glass as the sidebar, so the two read as one frame around the content. The macOS traffic
 // lights overlay the reserved left zone, vertically centred by `trafficLightPosition` in tauri.conf.json.
 // Empty areas drag the window.
 export default function TopBar() {
@@ -15,7 +15,7 @@ export default function TopBar() {
   return (
     <header
       data-tauri-drag-region
-      className="relative flex h-[var(--height-topbar)] shrink-0 items-center gap-3 bg-gradient-to-b from-white/[0.08] to-white/[0.02] px-4 backdrop-blur-xl"
+      className="glass relative flex h-[var(--height-topbar)] shrink-0 items-center gap-3 px-4"
     >
       <div data-tauri-drag-region className={cx("flex items-center gap-0.5", side, mac && "pl-[66px]")}>
         <IconButton label="Back" onClick={goBack} disabled={back.length === 0} className="size-8">
