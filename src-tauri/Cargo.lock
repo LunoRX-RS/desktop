@@ -2246,6 +2246,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "keyring",
+ "libc",
  "libmpv2",
  "objc2",
  "objc2-app-kit",

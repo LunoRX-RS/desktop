@@ -61,6 +61,7 @@ impl NativeHost {
         thread::Builder::new()
             .name("lunor-audio".into())
             .spawn(move || {
+                super::locale::numeric_c();
                 let mpv = Mpv::with_initializer(|init| {
                     init.set_option("config", "no")?;
                     #[cfg(target_os = "macos")]
@@ -84,7 +85,8 @@ impl NativeHost {
                         let _ = started.send(Ok(()));
                         run(mpv, receiver, reports, worker_audio);
                     }
-                    Err(_) => {
+                    Err(error) => {
+                        eprintln!("libmpv failed to start: {error}");
                         let _ = started.send(Err(extract::failed()));
                     }
                 }
