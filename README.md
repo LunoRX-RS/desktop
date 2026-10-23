@@ -117,6 +117,35 @@ Three rules shape the code:
 | Release signing | macOS apps are ad-hoc signed unless signing secrets are set. Windows installers are unsigned. |
 | Licences | This repository is GPL-3.0, because it links `rustypipe` (GPL-3.0). `libmpv` is LGPL. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists every component and licence. |
 
+## Install on Linux
+
+No clone, no build. One command installs the released AppImage for your user (no root) and adds LunoRX to your application menu:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/LunoRX-RS/desktop/main/scripts/install-linux.sh | sh
+```
+
+Start it from the menu, or run `lunorx`. The script finds the newest release, checks the download against the release's `SHA256SUMS.txt` and refuses to install it if it does not match. Read it first if you like: [scripts/install-linux.sh](scripts/install-linux.sh).
+
+| You want | Run |
+|---|---|
+| Any distribution, no root (default) | `curl -fsSL <url> \| sh` |
+| A system package on Debian, Ubuntu and relatives | `curl -fsSL <url> \| sh -s -- --deb` |
+| A specific release | `curl -fsSL <url> \| sh -s -- --version v1.0.0-rc.4` |
+| See what it would do, download nothing | `curl -fsSL <url> \| sh -s -- --dry-run` |
+| Remove it again | `curl -fsSL <url> \| sh -s -- --uninstall` |
+
+`<url>` is the address above. Your library and settings live in `~/.local/share/io.lunorx.desktop` and are kept when you uninstall.
+
+Things to know:
+
+- **x86_64 only**, for now. Other CPUs build from source (see [Quick start](#quick-start)).
+- **glibc 2.39 or newer**, because the release is built on Ubuntu 24.04. That covers Ubuntu 24.04 and newer, Debian 13, Fedora 40 and newer, Arch, openSUSE Tumbleweed and the like. The script checks and stops with an explanation on older systems (`--force` tries anyway). It does not support Alpine (musl).
+- **Nothing else to install for the AppImage.** It carries libmpv and WebKitGTK. The `.deb` pulls its dependencies in through `apt`.
+- **FUSE.** Recent Ubuntu and Fedora no longer ship FUSE 2. The `lunorx` launcher notices and unpacks the AppImage on start instead, so it still runs, a little slower to open.
+- **Sign-in storage** needs a running Secret Service (GNOME Keyring or KWallet); see [Linux notes](#linux-notes).
+- Verified so far: the download, checksum and install steps on Arch Linux, and that the AppImage bundles libmpv and WebKitGTK. Not run on other distributions, and the `--deb` path has not been run at all.
+
 ## Quick start
 
 ### Requirements
