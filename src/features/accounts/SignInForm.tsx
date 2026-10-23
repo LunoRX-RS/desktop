@@ -1,9 +1,22 @@
 "use client";
 
-import { useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Button } from "../../components/ui";
 import { FIELD, Inset, NoteRow, SettingRow } from "../settings/rows";
 import { antibotEnabled, useAntibot } from "./antibot";
+
+// Full-width mode (`bare`): the field fills the row and the placeholder names it; the label stays for screen readers.
+// Defined at module scope so the inputs keep their identity (and focus) across renders.
+function Row({ bare, label, htmlFor, children }: { bare: boolean; label: string; htmlFor: string; children: ReactNode }) {
+  return bare ? (
+    <div className="px-3 py-1.5 first:pt-3 last:pb-3">
+      <label htmlFor={htmlFor} className="sr-only">{label}</label>
+      {children}
+    </div>
+  ) : (
+    <SettingRow label={label} htmlFor={htmlFor}>{children}</SettingRow>
+  );
+}
 
 // Shared by Accounts and Sync. The password lives in state only until submit, then the field is cleared.
 // Sign in to an existing account, or create one. The backend limits passwords to 12 to 128 bytes.
@@ -82,41 +95,41 @@ export function SignInForm({
   return (
     <form onSubmit={submit} noValidate aria-busy={busy || checking}>
       <Inset id={`${idPrefix}-title`} title={registering ? "Create account" : "Sign in"} hideTitle={hideTitle}>
-        <SettingRow label="Email" htmlFor={eId}>
+        <Row bare={fullWidthSubmit} label="Email" htmlFor={eId}>
           <input
             ref={emailRef}
             id={eId}
             type="email"
-            placeholder="name@example.com"
+            placeholder={fullWidthSubmit ? "Email" : "name@example.com"}
             autoComplete="username"
             value={email}
             disabled={busy}
             aria-invalid={problems.email ? true : undefined}
             aria-describedby={describe(problems.email, `${eId}-problem`)}
             onChange={(e) => setEmail(e.currentTarget.value)}
-            className={`${FIELD} w-full sm:w-[320px]`}
+            className={fullWidthSubmit ? `${FIELD} h-11 w-full text-[15px]` : `${FIELD} w-full sm:w-[320px]`}
           />
-        </SettingRow>
+        </Row>
         {problems.email && (
           <NoteRow tone="bad" id={`${eId}-problem`} role="alert">
             {problems.email}
           </NoteRow>
         )}
-        <SettingRow label="Password" htmlFor={pId}>
+        <Row bare={fullWidthSubmit} label="Password" htmlFor={pId}>
           <input
             ref={passwordRef}
             id={pId}
             type="password"
-            placeholder={registering ? "12 to 128 characters" : "Your password"}
+            placeholder={fullWidthSubmit ? (registering ? "Password (12 to 128 characters)" : "Password") : registering ? "12 to 128 characters" : "Your password"}
             autoComplete={registering ? "new-password" : "current-password"}
             value={password}
             disabled={busy}
             aria-invalid={problems.password ? true : undefined}
             aria-describedby={describe(problems.password, `${pId}-problem`)}
             onChange={(e) => setPassword(e.currentTarget.value)}
-            className={`${FIELD} w-full sm:w-[320px]`}
+            className={fullWidthSubmit ? `${FIELD} h-11 w-full text-[15px]` : `${FIELD} w-full sm:w-[320px]`}
           />
-        </SettingRow>
+        </Row>
         {problems.password && (
           <NoteRow tone="bad" id={`${pId}-problem`} role="alert">
             {problems.password}
