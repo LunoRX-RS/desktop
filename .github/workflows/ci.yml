@@ -159,6 +159,15 @@ jobs:
           Copy-Item "$env:MPV_DEV_DIR\libmpv-2.dll" src-tauri/target/debug/
           $env:MPV_DEV_DIR | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
 
+      # libmpv-2.dll imports vulkan-1.dll (the Vulkan loader). The runner has no GPU driver and so no loader, and the test
+      # binary then stops with STATUS_DLL_NOT_FOUND although libmpv-2.dll itself is found. The runtime only supplies
+      # the loader; no GPU is needed for the tests.
+      - name: Install the Vulkan loader (Windows)
+        shell: pwsh
+        run: |
+          choco install vulkan-runtime -y --no-progress
+          if (-not (Test-Path "$env:SystemRoot\System32\vulkan-1.dll")) { throw "vulkan-1.dll still missing" }
+
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
