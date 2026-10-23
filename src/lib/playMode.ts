@@ -3,6 +3,10 @@ import { playerSetMode } from "../services/tauri/player";
 import { usePlayback } from "./playback";
 
 export type Repeat = "off" | "all" | "one";
+/** How closely autoplay keeps to what plays: the same mood, language and genre; a balance; or YouTube's own mix. */
+export type Vibe = "same" | "balanced" | "explore";
+export const VIBES: Vibe[] = ["same", "balanced", "explore"];
+const VIBE_KEY = "lunorx.vibe";
 const REPEAT_KEY = "lunorx.repeat";
 const AUTOPLAY_KEY = "lunorx.autoplay";
 const REPEATS: Repeat[] = ["off", "all", "one"];
@@ -13,16 +17,18 @@ function write(key: string, value: string) { try { window.localStorage.setItem(k
 /** What core reports now, falling back to the defaults (repeat off, autoplay on). */
 export const currentMode = () => {
   const a = usePlayback.getState().autoplay;
-  return { repeat: (a.repeat ?? "off") as Repeat, autoplay: a.radio ?? true };
+  return { repeat: (a.repeat ?? "off") as Repeat, autoplay: a.radio ?? true, vibe: (a.vibe ?? "balanced") as Vibe };
 };
 
-export function setPlayMode(next: { repeat?: Repeat; autoplay?: boolean }) {
+export function setPlayMode(next: { repeat?: Repeat; autoplay?: boolean; vibe?: Vibe }) {
   const cur = currentMode();
   const repeat = next.repeat ?? cur.repeat;
   const autoplay = next.autoplay ?? cur.autoplay;
+  const vibe = next.vibe ?? cur.vibe;
   write(REPEAT_KEY, repeat);
   write(AUTOPLAY_KEY, String(autoplay));
-  void playerSetMode(repeat, autoplay).catch(() => {});
+  write(VIBE_KEY, vibe);
+  void playerSetMode(repeat, autoplay, vibe).catch(() => {});
 }
 
 export const nextRepeat = (r: Repeat): Repeat => REPEATS[(REPEATS.indexOf(r) + 1) % REPEATS.length];
@@ -31,6 +37,11 @@ export const nextRepeat = (r: Repeat): Repeat => REPEATS[(REPEATS.indexOf(r) + 1
 export function applySavedMode() {
   const repeat = read(REPEAT_KEY);
   const autoplay = read(AUTOPLAY_KEY);
-  if (repeat === null && autoplay === null) return;
-  void playerSetMode(REPEATS.includes(repeat as Repeat) ? (repeat as Repeat) : "off", autoplay !== "false").catch(() => {});
+  const vibe = read(VIBE_KEY);
+  if (repeat === null && autoplay === null && vibe === null) return;
+  void playerSetMode(
+    REPEATS.includes(repeat as Repeat) ? (repeat as Repeat) : "off",
+    autoplay !== "false",
+    VIBES.includes(vibe as Vibe) ? (vibe as Vibe) : "balanced",
+  ).catch(() => {});
 }

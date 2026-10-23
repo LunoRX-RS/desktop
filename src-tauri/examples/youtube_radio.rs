@@ -7,11 +7,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| "r-G2pKr2_n8".into());
     assert!(extract::valid_id(&seed));
     let pipe = extract::resolver()?;
+    // No session yet: an empty taste profile gives YouTube's own radio order.
+    let profile = lunorx_lib::core::playback::taste::Profile::default();
+    let ctx = autoplay::RadioContext {
+        profile: &profile,
+        vibe: lunorx_lib::core::playback::taste::Vibe::Balanced,
+        recent: vec![],
+        current: lunorx_lib::core::playback::cache::OfflineTrack::default(),
+    };
     let candidates = autoplay::related(
         &pipe,
         &seed,
         &std::collections::VecDeque::from([seed.clone()]),
         vec![],
+        &ctx,
     )
     .await;
     println!("Radio returned {} unique upcoming songs", candidates.len());

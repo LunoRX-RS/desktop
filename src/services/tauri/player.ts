@@ -121,7 +121,7 @@ export function playerTrackInfo(providerTrackId: string): Promise<TrackInfo> {
 }
 
 export interface PlayerProgressDto {
-  autoplay: { state: string; nextTitle: string | null; queue: import("./offline").OfflineTrack[]; repeat?: "off" | "all" | "one"; radio?: boolean };
+  autoplay: { state: string; nextTitle: string | null; queue: import("./offline").OfflineTrack[]; repeat?: "off" | "all" | "one"; radio?: boolean; vibe?: "same" | "balanced" | "explore" };
   player: PlayerStateDto;
   track: LoadedTrack | null;
   positionMs: number;
@@ -148,9 +148,12 @@ export function playerSkip(forward: boolean): Promise<void> {
   return invoke("player_skip", { forward });
 }
 
-/** Repeat ("off" | "all" | "one") and autoplay (related tracks after the list). Core keeps them until changed. */
-export function playerSetMode(repeat: "off" | "all" | "one", autoplay: boolean): Promise<void> {
-  return invoke("player_set_mode", { args: { repeat, autoplay } });
+/**
+ * Repeat ("off" | "all" | "one"), autoplay (related tracks after the list) and how closely those tracks keep to what plays:
+ * "same" (mood, language, genre), "balanced" or "explore" (YouTube's own mix). Core keeps them until changed.
+ */
+export function playerSetMode(repeat: "off" | "all" | "one", autoplay: boolean, vibe?: "same" | "balanced" | "explore"): Promise<void> {
+  return invoke("player_set_mode", { args: { repeat, autoplay, vibe } });
 }
 
 export function playerSeek(positionMs: number): Promise<PlayerStateDto> {
