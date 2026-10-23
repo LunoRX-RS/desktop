@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNod
 import { ChevronRight, LayoutGrid, List, ListMusic, Search, X } from "lucide-react";
 import { useUi, type LibraryTab } from "../../lib/store";
 import { Art } from "../../components/Art";
-import type { Tone } from "../../lib/media";
+import { toneFor, type Tone } from "../../lib/media";
 import { MediaCard } from "../../components/MediaCard";
 import { ActivePill } from "../../components/Motion";
 import { Button, EmptyState, IconButton, Screen, Skeleton, StatusNote, cx } from "../../components/ui";
@@ -244,7 +244,7 @@ export default function LibraryScreen({ onOpenPlaylist }: Props) {
             <MediaCard
               key={p.id}
               seed={p.id}
-              tone="ink"
+              tone={toneFor(p.id)}
               title={p.name}
               subtitle={`${entriesLabel(p.entryCount)} · ${describeUpload(p)}`}
               onOpen={() => onOpenPlaylist(p.id)}
@@ -260,7 +260,7 @@ export default function LibraryScreen({ onOpenPlaylist }: Props) {
             <Row
               key={p.id}
               seed={p.id}
-              tone="ink"
+              tone={toneFor(p.id)}
               title={p.name}
               subtitle={`${entriesLabel(p.entryCount)} · ${describeUpload(p)}`}
               onClick={() => onOpenPlaylist(p.id)}

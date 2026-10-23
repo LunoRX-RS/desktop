@@ -108,6 +108,8 @@ export interface ShareDto {
   id: string;
   createdAt: string;
   active: boolean;
+  /** The live link, rebuilt from the token the server keeps for the owner. Contains the token: show it, never log it. */
+  url: string | null;
 }
 
 /** Makes a read-only link for a playlist that is on the server. Rejects with "unauthenticated" when signed out. */

@@ -22,7 +22,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type Keybo
 import { createPortal } from "react-dom";
 import { useUi, type View } from "../../lib/store";
 import { usePlayback } from "../../lib/playback";
-import type { Tone } from "../../lib/media";
+import { toneFor, type Tone } from "../../lib/media";
 import { useLocalPlaylists } from "../../features/playlists/usePlaylists";
 import { syncStatus, type SyncStatusDto } from "../../services/tauri/sync";
 import { Art } from "../Art";
@@ -34,7 +34,6 @@ import { IconButton, cx } from "../ui";
 
 const COLLAPSED_KEY = "lunorx.sidebar.collapsed";
 const ORDER_KEY = "lunorx.sidebar.playlistOrder";
-const TONES: Tone[] = ["slate", "violet", "amber", "rose", "moss", "ink"];
 const EASE = "ease-[cubic-bezier(0.16,1,0.3,1)]";
 
 // localStorage can throw or be absent (private windows, blocked site data). Every access is guarded.
@@ -51,12 +50,6 @@ function writeStore(key: string, value: string) {
   } catch {
     /* the sidebar works without persistence */
   }
-}
-
-function toneFor(seed: string): Tone {
-  let h = 2166136261;
-  for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 16777619);
-  return TONES[(h >>> 0) % TONES.length];
 }
 
 /* ---------- Tooltip (collapsed mode) ---------- */

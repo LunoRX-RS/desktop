@@ -11,8 +11,8 @@ function toCategory(e: unknown): ErrorCategory {
   return typeof e === "string" && Object.hasOwn(CATEGORY_MESSAGES, e) ? (e as ErrorCategory) : "internal";
 }
 
-// One live link per playlist (the server enforces it). The URL holds its token and the server cannot show it again, so
-// this device keeps it to show the same link every time. Kept only in this device's storage, never logged.
+// One live link per playlist (the server enforces it). The server sends its URL to the owner; this device also keeps
+// the URL it made, for links from before the server kept tokens. Kept only in this device's storage, never logged.
 const linkKey = (localId: string) => `lunorx.shareLink.${localId}`;
 function readLink(localId: string): { shareId: string; url: string } | null {
   try {
@@ -60,8 +60,9 @@ export function ShareSection({
   }, [localId, signedIn]);
 
   const active = (shares ?? []).find((s) => s.active) ?? null;
-  // The saved URL counts only while its link is the live one; a link replaced or stopped elsewhere is forgotten.
-  const link = active && saved && saved.shareId === active.id ? saved.url : null;
+  // The server sends the live link's URL. A link from an older server, or made before the server kept tokens, falls
+  // back to the URL this device saved when it made the link.
+  const link = active ? active.url ?? (saved && saved.shareId === active.id ? saved.url : null) : null;
 
   async function create() {
     setBusy(true);
@@ -142,15 +143,15 @@ export function ShareSection({
       )}
       {active && !link && (
         <p className="text-[12px] text-secondary-text">
-          This playlist has a link made on another device or before this one remembered it. Make a new link to see it
-          here; the old link stops working.
+          This link was made before links could be shown again. Recreate it once to see it here; the old link stops
+          working.
         </p>
       )}
       {active && (
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-[12px] text-secondary-text">Created {new Date(active.createdAt).toLocaleDateString()}</span>
-          <Button variant="ghost" disabled={busy} onClick={() => void create()} title="The current link stops working">
-            New link
+          <Button variant="ghost" disabled={busy} onClick={() => void create()} title="Makes a new link; the current one stops working">
+            Recreate link
           </Button>
           <Button variant="ghost" disabled={busy} onClick={() => void stop()}>
             Stop sharing

@@ -767,7 +767,7 @@ pub(crate) async fn share(h: &mut Host<'_>, local_id: &str) -> Result<ShareLink,
 pub(crate) async fn list_shares(
     h: &mut Host<'_>,
     local_id: &str,
-) -> Result<Vec<(String, String, bool)>, ErrorCategory> {
+) -> Result<Vec<(String, String, bool, Option<String>)>, ErrorCategory> {
     let (api, token, remote) = h
         .step(|e| Ok((e.api.clone(), e.token()?, remote_of(e, local_id)?)))
         .await?;
@@ -779,7 +779,12 @@ pub(crate) async fn list_shares(
         .into_iter()
         .map(|s| {
             let active = s.revoked_at.is_none();
-            (s.id, s.created_at, active)
+            // The URL, rebuilt from the token the server keeps for the owner; only for a live link.
+            let url = s
+                .token
+                .filter(|_| active)
+                .and_then(|t| share_link(&share_base(), &t));
+            (s.id, s.created_at, active, url)
         })
         .collect())
 }

@@ -344,6 +344,8 @@ pub struct ShareDto {
     pub id: String,
     pub created_at: String,
     pub active: bool,
+    /// The link to the playlist while it is live. Contains the token: show it, never log it.
+    pub url: Option<String>,
 }
 
 pub async fn run_share_playlist(
@@ -385,10 +387,11 @@ pub async fn run_list_shares(
     let shares = engine::list_shares(&mut Host::Shared(state), local_id).await?;
     Ok(shares
         .into_iter()
-        .map(|(id, created_at, active)| ShareDto {
+        .map(|(id, created_at, active, url)| ShareDto {
             id,
             created_at,
             active,
+            url,
         })
         .collect())
 }

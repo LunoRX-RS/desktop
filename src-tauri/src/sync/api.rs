@@ -101,12 +101,16 @@ pub struct PlaylistCreateRequest {
     pub description: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+/// Not Debug: `token` must never reach a log through `{:?}`.
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShareView {
     pub id: String,
     pub created_at: String,
     pub revoked_at: Option<String>,
+    /// The live link's token, sent to the owner only. Absent from older servers and for old links.
+    #[serde(default)]
+    pub token: Option<String>,
 }
 
 /// Not Debug: the token must never reach a log through `{:?}`.

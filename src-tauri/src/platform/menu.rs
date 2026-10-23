@@ -3,7 +3,10 @@
 //! handled in Rust and call the same core functions as the player commands, so they work with the window
 //! hidden or the webview unfocused.
 
-use tauri::menu::{Menu, MenuItem, MenuItemBuilder, MenuItemKind, SubmenuBuilder};
+use tauri::menu::{
+    AboutMetadata, Menu, MenuItem, MenuItemBuilder, MenuItemKind, PredefinedMenuItem,
+    SubmenuBuilder,
+};
 use tauri::{AppHandle, Wry};
 
 use super::control::{self, Remote};
@@ -127,8 +130,41 @@ fn build(app: &AppHandle) -> tauri::Result<PlaybackMenu> {
         )
         .unwrap_or(root.items()?.len());
     root.insert(&playback, before_window)?;
+    brand_app_menu(app, &root)?;
     app.set_menu(root)?;
     Ok(menu)
+}
+
+/// The default app menu takes its name from the binary ("lunorx") and, unbundled, shows a folder icon in About.
+/// Give About the product name, version, icon and links, and say "LunoRX" in Hide and Quit.
+fn brand_app_menu(app: &AppHandle, root: &Menu<Wry>) -> tauri::Result<()> {
+    let Some(MenuItemKind::Submenu(app_menu)) = root.items()?.into_iter().next() else {
+        return Ok(());
+    };
+    let about = PredefinedMenuItem::about(
+        app,
+        Some("About LunoRX"),
+        Some(AboutMetadata {
+            name: Some("LunoRX".into()),
+            version: Some(app.package_info().version.to_string()),
+            copyright: Some("MIT License".into()),
+            website: Some("https://lunorx.xyz".into()),
+            website_label: Some("lunorx.xyz".into()),
+            icon: app.default_window_icon().cloned(),
+            ..Default::default()
+        }),
+    )?;
+    app_menu.remove_at(0)?;
+    app_menu.insert(&about, 0)?;
+    for item in app_menu.items()? {
+        if let MenuItemKind::Predefined(p) = item
+            && let Ok(text) = p.text()
+            && text.contains("lunorx")
+        {
+            p.set_text(text.replace("lunorx", "LunoRX"))?;
+        }
+    }
+    Ok(())
 }
 
 fn command_for(id: &str) -> Option<Remote> {

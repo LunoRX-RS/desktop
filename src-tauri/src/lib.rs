@@ -22,6 +22,9 @@ pub fn run() {
             }
         }))
         .plugin(tauri_plugin_opener::init())
+        // Self-update: signed releases only (public key in tauri.conf.json); the user confirms before installing.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let library_path = app
                 .path()

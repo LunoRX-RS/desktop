@@ -1,4 +1,5 @@
 "use client";
+import { toneFor } from "../../lib/media";
 import { OfflinePlaylist, useOffline } from "../offline/OfflinePlaylist";
 import { ResultRow } from "../search/SourceGroup";
 import { menuHandlers } from "../../components/ContextMenu";
@@ -65,7 +66,7 @@ function ListRow({ p, selected, onSelect }: { p: LocalPlaylistDto; selected: boo
           selected ? "bg-frost-200" : "hover:bg-frost-100",
         )}
       >
-        <Art seed={p.id} tone="ink" grain={false} rounded="rounded-[6px]" className="size-10 shrink-0" />
+        <Art seed={p.id} tone={toneFor(p.id)} grain={false} rounded="rounded-[6px]" className="size-10 shrink-0" />
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] leading-[18px] font-semibold" title={p.name}>
             {p.name}
@@ -254,7 +255,7 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
       </Button>
 
       <section aria-labelledby="editor-detail" className="flex items-end gap-5">
-        <Art seed={selected.id} tone="ink" rounded="rounded-[10px]" className="size-[152px] shrink-0 shadow-[0_2px_10px_rgba(0,0,0,0.4)]" />
+        <Art seed={selected.id} tone={toneFor(selected.id)} rounded="rounded-[10px]" className="size-[152px] shrink-0 shadow-[0_2px_10px_rgba(0,0,0,0.4)]" />
         <div className="flex min-w-0 flex-col gap-1 pb-1">
           {renaming !== null ? (
             <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); void saveRename(); }}>

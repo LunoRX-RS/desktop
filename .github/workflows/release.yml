@@ -102,6 +102,9 @@ jobs:
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+      # Self-update: Tauri signs the update files with this key; the app checks them with the public key in tauri.conf.json.
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -154,6 +157,18 @@ jobs:
           mkdir -p dist
           scripts/release/bundle-macos.sh "$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.app' | head -n 1)" "dist/LunoRX_${VERSION}_${{ matrix.target }}.dmg"
 
+      # The update archive is made from the finished app (with libmpv inside), so it is packed and signed after bundling,
+      # not taken from tauri build, whose archive predates the libmpv copy.
+      - name: Update archive (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          app="$(find src-tauri/target/release/bundle/macos -maxdepth 1 -name '*.app' | head -n 1)"
+          file="LunoRX_${VERSION}_${{ matrix.target }}.app.tar.gz"
+          tar -czf "dist/$file" -C "$(dirname "$app")" "$(basename "$app")"
+          npx tauri signer sign "dist/$file"
+          platform=$([ "${{ matrix.target }}" = "macos-arm64" ] && echo darwin-aarch64 || echo darwin-x86_64)
+          printf '{"platform":"%s","file":"%s","signature":"%s"}' "$platform" "$file" "$(cat "dist/$file.sig")" > "dist/update-$platform.json"
+
       # ---------- Linux ----------
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -169,6 +184,8 @@ jobs:
           mkdir -p dist
           cp src-tauri/target/release/bundle/deb/*.deb "dist/LunoRX_${VERSION}_${{ matrix.target }}.deb"
           cp src-tauri/target/release/bundle/appimage/*.AppImage "dist/LunoRX_${VERSION}_${{ matrix.target }}.AppImage"
+          file="LunoRX_${VERSION}_${{ matrix.target }}.AppImage"
+          printf '{"platform":"linux-x86_64","file":"%s","signature":"%s"}' "$file" "$(cat src-tauri/target/release/bundle/appimage/*.AppImage.sig)" > dist/update-linux-x86_64.json
 
       # ---------- Windows ----------
       # libmpv comes from the community build that publishes a development archive (import definition + DLL).
@@ -209,7 +226,11 @@ jobs:
           '{"bundle":{"resources":{"mpv/libmpv-2.dll":"libmpv-2.dll"}}}' | Out-File -Encoding ascii src-tauri/release-windows.json
           npx tauri build --bundles nsis --config src-tauri/release-windows.json
           New-Item -ItemType Directory -Force dist | Out-Null
-          Copy-Item (Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1) "dist/LunoRX_$($env:VERSION)_${{ matrix.target }}-setup.exe"
+          $setup = Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe | Select-Object -First 1
+          $file = "LunoRX_$($env:VERSION)_${{ matrix.target }}-setup.exe"
+          Copy-Item $setup "dist/$file"
+          $sig = (Get-Content "$($setup.FullName).sig" -Raw).Trim()
+          @{ platform = "windows-x86_64"; file = $file; signature = $sig } | ConvertTo-Json -Compress | Out-File -Encoding ascii dist/update-windows-x86_64.json
 
       - uses: actions/upload-artifact@v4
         with:
@@ -230,6 +251,22 @@ jobs:
           pattern: installer-*
           path: dist
           merge-multiple: true
+      # latest.json for the in-app updater: one entry per platform that built, each pointing at this release's file.
+      - name: Update manifest
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          mkdir -p feed
+          jq -s --arg v "$VERSION" --arg tag "$GITHUB_REF_NAME" --arg repo "$GITHUB_REPOSITORY" \
+            --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '{
+              version: $v,
+              notes: ("LunoRX " + $v),
+              pub_date: $date,
+              platforms: (map({ key: .platform, value: { signature: .signature,
+                url: ("https://github.com/" + $repo + "/releases/download/" + $tag + "/" + .file) } }) | from_entries)
+            }' dist/update-*.json > feed/latest.json
+          rm dist/update-*.json
+          jq '.platforms | keys' feed/latest.json
       - name: Checksums
         working-directory: dist
         run: sha256sum -- * | tee SHA256SUMS.txt
@@ -243,3 +280,12 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/* \
             --title "LunoRX ${GITHUB_REF_NAME#v}" \
             --generate-notes --verify-tag $flag
+      # The app reads releases/download/updates/latest.json: one fixed place that also covers pre-releases, which
+      # GitHub's "latest" link skips.
+      - name: Point the updater at this release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view updates >/dev/null 2>&1 || gh release create updates --title "Updater feed" \
+            --notes "Holds latest.json for the in-app updater. Not an installer." --prerelease --target "$GITHUB_SHA"
+          gh release upload updates feed/latest.json --clobber

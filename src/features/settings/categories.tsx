@@ -101,6 +101,7 @@ export const SEARCH_INDEX: { cat: CategoryKey; group: string; label: string }[] 
   { cat: "shortcuts", group: "settings-keys-search", label: "Quick search and commands" },
   { cat: "shortcuts", group: "settings-keys-mac", label: "Playback menu (macOS)" },
   { cat: "about", group: "settings-about", label: "App version" },
+  { cat: "about", group: "settings-about", label: "Check for updates" },
   { cat: "about", group: "settings-about", label: "Platform" },
   { cat: "about", group: "settings-about", label: "Native player (libmpv)" },
   { cat: "about", group: "settings-about", label: "Cache management" },

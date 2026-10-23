@@ -51,14 +51,33 @@ impl SearchProvider for YouTubeMusicSearch {
             if music.is_none() && videos.is_none() {
                 return Err(CoreError::ProviderUnavailable);
             }
-            let mut candidates = Vec::new();
-            for track in music.into_iter().flat_map(|r| r.items) {
-                candidates.extend(music_candidate(track));
-            }
-            for video in videos.into_iter().flat_map(|r| r.items) {
-                candidates.extend(video_candidate(video));
-            }
-            Ok(order(query, candidates, usize::from(limit.clamp(1, 10))))
+            // Each source is ranked on its own, so ordinary YouTube videos are not crowded out by YouTube Music songs.
+            // A video that is also a YouTube Music result is shown once, under YouTube Music.
+            let limit = usize::from(limit.clamp(1, 10));
+            let songs = order(
+                query,
+                music
+                    .into_iter()
+                    .flat_map(|r| r.items)
+                    .filter_map(music_candidate)
+                    .collect(),
+                limit,
+            );
+            let known: std::collections::HashSet<String> = songs
+                .iter()
+                .map(|h| h.provider_track_id().to_owned())
+                .collect();
+            let clips = order(
+                query,
+                videos
+                    .into_iter()
+                    .flat_map(|r| r.items)
+                    .filter_map(video_candidate)
+                    .filter(|c| !known.contains(c.hit.provider_track_id()))
+                    .collect(),
+                limit,
+            );
+            Ok(songs.into_iter().chain(clips).collect())
         })
     }
 }

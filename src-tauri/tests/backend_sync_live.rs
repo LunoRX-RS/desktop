@@ -203,6 +203,47 @@ async fn desktop_sync_client_against_live_backend() {
         "PASS: Spotify entry with a title refused by engine and ApiClient; server still has 3 entries"
     );
 
+    // Share: one live link per playlist; the owner reads its token back; a recreated link replaces the old one; the
+    // public route opens only the live link. Tokens are compared, never printed.
+    let first = api
+        .create_share(&token_a, &remote)
+        .await
+        .expect("create share");
+    let second = api
+        .create_share(&token_a, &remote)
+        .await
+        .expect("recreate share");
+    let shares = api
+        .list_shares(&token_a, &remote)
+        .await
+        .expect("list shares");
+    let live: Vec<_> = shares.iter().filter(|s| s.revoked_at.is_none()).collect();
+    assert_eq!(live.len(), 1, "one live link per playlist");
+    assert_eq!(live[0].id, second.id);
+    assert_eq!(
+        live[0].token.as_deref(),
+        Some(second.token.as_str()),
+        "owner sees the live token"
+    );
+    let open = |t: &str| {
+        let url = format!("{base}/api/v1/shared/{t}");
+        async move { reqwest::get(url).await.unwrap().status().as_u16() }
+    };
+    assert_eq!(open(&first.token).await, 404, "replaced link stops working");
+    assert_eq!(
+        open(&second.token).await,
+        200,
+        "live link opens without an account"
+    );
+    let url = lunorx_lib::sync::settings::share_link("https://play.lunorx.xyz", &second.token)
+        .expect("share url");
+    assert!(url.starts_with("https://play.lunorx.xyz/s/"));
+    api.revoke_share(&token_a, &remote, &second.id)
+        .await
+        .expect("revoke");
+    assert_eq!(open(&second.token).await, 404, "revoked link stops working");
+    println!("PASS: share create, recreate, owner token, public open, revoke");
+
     // Owner-only: a second account cannot see the playlist.
     assert_eq!(
         register(&base, &email_b, &password).await,

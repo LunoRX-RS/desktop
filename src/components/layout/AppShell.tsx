@@ -9,6 +9,8 @@ import { detectPlatform } from "../../lib/platform";
 import { actionFor, comboFromEvent, currentBindings, hasCommandModifier } from "../../lib/shortcuts";
 import { initTelemetry, track } from "../../lib/telemetry";
 import { initRemote } from "../../lib/remote";
+import { initUpdater } from "../../lib/updater";
+import { UpdateBanner } from "./UpdateBanner";
 import { hydrateRecentSearches } from "../../lib/store";
 import { useUi } from "../../lib/store";
 import ArtistScreen, { AlbumScreen, SavedLibraryScreen } from "../../features/artists/ArtistsScreen";
@@ -131,6 +133,7 @@ export default function AppShell() {
   useEffect(() => initHistory(), []);
   useEffect(() => initTelemetry(), []);
   useEffect(() => initRemote(), []);
+  useEffect(() => initUpdater(), []);
   useEffect(() => { track(`feature.view.${view}`); }, [view]);
 
   // Demo playback clock. Only advances while the simulated state is "playing".
@@ -142,6 +145,7 @@ export default function AppShell() {
   return (
     <MotionConfig reducedMotion="user">
       <PlaybackEvents />
+      <UpdateBanner />
       <LoginGate />
       <a
         href="#main-content"
