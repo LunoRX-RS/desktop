@@ -78,6 +78,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # cargo test links the test binary against libmpv, as the release job does (build.rs finds Homebrew's copy).
+      - name: Install libmpv
+        run: brew install mpv
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
