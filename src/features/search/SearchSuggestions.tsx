@@ -6,19 +6,10 @@ import { searchQuery, searchCancel, type SearchHitDto } from "../../services/tau
 import { useUi } from "../../lib/store";
 import { Button } from "../../components/ui";
 import { ResultRow } from "./SourceGroup";
+import { historyMatches } from "../../lib/searchTaste";
 
 // Short, so the panel feels instant; the keystroke that follows cancels the request that was in flight.
 const TYPING_PAUSE_MS = 180;
-const HISTORY_SHOWN = 4;
-
-/** Earlier searches that contain what is typed, closest matches (prefix) first. Pure, so it is easy to check. */
-export function historyMatches(recent: string[], typed: string): string[] {
-  const text = typed.trim().toLowerCase();
-  if (text === "") return [];
-  const lower = (s: string) => s.toLowerCase();
-  const hits = recent.filter((r) => lower(r) !== text && lower(r).includes(text));
-  return [...hits.filter((r) => lower(r).startsWith(text)), ...hits.filter((r) => !lower(r).startsWith(text))].slice(0, HISTORY_SHOWN);
-}
 
 export default function SearchSuggestions({ query, onChoose }: { query: string; onChoose: (query: string) => void }) {
   const recent = useUi((s) => s.recentSearches);
