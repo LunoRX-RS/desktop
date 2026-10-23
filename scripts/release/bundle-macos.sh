@@ -14,6 +14,13 @@ BREW="$(brew --prefix)"
 # 1. Copy libmpv and everything it links to into the app and point the executable at the copies.
 dylibbundler -od -b -cd -x "$EXE" -d "$FRAMEWORKS" -p "@executable_path/../Frameworks/" -s "$BREW/lib" -s "$BREW/opt/mpv/lib"
 
+# 1b. macOS 27 dyld refuses a binary with the same LC_RPATH twice ("duplicate LC_RPATH"). dylibbundler can leave one on libmpv, so keep a single copy of each.
+for f in "$EXE" "$FRAMEWORKS"/*.dylib; do
+  otool -l "$f" | awk '/cmd LC_RPATH/{r=1} r&&/ path /{print $2; r=0}' | sort | uniq -d | while read -r rp; do
+    install_name_tool -delete_rpath "$rp" "$f"
+  done
+done
+
 # 2. Fail the build if the app would still need Homebrew on the user's machine.
 if otool -L "$EXE" "$FRAMEWORKS"/*.dylib | grep -E "$BREW|/usr/local/(opt|Cellar)" ; then
   echo "error: the bundle still links to Homebrew paths" >&2
@@ -28,6 +35,7 @@ else
   codesign --force --deep --sign - "$APP"
 fi
 codesign --verify --deep --strict "$APP"
+"$(dirname "$0")/verify-macos-bundle.sh" "$APP"
 
 # 4. DMG with the usual drag-to-Applications layout.
 STAGE="$(mktemp -d)"

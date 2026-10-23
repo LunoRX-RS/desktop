@@ -363,6 +363,7 @@ A release is a version tag. Pushing the tag builds the installers and publishes 
 | [PRODUCT.md](PRODUCT.md) | Who the app is for and what it must not become |
 | [DESIGN.md](DESIGN.md) | Tokens, components, motion and accessibility rules |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Branching and quality gates |
+| [INSTALL.md](INSTALL.md) | Installing a release, and the macOS "could not verify" warning |
 | [RELEASING.md](RELEASING.md) | Tags, installers, signing |
 | [SECURITY.md](SECURITY.md) | How to report a vulnerability (privately, through GitHub) |
 | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) | Components, licences and what needs attention |
