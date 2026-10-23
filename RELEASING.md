@@ -27,18 +27,15 @@ To build installers without publishing, run the workflow by hand (Actions → Re
 
 Linux and Windows jobs are allowed to fail without blocking the release. Check the release assets to see which ones were built.
 
-## Signing (optional)
+## Signing
 
-Without these repository secrets the macOS app is ad-hoc signed and users must approve it in System Settings the first time.
+The macOS app is ad-hoc signed (no Apple Developer account), so users approve it once in System Settings › Privacy &
+Security the first time they open it. Windows installers are not code-signed.
 
-| Secret | Value |
-|---|---|
-| `MACOS_SIGN_IDENTITY` | e.g. `Developer ID Application: Name (TEAMID)` |
-| `APPLE_CERTIFICATE` | base64 of the `.p12` certificate |
-| `APPLE_CERTIFICATE_PASSWORD` | the `.p12` password |
-| `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD` | notarization (app-specific password) |
+Update files are signed separately with the project's minisign key (repository secrets `TAURI_SIGNING_PRIVATE_KEY`
+and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`; public key in `src-tauri/tauri.conf.json`). The app installs only updates
+that match it.
 
-Windows installers are not code-signed.
 
 ## Before a public release
 

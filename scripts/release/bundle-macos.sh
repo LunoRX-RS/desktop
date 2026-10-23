@@ -2,7 +2,6 @@
 # Makes a built LunoRX.app self-contained and packs it into a DMG.
 #   usage: bundle-macos.sh <path/to/App.app> <output.dmg>
 # Needs: Homebrew mpv and dylibbundler. Signing is optional (see below).
-# Env (all optional): MACOS_SIGN_IDENTITY, APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD
 set -euo pipefail
 
 APP="$1"
@@ -27,13 +26,8 @@ if otool -L "$EXE" "$FRAMEWORKS"/*.dylib | grep -E "$BREW|/usr/local/(opt|Cellar
   exit 1
 fi
 
-# 3. Sign. Without an identity the app gets an ad-hoc signature: it runs, but Gatekeeper asks the user to approve it.
-if [ -n "${MACOS_SIGN_IDENTITY:-}" ]; then
-  find "$FRAMEWORKS" -name '*.dylib' -print0 | xargs -0 -n 1 codesign --force --timestamp --options runtime --sign "$MACOS_SIGN_IDENTITY"
-  codesign --force --timestamp --options runtime --sign "$MACOS_SIGN_IDENTITY" "$APP"
-else
-  codesign --force --deep --sign - "$APP"
-fi
+# 3. Ad-hoc signature (no Apple Developer account): it runs, but Gatekeeper asks the user to approve it once.
+codesign --force --deep --sign - "$APP"
 codesign --verify --deep --strict "$APP"
 "$(dirname "$0")/verify-macos-bundle.sh" "$APP"
 
@@ -45,12 +39,4 @@ rm -f "$DMG"
 hdiutil create -volname "LunoRX" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
 rm -rf "$STAGE"
 
-# 5. Notarize and staple when Apple credentials are present.
-if [ -n "${MACOS_SIGN_IDENTITY:-}" ]; then
-  codesign --force --timestamp --sign "$MACOS_SIGN_IDENTITY" "$DMG"
-  if [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ] && [ -n "${APPLE_APP_PASSWORD:-}" ]; then
-    xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
-    xcrun stapler staple "$DMG"
-  fi
-fi
 echo "Created $DMG"

@@ -95,13 +95,6 @@ jobs:
           - { name: Windows (x86_64), os: windows-latest, target: windows-x64, experimental: true }
     env:
       VERSION: ${{ needs.version.outputs.version }}
-      # Optional macOS signing and notarization. Without them the app is ad-hoc signed.
-      MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
-      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
       # Self-update: Tauri signs the update files with this key; the app checks them with the public key in tauri.conf.json.
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
@@ -130,26 +123,9 @@ jobs:
         if: runner.os == 'macOS'
         run: brew install mpv dylibbundler
 
-      - name: Import signing certificate
-        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE != ''
-        run: |
-          echo "$APPLE_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
-          security create-keychain -p ci "$RUNNER_TEMP/ci.keychain"
-          security set-keychain-settings -lut 21600 "$RUNNER_TEMP/ci.keychain"
-          security unlock-keychain -p ci "$RUNNER_TEMP/ci.keychain"
-          security import "$RUNNER_TEMP/cert.p12" -k "$RUNNER_TEMP/ci.keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: -s -k ci "$RUNNER_TEMP/ci.keychain"
-          security list-keychains -d user -s "$RUNNER_TEMP/ci.keychain" login.keychain
-          rm "$RUNNER_TEMP/cert.p12"
-
       - name: Build app (macOS)
         if: runner.os == 'macOS'
-        run: |
-          # Unset secrets are empty strings; Tauri would still try to import an empty certificate.
-          if [ -z "$APPLE_CERTIFICATE" ]; then
-            unset APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID APPLE_TEAM_ID APPLE_APP_PASSWORD
-          fi
-          npx tauri build --bundles app
+        run: npx tauri build --bundles app
 
       - name: Bundle libmpv and make the DMG
         if: runner.os == 'macOS'
