@@ -53,7 +53,7 @@ export function NativePlayerBar() {
   const playing = s.player.state === "playing" || s.player.state === "buffering";
   const controllable = ["ready", "playing", "paused", "buffering"].includes(s.player.state);
   return (
-    <footer aria-label="YouTube player" className="glass-bar flex min-h-[var(--height-player)] shrink-0 items-center gap-4 border-t border-hairline px-4">
+    <footer aria-label="YouTube player" className="glass flex min-h-[var(--height-player)] shrink-0 items-center gap-4 px-4">
       <div className="flex w-[30%] min-w-0 items-center gap-3">
         {track && <button type="button" aria-label="Open Now Playing" onClick={() => useUi.getState().setNowPlaying(true)} className="shrink-0 rounded-[6px]">
           <TrackCover key={track.providerTrackId} url={info?.artworkUrl ?? track.artworkUrl} videoId={track.providerTrackId} className="lx-fade-in size-12" />
