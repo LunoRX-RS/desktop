@@ -97,7 +97,7 @@ export default function SettingsScreen({ initialCategory }: { initialCategory?: 
   const panelId = `${uid}-panel`;
 
   return (
-    <div data-pg className="flex max-w-[1000px] flex-col gap-8">
+    <div data-pg className="flex flex-col gap-8">
       <Screen id="settings-title" title="Settings">
         <div className="flex flex-col gap-6 min-[1100px]:flex-row min-[1100px]:items-start min-[1100px]:gap-10">
           <div className="flex flex-col gap-3 min-[1100px]:sticky min-[1100px]:top-0 min-[1100px]:w-[200px] min-[1100px]:shrink-0">
@@ -186,7 +186,7 @@ export default function SettingsScreen({ initialCategory }: { initialCategory?: 
             )}
           </div>
 
-          <div id={panelId} role="tabpanel" aria-labelledby={tabId(cat)} className="flex min-w-0 max-w-[640px] flex-1 flex-col gap-8">
+          <div id={panelId} role="tabpanel" aria-labelledby={tabId(cat)} className="flex min-w-0 flex-1 flex-col gap-8">
             <header className="flex flex-col gap-1">
               <h2 className="font-display text-[22px] leading-7 font-semibold tracking-[-0.01em]">{active.label}</h2>
               <p className="text-[13px] leading-[18px] text-secondary-text">{active.description}</p>

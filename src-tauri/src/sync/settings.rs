@@ -30,8 +30,13 @@ impl fmt::Display for SettingsError {
 
 impl std::error::Error for SettingsError {}
 
+/// The backend the app talks to: `LUNORX_BACKEND_URL` when set (checked by `parse_base_url` like any URL), else the local
+/// development server.
 pub fn default_base_url() -> String {
-    "http://127.0.0.1:8080".to_string()
+    std::env::var("LUNORX_BACKEND_URL")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .unwrap_or_else(|| env!("LUNORX_DEFAULT_BACKEND_URL").to_string())
 }
 
 /// Validates and normalizes a backend base URL. std-only: no url crate.
@@ -89,8 +94,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_is_local_backend() {
-        assert_eq!(default_base_url(), "http://127.0.0.1:8080");
+    fn default_is_the_build_time_backend() {
+        assert_eq!(env!("LUNORX_DEFAULT_BACKEND_URL"), "https://api.lunorx.xyz");
+        assert_eq!(default_base_url(), env!("LUNORX_DEFAULT_BACKEND_URL"));
     }
 
     #[test]
@@ -210,5 +216,10 @@ mod tests {
             let msg = parse_base_url(input).unwrap_err().to_string();
             assert!(!msg.contains(input), "{msg}");
         }
+    }
+
+    #[test]
+    fn the_build_time_default_is_a_valid_backend_url() {
+        assert!(parse_base_url(env!("LUNORX_DEFAULT_BACKEND_URL")).is_ok());
     }
 }

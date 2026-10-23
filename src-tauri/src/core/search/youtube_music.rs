@@ -1,9 +1,15 @@
 //! Unified YouTube Music and ordinary YouTube search using the desktop session.
 use super::{
-    hit::{SearchHit, SearchSource},
+    hit::{ArtistRef, SearchHit, SearchSource},
     provider::{SearchFuture, SearchProvider},
+    rank::{Candidate, Channel, Kind, order},
 };
 use crate::core::{domain::ProviderId, errors::CoreError, playback::extract::valid_id, yt::Yt};
+use innerlight::{
+    Error as YtError,
+    music::{Track, TrackKind},
+    youtube::{Verification, Video},
+};
 
 pub struct YouTubeMusicSearch {
     yt: Yt,
@@ -13,6 +19,11 @@ impl YouTubeMusicSearch {
         Self { yt }
     }
 }
+// After the song search answers, the video search gets this long to finish. Waiting out its full timeout made every search as
+// slow as the slower of the two requests.
+const VIDEO_GRACE: std::time::Duration = std::time::Duration::from_millis(900);
+const REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(14);
+
 impl SearchProvider for YouTubeMusicSearch {
     fn id(&self) -> ProviderId {
         ProviderId::YouTube
@@ -20,189 +31,129 @@ impl SearchProvider for YouTubeMusicSearch {
     fn search<'a>(&'a self, query: &'a str, limit: u8) -> SearchFuture<'a> {
         Box::pin(async move {
             let (music_api, youtube_api) = (self.yt.music(), self.yt.youtube());
-            let (music, videos) = tokio::join!(
-                tokio::time::timeout(
-                    std::time::Duration::from_secs(14),
-                    music_api.search_tracks(query)
-                ),
-                tokio::time::timeout(
-                    std::time::Duration::from_secs(14),
-                    youtube_api.search_videos(query, None)
-                ),
-            );
+            let mut music = std::pin::pin!(tokio::time::timeout(
+                REQUEST_TIMEOUT,
+                music_api.search_tracks(query)
+            ));
+            let mut videos = std::pin::pin!(tokio::time::timeout(
+                REQUEST_TIMEOUT,
+                youtube_api.search_videos(query, None)
+            ));
+            let (music, videos) = tokio::select! {
+                music = &mut music => {
+                    let videos = tokio::time::timeout(VIDEO_GRACE, &mut videos).await;
+                    (music, videos.unwrap_or(Ok(Err(YtError::Network))))
+                }
+                videos = &mut videos => ((&mut music).await, videos),
+            };
             let music = music.ok().and_then(Result::ok);
             let videos = videos.ok().and_then(Result::ok);
             if music.is_none() && videos.is_none() {
                 return Err(CoreError::ProviderUnavailable);
             }
-            let mut music_hits = Vec::new();
-            if let Some(result) = music {
-                for track in result
-                    .items
-                    .into_iter()
-                    .take(usize::from(limit.clamp(1, 10)))
-                {
-                    if !valid_id(&track.id) {
-                        continue;
-                    }
-                    let artist_refs = track
-                        .artists
-                        .iter()
-                        .map(|a| super::hit::ArtistRef {
-                            provider: ProviderId::YouTube,
-                            id: a.id.clone(),
-                            name: a.name.clone(),
-                        })
-                        .collect();
-                    let mut hit = SearchHit::new(
-                        ProviderId::YouTube,
-                        track.id.clone(),
-                        format!("https://www.youtube.com/watch?v={}", track.id),
-                        track.title,
-                        track
-                            .artists
-                            .into_iter()
-                            .map(|artist| artist.name)
-                            .collect(),
-                    )?;
-                    hit.source = Some(SearchSource::YouTubeMusic);
-                    hit.artist_refs = artist_refs;
-                    hit.duration_ms = track.duration_ms;
-                    hit.artwork_url = track
-                        .thumbnails
-                        .into_iter()
-                        .max_by_key(|cover| cover.width)
-                        .and_then(|cover| {
-                            crate::core::playback::track_info::artwork_url(&cover.url)
-                        });
-                    music_hits.push(hit);
-                }
+            let mut candidates = Vec::new();
+            for track in music.into_iter().flat_map(|r| r.items) {
+                candidates.extend(music_candidate(track));
             }
-            let mut video_hits = Vec::new();
-            if let Some(result) = videos {
-                for video in result
-                    .items
-                    .into_iter()
-                    // Live streams, Shorts and premieres that have not started (no length) are not songs to play.
-                    .filter(|v| {
-                        valid_id(&v.id) && !v.is_live && !v.is_short && v.duration_ms.is_some()
-                    })
-                    .take(usize::from(limit.clamp(1, 10)))
-                {
-                    let artists = video
-                        .channel
-                        .as_ref()
-                        .map(|c| vec![c.name.clone()])
-                        .unwrap_or_default();
-                    let mut hit = SearchHit::new(
-                        ProviderId::YouTube,
-                        video.id.clone(),
-                        format!("https://www.youtube.com/watch?v={}", video.id),
-                        video.title,
-                        artists,
-                    )?;
-                    hit.source = Some(SearchSource::YouTube);
-                    hit.artist_refs = video
-                        .channel
-                        .into_iter()
-                        .map(|c| super::hit::ArtistRef {
-                            provider: ProviderId::YouTube,
-                            id: c.id,
-                            name: c.name,
-                        })
-                        .collect();
-                    hit.duration_ms = video.duration_ms;
-                    hit.artwork_url = video
-                        .thumbnails
-                        .into_iter()
-                        .max_by_key(|c| c.width)
-                        .and_then(|c| crate::core::playback::track_info::artwork_url(&c.url));
-                    video_hits.push(hit);
-                }
+            for video in videos.into_iter().flat_map(|r| r.items) {
+                candidates.extend(video_candidate(video));
             }
-            Ok(combine(music_hits, video_hits, limit))
+            Ok(order(query, candidates, usize::from(limit.clamp(1, 10))))
         })
     }
 }
 
-fn combine(music: Vec<SearchHit>, videos: Vec<SearchHit>, limit: u8) -> Vec<SearchHit> {
-    let mut music = music.into_iter();
-    let mut videos = videos.into_iter();
-    let mut seen = std::collections::HashSet::new();
-    let mut hits = Vec::new();
-    loop {
-        let pair = [music.next(), videos.next()];
-        if pair.iter().all(Option::is_none) {
-            break;
-        }
-        for hit in pair.into_iter().flatten() {
-            if seen.insert(hit.provider_track_id().to_owned()) {
-                hits.push(hit);
-            }
-            if hits.len() >= usize::from(limit.clamp(1, 10)) {
-                return hits;
-            }
-        }
+fn music_candidate(track: Track) -> Option<Candidate> {
+    if !valid_id(&track.id) {
+        return None;
     }
-    hits
+    let artist_refs = track
+        .artists
+        .iter()
+        .map(|a| ArtistRef {
+            provider: ProviderId::YouTube,
+            id: a.id.clone(),
+            name: a.name.clone(),
+        })
+        .collect();
+    let mut hit = SearchHit::new(
+        ProviderId::YouTube,
+        track.id.clone(),
+        format!("https://www.youtube.com/watch?v={}", track.id),
+        track.title,
+        track.artists.into_iter().map(|a| a.name).collect(),
+    )
+    .ok()?;
+    hit.source = Some(SearchSource::YouTubeMusic);
+    hit.artist_refs = artist_refs;
+    hit.duration_ms = track.duration_ms;
+    hit.artwork_url = track
+        .thumbnails
+        .into_iter()
+        .max_by_key(|cover| cover.width)
+        .and_then(|cover| crate::core::playback::track_info::artwork_url(&cover.url));
+    let kind = if track.kind == TrackKind::Audio {
+        Kind::Release
+    } else {
+        Kind::MusicVideo
+    };
+    Some(Candidate {
+        hit,
+        kind,
+        channel: Channel::Unknown,
+    })
 }
+
+fn video_candidate(video: Video) -> Option<Candidate> {
+    // Live streams, Shorts and premieres that have not started (no length) are not songs to play.
+    if !valid_id(&video.id) || video.is_live || video.is_short || video.duration_ms.is_none() {
+        return None;
+    }
+    let channel = match video.channel.as_ref().map(|c| c.verification) {
+        Some(Verification::Artist) => Channel::Artist,
+        Some(Verification::Verified) => Channel::Verified,
+        _ => Channel::Unknown,
+    };
+    let artists = video
+        .channel
+        .as_ref()
+        .map(|c| vec![c.name.clone()])
+        .unwrap_or_default();
+    let artist_refs = video
+        .channel
+        .into_iter()
+        .map(|c| ArtistRef {
+            provider: ProviderId::YouTube,
+            id: c.id,
+            name: c.name,
+        })
+        .collect();
+    let mut hit = SearchHit::new(
+        ProviderId::YouTube,
+        video.id.clone(),
+        format!("https://www.youtube.com/watch?v={}", video.id),
+        video.title,
+        artists,
+    )
+    .ok()?;
+    hit.source = Some(SearchSource::YouTube);
+    hit.artist_refs = artist_refs;
+    hit.duration_ms = video.duration_ms;
+    hit.artwork_url = video
+        .thumbnails
+        .into_iter()
+        .max_by_key(|c| c.width)
+        .and_then(|c| crate::core::playback::track_info::artwork_url(&c.url));
+    Some(Candidate {
+        hit,
+        kind: Kind::Video,
+        channel,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn hit(id: &str, source: SearchSource) -> SearchHit {
-        let mut hit = SearchHit::new(
-            ProviderId::YouTube,
-            id.into(),
-            format!("https://www.youtube.com/watch?v={id}"),
-            "Same title".into(),
-            vec![],
-        )
-        .unwrap();
-        hit.source = Some(source);
-        hit
-    }
-    #[test]
-    fn combines_sources_by_rank_and_deduplicates_only_video_identity() {
-        let hits = combine(
-            vec![
-                hit("r-G2pKr2_n8", SearchSource::YouTubeMusic),
-                hit("aqz-KE-bpKQ", SearchSource::YouTubeMusic),
-            ],
-            vec![
-                hit("r-G2pKr2_n8", SearchSource::YouTube),
-                hit("abcdefghijk", SearchSource::YouTube),
-            ],
-            10,
-        );
-        assert_eq!(hits.len(), 3);
-        assert_eq!(hits[0].source(), Some(SearchSource::YouTubeMusic));
-        assert_eq!(hits[2].source(), Some(SearchSource::YouTube));
-    }
-    #[test]
-    fn either_source_can_supply_results_alone_and_limit_is_bounded() {
-        assert_eq!(
-            combine(vec![], vec![hit("abcdefghijk", SearchSource::YouTube)], 5).len(),
-            1
-        );
-        assert_eq!(
-            combine(
-                vec![hit("r-G2pKr2_n8", SearchSource::YouTubeMusic)],
-                vec![],
-                5
-            )
-            .len(),
-            1
-        );
-        assert_eq!(
-            combine(
-                vec![hit("r-G2pKr2_n8", SearchSource::YouTubeMusic)],
-                vec![hit("abcdefghijk", SearchSource::YouTube)],
-                1
-            )
-            .len(),
-            1
-        );
-    }
 
     fn provider(transport: innerlight::FixtureTransport) -> YouTubeMusicSearch {
         let client = innerlight::Client::builder()
@@ -263,5 +214,34 @@ mod tests {
             down.search("lofi", 5).await,
             Err(CoreError::ProviderUnavailable)
         ));
+    }
+
+    #[test]
+    fn a_verified_artist_channel_ranks_as_artist_and_a_live_row_is_dropped() {
+        let channel = innerlight::youtube::ChannelRef {
+            id: Some("UCuAXFkgsw1L7xaCfnd5JJOw".into()),
+            name: "Artist".into(),
+            verification: Verification::Artist,
+        };
+        let row = Video {
+            id: "abcdefghijk".into(),
+            title: "Song".into(),
+            channel: Some(channel.clone()),
+            duration_ms: Some(200_000),
+            thumbnails: vec![],
+            is_live: false,
+            is_short: false,
+            set_video_id: None,
+        };
+        let candidate = video_candidate(row.clone()).unwrap();
+        assert_eq!(candidate.channel, Channel::Artist);
+        assert_eq!(candidate.kind, Kind::Video);
+        assert!(
+            video_candidate(Video {
+                is_live: true,
+                ..row
+            })
+            .is_none()
+        );
     }
 }

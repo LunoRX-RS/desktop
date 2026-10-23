@@ -31,3 +31,6 @@ next-env.d.ts
 *.tsbuildinfo
 .playwright-mcp/
 src-tauri/bg_snapshot.bin
+
+# Local environment: copy .env.example to .env (the default backend URL is read at build time).
+.env

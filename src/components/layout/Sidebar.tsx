@@ -495,7 +495,7 @@ export default function Sidebar() {
     <nav
       aria-label="Primary"
       className={cx(
-        "glass flex min-h-0 shrink-0 flex-col overflow-x-hidden px-3 pb-3 transition-[width] duration-[220ms]",
+        "flex min-h-0 shrink-0 flex-col overflow-x-hidden px-3 pb-3 transition-[width] duration-[220ms]",
         EASE,
         collapsed ? "w-sidebar-collapsed" : "w-sidebar",
       )}
