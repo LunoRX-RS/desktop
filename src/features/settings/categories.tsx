@@ -15,6 +15,7 @@ import { TextStyleSettings } from "./TextStyleSettings";
 import { DiscordSettings } from "./DiscordSettings";
 import { TelemetrySettings } from "./TelemetrySettings";
 import { Inset, NoteRow, SettingRow, SkeletonRows, StatusRow, syncSummary } from "./rows";
+import { ShortcutSettings } from "./ShortcutSettings";
 
 export type CategoryKey = "general" | "playback" | "accounts" | "sync" | "shortcuts" | "about";
 
@@ -220,16 +221,13 @@ function Sync() {
 function Shortcuts({ mac }: { mac: boolean }) {
   const groups: { id: string; title: string; hint?: string; rows: [string, string][] }[] = [
     {
-      id: "settings-keys-nav",
-      title: "Navigation",
+      id: "settings-keys-fixed",
+      title: "Always the same",
       rows: [
-        ["Back and forward", "⌘[ / ⌘]"],
-        ["Collapse or expand the sidebar", "⌘B / Ctrl+B"],
-        ["Larger, smaller, reset text size", "⌘+ ⌘− ⌘0 / Ctrl+ Ctrl− Ctrl0"],
         ["Close Now Playing, the command list or a dialog", "Esc"],
+        ["Move and choose in Search and the command list", "↑ ↓ Enter"],
       ],
     },
-    { id: "settings-keys-play", title: "Playback", rows: [["Play or pause the demo (not while typing)", "Space"]] },
     {
       id: "settings-keys-maker",
       title: "Lyric Maker",
@@ -245,17 +243,10 @@ function Shortcuts({ mac }: { mac: boolean }) {
         ["Close the maker, then Now Playing", "Esc"],
       ],
     },
-    {
-      id: "settings-keys-search",
-      title: "Search",
-      rows: [
-        ["Quick search and commands", "⌘K / Ctrl+K"],
-        ["Move and choose in Search and the command list", "↑ ↓ Enter"],
-      ],
-    },
   ];
   return (
     <>
+      <ShortcutSettings />
       {groups.map((g) => (
         <Inset key={g.id} id={g.id} title={g.title}>
           {g.rows.map(([action, keys]) => (

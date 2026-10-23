@@ -317,7 +317,7 @@ Read both before UI work. Loading, empty, unavailable, unauthorized, unsupported
 | Play or pause (not while typing) | `Space` | `Space` |
 | Close Now Playing, palette or dialog | `Esc` | `Esc` |
 
-Lyric Maker and the macOS Playback menu have their own shortcuts, listed under Settings > Keyboard shortcuts.
+These are the defaults for your system. In Settings > Keyboard shortcuts you can press Change, record any combination you like, and Reset it again. Choices are stored per device, so macOS, Windows and Linux machines each keep their own. Keys are matched by physical key, so they work on any keyboard layout. Lyric Maker and the macOS Playback menu have their own shortcuts, listed on the same page.
 
 ## Quality gates and tests
 

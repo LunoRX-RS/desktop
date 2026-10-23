@@ -6,6 +6,7 @@ import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/
 import { applySavedAudio } from "../../lib/audioSettings";
 import { initHistory } from "../../lib/history";
 import { detectPlatform } from "../../lib/platform";
+import { actionFor, comboFromEvent, currentBindings, hasCommandModifier } from "../../lib/shortcuts";
 import { initTelemetry, track } from "../../lib/telemetry";
 import { initRemote } from "../../lib/remote";
 import { hydrateRecentSearches } from "../../lib/store";
@@ -49,44 +50,36 @@ function isTypingTarget(target: EventTarget | null): boolean {
   return target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT", "BUTTON"].includes(target.tagName);
 }
 
-// Keyboard shortcuts. Cmd on macOS, Ctrl elsewhere.
+// Keyboard shortcuts. The keys come from lib/shortcuts (Command on macOS, Ctrl elsewhere, changeable in Settings).
 function useGlobalKeys() {
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      const mod = e.metaKey || e.ctrlKey;
-      const s = useUi.getState();
-      if (mod && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        s.setPalette(!s.paletteOpen);
-        return;
-      }
-      if (mod && e.key === "[") {
-        e.preventDefault();
-        s.goBack();
-        return;
-      }
-      if (mod && e.key === "]") {
-        e.preventDefault();
-        s.goForward();
-        return;
-      }
-      if (mod && (e.key === "=" || e.key === "+")) { e.preventDefault(); stepAppScale(1); return; }
-      if (mod && (e.key === "-" || e.key === "_")) { e.preventDefault(); stepAppScale(-1); return; }
-      if (mod && e.key === "0") { e.preventDefault(); resetAppScale(); return; }
-      if (mod && e.key.toLowerCase() === "b") {
-        e.preventDefault();
-        s.toggleSidebar();
-        return;
-      }
-      if (e.key === " " && !mod && !s.paletteOpen && !isTypingTarget(e.target)) {
-        e.preventDefault();
-        if (usePlayback.getState().requested || usePlayback.getState().track) void togglePlayback();
-        else s.togglePlay();
-      }
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
+	useEffect(() => {
+		function onKey(e: KeyboardEvent) {
+			const combo = comboFromEvent(e);
+			if (!combo) return;
+			const action = actionFor(combo, currentBindings());
+			if (!action) return;
+			// Keys without Ctrl, Alt or Command (Space) must not fire while typing or on a focused button.
+			if (!hasCommandModifier(combo) && isTypingTarget(e.target)) return;
+			const s = useUi.getState();
+			if (action === "playPause" && s.paletteOpen) return;
+			e.preventDefault();
+			switch (action) {
+				case "palette": s.setPalette(!s.paletteOpen); break;
+				case "back": s.goBack(); break;
+				case "forward": s.goForward(); break;
+				case "toggleSidebar": s.toggleSidebar(); break;
+				case "zoomIn": stepAppScale(1); break;
+				case "zoomOut": stepAppScale(-1); break;
+				case "zoomReset": resetAppScale(); break;
+				case "playPause":
+					if (usePlayback.getState().requested || usePlayback.getState().track) void togglePlayback();
+					else s.togglePlay();
+					break;
+			}
+		}
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, []);
 }
 
 // Motion writes inline style attributes when rendered on the server, and the Tauri CSP forbids those.
