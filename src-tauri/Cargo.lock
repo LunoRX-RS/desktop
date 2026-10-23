@@ -2256,6 +2256,7 @@ dependencies = [
 [[package]]
 name = "innerlight"
 version = "0.0.1"
+source = "git+https://github.com/LunoRX-RS/innerlight#3b9eef59f9e04996beb40d5bcb40938226b602b8"
 dependencies = [
  "boa_engine",
  "reqwest 0.13.5",

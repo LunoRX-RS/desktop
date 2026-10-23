@@ -9,7 +9,7 @@ use tauri_plugin_opener::OpenerExt;
 fn dir(app: &AppHandle) -> Result<PathBuf, LrcError> {
     let path = app.path();
     path.document_dir()
-        .map(|d| d.join("LUNOR-X Lyrics"))
+        .map(|d| d.join("LunoRX Lyrics"))
         .or_else(|_| path.app_data_dir().map(|d| d.join("lyrics")))
         .map_err(|_| LrcError::StorageUnavailable)
 }

@@ -113,8 +113,8 @@ export default function SyncPanel() {
     return failed;
   }
 
-  async function signIn(email: string, secret: string) {
-    await run(() => syncSignIn(email, secret));
+  async function signIn(email: string, secret: string, antibot: string[]) {
+    await run(() => syncSignIn(email, secret, antibot[0]));
   }
 
   async function signOut() {
@@ -184,7 +184,7 @@ export default function SyncPanel() {
   if (!status) {
     return (
       <PageRoot>
-        <Screen id="sync-title" title="Sync" caption="Keep local playlists in step with your LUNOR-X account.">
+        <Screen id="sync-title" title="Sync" caption="Keep local playlists in step with your LunoRX account.">
           {error ? (
             <Inset id="sync-failed-title" title="Status">
               <NoteRow tone="bad" role="alert">
@@ -244,7 +244,7 @@ export default function SyncPanel() {
 
   return (
     <PageRoot>
-      <Screen id="sync-title" title="Sync" caption="Keep local playlists in step with your LUNOR-X account." actions={header}>
+      <Screen id="sync-title" title="Sync" caption="Keep local playlists in step with your LunoRX account." actions={header}>
         <div className="flex flex-col gap-8">
           <SyncAllResult />
           {notice && (
@@ -370,7 +370,7 @@ export default function SyncPanel() {
                 </NoteRow>
               )}
               {!signedOut && (
-                <SettingRow label="Sign out" hint="Signs out of the LUNOR-X backend on this device.">
+                <SettingRow label="Sign out" hint="Signs out of the LunoRX backend on this device.">
                   <Button disabled={busy} onClick={() => void signOut()}>
                     Sign out
                   </Button>

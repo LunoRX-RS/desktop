@@ -23,6 +23,7 @@ import {
   type LocalPlaylistDto,
   type ResolutionDto,
 } from "../../services/tauri/sync";
+import { ShareSection } from "./ShareSection";
 import { describeUpload, entriesLabel, errorText, needsUpload, useLocalPlaylists, useSyncStatus } from "./usePlaylists";
 import { Button, EmptyState, Group, GroupRow, Screen, Skeleton, StatusNote, cx } from "../../components/ui";
 
@@ -332,6 +333,9 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
 
       {syncState === "offline" && (
         <StatusNote tone="amber">No connection to the server. Changes stay on this device until it returns.</StatusNote>
+      )}
+      {selected.remoteId && !needsUpload(selected) && (
+        <ShareSection localId={selected.id} signedIn={syncState !== "signedOut"} onSignIn={() => onNavigate("login")} />
       )}
       {syncState === "signedOut" && needsUpload(selected) && (
         <StatusNote tone="blue">

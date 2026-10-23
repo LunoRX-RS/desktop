@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { Button, Screen } from "../../components/ui";
 import { useUi } from "../../lib/store";
 import {
-  syncSignIn,
   syncSignOut,
   syncStatus,
   type ErrorCategory,
@@ -12,7 +11,6 @@ import {
 } from "../../services/tauri/sync";
 import { Banner, Inset, NoteRow, PageRoot, SettingRow, SkeletonRows, Status, StatusRow, syncSummary } from "../settings/rows";
 import { CATEGORY_MESSAGES } from "../sync/SyncPanel";
-import { SignInForm } from "./SignInForm";
 
 const SIGN_OUT_REFUSED =
   "You have changes that have not been uploaded. Upload them or discard them in Sync before signing out.";
@@ -43,20 +41,6 @@ export default function AccountsScreen() {
     void reload();
   }, []);
 
-  async function signIn(email: string, secret: string) {
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      await syncSignIn(email, secret);
-      setNotice({ warn: false, text: "Signed in." });
-    } catch (err) {
-      setError(toCategory(err));
-    }
-    setBusy(false);
-    await reload();
-  }
-
   async function signOut() {
     setBusy(true);
     setError(null);
@@ -84,7 +68,7 @@ export default function AccountsScreen() {
       <Screen
         id="accounts-title"
         title="Accounts"
-        caption="Sign in to the LUNOR-X backend to sync playlists. This is not a music provider connection."
+        caption="Sign in to the LunoRX backend to sync playlists. This is not a music provider connection."
       >
         <div className="flex flex-col gap-8">
           {notice && (
@@ -123,7 +107,11 @@ export default function AccountsScreen() {
                   </SettingRow>
                 </Inset>
               )}
-              <SignInForm idPrefix="accounts" busy={busy} error={errorText} onSubmit={signIn} />
+              <Inset id="accounts-login-title" title="Account">
+                <SettingRow label="Sign in or create an account" hint="Needed to upload and share playlists. Playlists still work without one.">
+                  <Button onClick={() => navigate("login")}>Continue</Button>
+                </SettingRow>
+              </Inset>
             </>
           )}
 
@@ -141,7 +129,7 @@ export default function AccountsScreen() {
                   {errorText}
                 </NoteRow>
               )}
-              <SettingRow label="Sign out" hint={status.pendingWrites > 0 ? "Blocked while changes are unsent. Upload or discard them in Sync first." : "Signs out of the LUNOR-X backend on this device."}>
+              <SettingRow label="Sign out" hint={status.pendingWrites > 0 ? "Blocked while changes are unsent. Upload or discard them in Sync first." : "Signs out of the LunoRX backend on this device."}>
                 <Button onClick={() => navigate("sync")}>Open Sync</Button>
                 <Button
                   disabled={busy}

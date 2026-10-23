@@ -144,7 +144,7 @@ pub fn render(p: &Prepared) -> String {
         let s = p.duration_ms / 1000;
         out += &format!("[length:{:02}:{:02}]\n", s / 60, s % 60);
     }
-    out += "[by:LUNOR-X Lyric Maker]\n[re:LUNOR-X]\n";
+    out += "[by:LunoRX Lyric Maker]\n[re:LunoRX]\n";
     for l in &p.lines {
         let (s, cs) = (l.start_ms / 1000, l.start_ms % 1000 / 10);
         out += &format!("[{:02}:{:02}.{:02}]{}\n", s / 60, s % 60, cs, l.text);
@@ -494,7 +494,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             render(&p),
-            "[ti:My Song]\n[ar:A, B]\n[length:03:20]\n[by:LUNOR-X Lyric Maker]\n[re:LUNOR-X]\n\
+            "[ti:My Song]\n[ar:A, B]\n[length:03:20]\n[by:LunoRX Lyric Maker]\n[re:LunoRX]\n\
              [00:00.00]first\n[01:01.23]second\n[62:05.99]late\n"
         );
         let no_len = prepare("T", &[], 0, &[li(5, "x")]).unwrap();
@@ -556,7 +556,7 @@ mod tests {
 
     #[test]
     fn one_file_per_id_across_title_change_and_no_temp_left() {
-        let dir = tmp().join("LUNOR-X Lyrics");
+        let dir = tmp().join("LunoRX Lyrics");
         let one = [li(1000, "a")];
         let first = save(&dir, ID, &prep("Old", &one)).unwrap();
         let second = save(&dir, ID, &prep("New", &one)).unwrap();

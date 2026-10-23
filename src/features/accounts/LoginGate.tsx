@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { Button } from "../../components/ui";
 import { syncRegister, syncSignIn, syncStatus, type ErrorCategory } from "../../services/tauri/sync";
 import { CATEGORY_MESSAGES } from "../sync/SyncPanel";
-import { RegisterForm } from "./RegisterForm";
 import { SignInForm } from "./SignInForm";
 
 // After a create, the sign-in step is what refuses: an existing email gets the same 201, then a wrong-password answer.
@@ -41,7 +40,7 @@ export function LoginGate() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"signin" | "register">("signin");
+  const [mode, setMode] = useState<"signIn" | "register">("signIn");
 
   useEffect(() => {
     let active = true;
@@ -55,27 +54,18 @@ export function LoginGate() {
 
   if (!open) return null;
 
-  async function signIn(email: string, secret: string) {
+  async function submit(email: string, secret: string, antibot: string[]) {
     setBusy(true);
     setError(null);
     try {
-      await syncSignIn(email, secret);
-      setOpen(false);
-    } catch (err) {
-      setError(CATEGORY_MESSAGES[toCategory(err)]);
-    }
-    setBusy(false);
-  }
-
-  async function register(email: string, secret: string) {
-    setBusy(true);
-    setError(null);
-    try {
-      await syncRegister(email, secret);
+      if (mode === "register") await syncRegister(email, secret, antibot);
+      else await syncSignIn(email, secret, antibot[0]);
       setOpen(false);
     } catch (err) {
       const category = toCategory(err);
-      setError(category === "unauthenticated" ? REGISTER_REFUSED_SIGNIN : CATEGORY_MESSAGES[category]);
+      setError(
+        mode === "register" && category === "unauthenticated" ? REGISTER_REFUSED_SIGNIN : CATEGORY_MESSAGES[category],
+      );
     }
     setBusy(false);
   }
@@ -94,21 +84,21 @@ export function LoginGate() {
             Sync your playlists, likes and listening stats across your devices. You can also use LunoRX without an account.
           </p>
         </header>
-        {mode === "signin" ? (
-          <SignInForm idPrefix="login-gate" busy={busy} error={error} onSubmit={signIn} />
-        ) : (
-          <RegisterForm
-            idPrefix="login-gate"
-            busy={busy}
-            error={error}
-            onSubmit={register}
-            onHaveAccount={() => { setError(null); setMode("signin"); }}
-          />
-        )}
+        <SignInForm
+          idPrefix="login-gate"
+          mode={mode}
+          busy={busy}
+          error={error}
+          onSubmit={submit}
+        />
         <div className="flex flex-col items-center gap-1">
-          {mode === "signin" && (
-            <Button variant="ghost" disabled={busy} onClick={() => { setError(null); setMode("register"); }}>Create an account</Button>
-          )}
+          <Button
+            variant="ghost"
+            disabled={busy}
+            onClick={() => { setError(null); setMode(mode === "signIn" ? "register" : "signIn"); }}
+          >
+            {mode === "signIn" ? "Create an account" : "I already have an account"}
+          </Button>
           <Button variant="ghost" disabled={busy} onClick={continueWithoutAccount}>Continue without an account</Button>
         </div>
       </section>

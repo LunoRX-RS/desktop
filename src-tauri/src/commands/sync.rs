@@ -155,27 +155,37 @@ pub enum ResolutionDto {
     KeepMine,
 }
 
+// The IPC command queues antibot tokens and calls the `_locked` step directly; tests use this plain form.
+#[cfg(test)]
 pub async fn run_sign_in(
     state: &SyncEngineState,
     email: &str,
     password: &str,
 ) -> Result<SignedInDto, ErrorCategory> {
     let _net = state.net.lock().await;
-    let user = engine::sign_in(&mut Host::Shared(state), email, password).await?;
+    run_sign_in_locked(state, email, password).await
+}
+
+/// The caller holds `state.net`.
+async fn run_register_locked(
+    state: &SyncEngineState,
+    email: &str,
+    password: &str,
+) -> Result<SignedInDto, ErrorCategory> {
+    let user = engine::register(&mut Host::Shared(state), email, password).await?;
     Ok(SignedInDto {
         user_id: user.user_id,
         expires_at: user.expires_at,
     })
 }
 
-/// Creates an account and signs in with it. Same guard and network gate as sign-in.
-pub async fn run_register(
+/// The caller holds `state.net`.
+async fn run_sign_in_locked(
     state: &SyncEngineState,
     email: &str,
     password: &str,
 ) -> Result<SignedInDto, ErrorCategory> {
-    let _net = state.net.lock().await;
-    let user = engine::register(&mut Host::Shared(state), email, password).await?;
+    let user = engine::sign_in(&mut Host::Shared(state), email, password).await?;
     Ok(SignedInDto {
         user_id: user.user_id,
         expires_at: user.expires_at,
@@ -320,6 +330,59 @@ pub async fn run_remove_local_entry(
 
 /// Returns how many queued writes the server accepted.
 /// Returns how many queued writes the server accepted.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShareLinkDto {
+    pub id: String,
+    /// Contains the share token. Shown to the user once and never logged.
+    pub url: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShareDto {
+    pub id: String,
+    pub created_at: String,
+    pub active: bool,
+}
+
+pub async fn run_share_playlist(
+    state: &SyncEngineState,
+    local_id: &str,
+) -> Result<ShareLinkDto, ErrorCategory> {
+    let _net = state.net.lock().await;
+    let link = engine::share(&mut Host::Shared(state), local_id).await?;
+    Ok(ShareLinkDto {
+        id: link.id,
+        url: link.url,
+    })
+}
+
+pub async fn run_list_shares(
+    state: &SyncEngineState,
+    local_id: &str,
+) -> Result<Vec<ShareDto>, ErrorCategory> {
+    let _net = state.net.lock().await;
+    let shares = engine::list_shares(&mut Host::Shared(state), local_id).await?;
+    Ok(shares
+        .into_iter()
+        .map(|(id, created_at, active)| ShareDto {
+            id,
+            created_at,
+            active,
+        })
+        .collect())
+}
+
+pub async fn run_revoke_share(
+    state: &SyncEngineState,
+    local_id: &str,
+    share: &str,
+) -> Result<(), ErrorCategory> {
+    let _net = state.net.lock().await;
+    engine::revoke_share(&mut Host::Shared(state), local_id, share).await
+}
+
 pub async fn run_flush_pending(state: &SyncEngineState) -> Result<usize, ErrorCategory> {
     let _net = state.net.lock().await;
     engine::flush_pending(&mut Host::Shared(state)).await
@@ -393,13 +456,34 @@ pub async fn run_resolve_conflict(
     engine::resolve_conflict(&mut Host::Shared(state), playlist_id, resolution).await
 }
 
-#[tauri::command]
-pub async fn sync_sign_in(
-    state: State<'_, SyncEngineState>,
-    email: String,
-    password: String,
-) -> Result<SignedInDto, ErrorCategory> {
-    run_sign_in(&state, &email, &password).await
+/// Cloudflare Turnstile tokens are at most 2048 characters of letters, digits, `.`, `_` and `-`.
+fn antibot_tokens(tokens: [Option<String>; 2]) -> Result<Vec<String>, ErrorCategory> {
+    let tokens: Vec<String> = tokens.into_iter().flatten().collect();
+    let ok = |t: &String| {
+        !t.is_empty()
+            && t.len() <= 2048
+            && t.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+    };
+    if tokens.iter().all(ok) {
+        Ok(tokens)
+    } else {
+        Err(ErrorCategory::Validation)
+    }
+}
+
+/// Queues the tokens, runs the sign-in step, and always drops tokens it did not use.
+async fn with_antibot<T>(
+    state: &SyncEngineState,
+    tokens: Vec<String>,
+    run: impl std::future::Future<Output = Result<T, ErrorCategory>>,
+) -> Result<T, ErrorCategory> {
+    let _net = state.net.lock().await;
+    engine::set_antibot(&mut Host::Shared(state), tokens).await?;
+    let out = run.await;
+    // Best effort: a token is single use, so a leftover is useless to the next call.
+    let _ = engine::set_antibot(&mut Host::Shared(state), Vec::new()).await;
+    out
 }
 
 #[tauri::command]
@@ -407,8 +491,33 @@ pub async fn sync_register(
     state: State<'_, SyncEngineState>,
     email: String,
     password: String,
+    register_token: Option<String>,
+    login_token: Option<String>,
 ) -> Result<SignedInDto, ErrorCategory> {
-    run_register(&state, &email, &password).await
+    let tokens = antibot_tokens([register_token, login_token])?;
+    // run_register takes the network lock itself, so queue and run under one hold of it instead.
+    with_antibot(
+        &state,
+        tokens,
+        run_register_locked(&state, &email, &password),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn sync_sign_in(
+    state: State<'_, SyncEngineState>,
+    email: String,
+    password: String,
+    token: Option<String>,
+) -> Result<SignedInDto, ErrorCategory> {
+    let tokens = antibot_tokens([token, None])?;
+    with_antibot(
+        &state,
+        tokens,
+        run_sign_in_locked(&state, &email, &password),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -506,6 +615,31 @@ pub async fn sync_remove_local_entry(
     index: usize,
 ) -> Result<(), ErrorCategory> {
     run_remove_local_entry(&state, &local_id, index).await
+}
+
+#[tauri::command]
+pub async fn sync_share_playlist(
+    state: State<'_, SyncEngineState>,
+    local_id: String,
+) -> Result<ShareLinkDto, ErrorCategory> {
+    run_share_playlist(&state, &local_id).await
+}
+
+#[tauri::command]
+pub async fn sync_list_shares(
+    state: State<'_, SyncEngineState>,
+    local_id: String,
+) -> Result<Vec<ShareDto>, ErrorCategory> {
+    run_list_shares(&state, &local_id).await
+}
+
+#[tauri::command]
+pub async fn sync_revoke_share(
+    state: State<'_, SyncEngineState>,
+    local_id: String,
+    share_id: String,
+) -> Result<(), ErrorCategory> {
+    run_revoke_share(&state, &local_id, &share_id).await
 }
 
 #[tauri::command]

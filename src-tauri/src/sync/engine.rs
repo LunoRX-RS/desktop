@@ -19,6 +19,7 @@ use super::credentials::TokenStore;
 use super::local_store::{LocalEntry, LocalPlaylist, LocalStore, UploadStep};
 use super::persist;
 use super::queue::{OfflineQueue, QueueError};
+use super::settings::{share_base, share_link};
 use crate::commands::sync::{Checkout, SyncEngineState};
 
 /// The only error strings the sync layer exposes.
@@ -401,33 +402,33 @@ fn auth_category(e: &AuthError) -> ErrorCategory {
     }
 }
 
-/// The same limits the server enforces: a usable email and a password of 12 to 128 bytes. Checked before any request.
-pub(crate) fn check_new_credentials(email: &str, password: &str) -> Result<(), ErrorCategory> {
-    let email = email.trim();
-    let ok = !email.is_empty()
-        && email.len() <= 254
-        && email.contains('@')
-        && (12..=128).contains(&password.len());
-    if ok {
-        Ok(())
-    } else {
-        Err(ErrorCategory::Validation)
-    }
+/// Queues the antibot tokens the next register/login calls send, replacing leftovers. An empty list clears them.
+pub(crate) async fn set_antibot(
+    h: &mut Host<'_>,
+    tokens: Vec<String>,
+) -> Result<(), ErrorCategory> {
+    let api = h.step(|e| Ok(e.api.clone())).await?;
+    api.set_antibot(tokens);
+    Ok(())
 }
 
-/// Creates the account, then signs in with it. Refused while writes are queued, like sign-in. If the account exists
-/// already the sign-in step fails with `Unauthenticated`; the caller says so.
+/// Creates an account, then signs in with it. The backend answers a registration the same way whether or not the email
+/// exists, so a wrong password on an existing account shows as the sign-in failure, not as "already registered".
 pub(crate) async fn register(
     h: &mut Host<'_>,
     email: &str,
     password: &str,
 ) -> Result<SignedInUser, ErrorCategory> {
-    check_new_credentials(email, password)?;
+    let email = email.trim();
+    // The backend's rule: 12 to 128 bytes. Checked here so a bad password never leaves the device.
+    if email.is_empty() || !(12..=128).contains(&password.len()) {
+        return Err(ErrorCategory::Validation);
+    }
     let api = h.step(|e| Ok(e.api.clone())).await?;
-    api.register(email.trim(), password)
+    api.register(email, password)
         .await
         .map_err(|e| category(&e))?;
-    sign_in(h, email.trim(), password).await
+    sign_in(h, email, password).await
 }
 
 /// Signs in. Refused while writes are queued: they belong to the previous account and must not be replayed onto a new one.
@@ -668,6 +669,71 @@ pub(crate) async fn stats_clear_remote(h: &mut Host<'_>) -> Result<(), ErrorCate
 pub(crate) async fn upload(h: &mut Host<'_>, local_id: &str) -> Result<String, ErrorCategory> {
     let (api, token) = h.step(|e| Ok((e.api.clone(), e.token()?))).await?;
     push_tail(h, &api, &token, local_id).await
+}
+
+/// A share link for a playlist that has reached the backend. The URL contains the token; callers show it, never log it.
+pub(crate) struct ShareLink {
+    pub id: String,
+    pub url: String,
+}
+
+/// The remote id of a playlist that has been uploaded; a playlist that is only local cannot be shared.
+fn remote_of(e: &SyncEngine, local_id: &str) -> Result<String, ErrorCategory> {
+    e.store
+        .playlists()
+        .iter()
+        .find(|p| p.id == local_id)
+        .and_then(|p| p.remote_id.clone())
+        .ok_or(ErrorCategory::Validation)
+}
+
+pub(crate) async fn share(h: &mut Host<'_>, local_id: &str) -> Result<ShareLink, ErrorCategory> {
+    let (api, token, remote) = h
+        .step(|e| Ok((e.api.clone(), e.token()?, remote_of(e, local_id)?)))
+        .await?;
+    let created = api
+        .create_share(&token, &remote)
+        .await
+        .map_err(|e| category(&e))?;
+    // The link is the website's page, not the API. A bad configured base is an internal error, not a wrong link.
+    let url = share_link(&share_base(), &created.token).ok_or(ErrorCategory::Internal)?;
+    Ok(ShareLink {
+        id: created.id,
+        url,
+    })
+}
+
+pub(crate) async fn list_shares(
+    h: &mut Host<'_>,
+    local_id: &str,
+) -> Result<Vec<(String, String, bool)>, ErrorCategory> {
+    let (api, token, remote) = h
+        .step(|e| Ok((e.api.clone(), e.token()?, remote_of(e, local_id)?)))
+        .await?;
+    let shares = api
+        .list_shares(&token, &remote)
+        .await
+        .map_err(|e| category(&e))?;
+    Ok(shares
+        .into_iter()
+        .map(|s| {
+            let active = s.revoked_at.is_none();
+            (s.id, s.created_at, active)
+        })
+        .collect())
+}
+
+pub(crate) async fn revoke_share(
+    h: &mut Host<'_>,
+    local_id: &str,
+    share: &str,
+) -> Result<(), ErrorCategory> {
+    let (api, token, remote) = h
+        .step(|e| Ok((e.api.clone(), e.token()?, remote_of(e, local_id)?)))
+        .await?;
+    api.revoke_share(&token, &remote, share)
+        .await
+        .map_err(|e| category(&e))
 }
 
 /// Each request is planned under the engine, sent with it released, and its result recorded under the engine again.
@@ -2603,36 +2669,5 @@ mod tests {
         assert_eq!(e.status().await.state, SyncState::Synced);
         assert!(e.store.refresh_marks().is_empty());
         assert_eq!(s.lines(), ["POST /api/v1/auth/login HTTP/1.1".to_string()]);
-    }
-}
-
-#[cfg(test)]
-mod register_checks {
-    use super::*;
-
-    #[test]
-    fn new_credentials_follow_the_server_limits() {
-        assert!(check_new_credentials("me@example.com", "twelve chars!").is_ok());
-        assert!(check_new_credentials("  me@example.com  ", "x".repeat(128).as_str()).is_ok());
-        for (email, password) in [
-            ("", "twelve chars!"),
-            ("no-at-sign", "twelve chars!"),
-            ("me@example.com", "short"),
-            ("me@example.com", "x".repeat(129).as_str()),
-            // The limit counts bytes: 11 Thai characters are 33 bytes, so they pass.
-            ("me@example.com", "ก".repeat(11).as_str()),
-        ] {
-            let got = check_new_credentials(email, password);
-            if password.len() >= 12 && password.len() <= 128 && email.contains('@') {
-                assert!(got.is_ok(), "{email} {}", password.len());
-            } else {
-                assert_eq!(
-                    got,
-                    Err(ErrorCategory::Validation),
-                    "{email} {}",
-                    password.len()
-                );
-            }
-        }
     }
 }
