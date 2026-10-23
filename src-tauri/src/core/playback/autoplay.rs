@@ -7,7 +7,10 @@ use super::{
     extract::valid_id,
     state::PlaybackState,
 };
-use crate::core::domain::{ProviderId, TrackReference};
+use crate::core::{
+    domain::{ProviderId, TrackReference},
+    yt::Yt,
+};
 use std::{collections::VecDeque, sync::Arc, time::Duration};
 use tokio::sync::{Mutex, watch};
 
@@ -192,7 +195,7 @@ fn eligible(id: &str, history: &VecDeque<String>) -> bool {
 }
 async fn session(
     engine: Arc<Mutex<PlaybackEngine>>,
-    pipe: rustypipe::client::RustyPipe,
+    yt: Yt,
     cache: Arc<DiskCache>,
     audio: AudioControl,
     mut reports: watch::Receiver<u64>,
@@ -222,7 +225,7 @@ async fn session(
             .unwrap_or_default();
         // A playlist or album plays through first; related tracks come in only once it is used up.
         if radio && repeat != "one" && (queue.is_empty() || (!list && queue.len() < 10)) {
-            queue = related(&pipe, &seed, &history, queue).await;
+            queue = related(&yt, &seed, &history, queue).await;
         }
         if queue.is_empty() && repeat == "all" && !context.is_empty() {
             queue = context.iter().skip(1).cloned().collect();
@@ -243,7 +246,7 @@ async fn session(
             // Keep the file alive until Load acquires it, including when cache quota is tight.
             if let Ok(Ok(file)) = tokio::time::timeout(
                 Duration::from_secs(90),
-                cache.ensure(&pipe, track.clone(), audio.settings().quality),
+                cache.ensure(&yt, track.clone(), audio.settings().quality),
             )
             .await
             {
@@ -310,36 +313,35 @@ fn append(
     }
 }
 /// Bounded radio pagination; returns partial results when the source is exhausted or unavailable.
+/// The radio answer has no next-page handle, so each further page is the radio of the last queued track not used as a seed yet.
 pub async fn related(
-    pipe: &rustypipe::client::RustyPipe,
+    yt: &Yt,
     seed: &str,
     history: &VecDeque<String>,
     mut queue: Vec<OfflineTrack>,
 ) -> Vec<OfflineTrack> {
     queue.truncate(QUEUE_SIZE);
     let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
-    let client = pipe.query();
-    let Ok(Ok(mut page)) =
-        tokio::time::timeout(Duration::from_secs(14), client.music_radio_track(seed)).await
+    let music = yt.music();
+    let Ok(Ok(mut page)) = tokio::time::timeout(Duration::from_secs(14), music.radio(seed)).await
     else {
         return queue;
     };
     let mut seeds = std::collections::HashSet::from([seed.to_owned()]);
     for page_index in 0..5 {
-        let items = std::mem::take(&mut page.items)
+        let items = std::mem::take(&mut page.queue)
             .into_iter()
-            .filter(|t| t.track_type != rustypipe::model::TrackType::Episode)
             .map(|t| OfflineTrack {
                 provider: "YouTube".into(),
                 id: t.id,
-                title: t.name,
+                title: t.title,
                 artists: t.artists.into_iter().map(|a| a.name).collect(),
                 artwork_url: t
-                    .cover
+                    .thumbnails
                     .into_iter()
                     .max_by_key(|c| c.width)
                     .and_then(|c| super::track_info::artwork_url(&c.url)),
-                duration_ms: t.duration.map(|d| i64::from(d) * 1000),
+                duration_ms: t.duration_ms.and_then(|d| i64::try_from(d).ok()),
             });
         append(&mut queue, items, history);
         if queue.len() >= QUEUE_SIZE || page_index == 4 {
@@ -351,25 +353,18 @@ pub async fn related(
         if remaining.is_zero() {
             break;
         }
-        if page.ctoken.is_some() {
-            match tokio::time::timeout(remaining, page.next(&client)).await {
-                Ok(Ok(Some(next))) => page = next,
-                _ => break,
-            }
-        } else {
-            let Some(seed) = queue
-                .iter()
-                .rev()
-                .find(|t| !seeds.contains(&t.id))
-                .map(|t| t.id.clone())
-            else {
-                break;
-            };
-            seeds.insert(seed.clone());
-            match tokio::time::timeout(remaining, client.music_radio_track(&seed)).await {
-                Ok(Ok(next)) => page = next,
-                _ => break,
-            }
+        let Some(seed) = queue
+            .iter()
+            .rev()
+            .find(|t| !seeds.contains(&t.id))
+            .map(|t| t.id.clone())
+        else {
+            break;
+        };
+        seeds.insert(seed.clone());
+        match tokio::time::timeout(remaining, music.radio(&seed)).await {
+            Ok(Ok(next)) => page = next,
+            _ => break,
         }
     }
     queue
@@ -422,13 +417,13 @@ async fn advance(player: &mut PlaybackEngine, seed: &str, next: &OfflineTrack) -
 }
 pub async fn run(
     engine: Arc<Mutex<PlaybackEngine>>,
-    pipe: rustypipe::client::RustyPipe,
+    yt: Yt,
     cache: Arc<DiskCache>,
     audio: AudioControl,
     reports: watch::Receiver<u64>,
     state: Status,
 ) {
-    session(engine, pipe, cache, audio, reports, state.clone()).await;
+    session(engine, yt, cache, audio, reports, state.clone()).await;
     let radio = state.lock().map(|s| s.radio).unwrap_or(true);
     // With autoplay off, running out of tracks is the normal end, not a failure.
     status(&state, if radio { "unavailable" } else { "idle" }, None);

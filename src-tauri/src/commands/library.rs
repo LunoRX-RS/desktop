@@ -97,7 +97,7 @@ pub async fn library_artist(
         .try_acquire()
         .map_err(|_| LibraryError::Unavailable)?;
     crate::core::library::profile(
-        youtube.pipe.as_ref().ok_or(LibraryError::Unavailable)?,
+        youtube.yt.as_ref().ok_or(LibraryError::Unavailable)?,
         provider,
         &id,
     )
@@ -117,7 +117,7 @@ pub async fn library_album(
         .try_acquire()
         .map_err(|_| LibraryError::Unavailable)?;
     crate::core::library::album(
-        youtube.pipe.as_ref().ok_or(LibraryError::Unavailable)?,
+        youtube.yt.as_ref().ok_or(LibraryError::Unavailable)?,
         provider,
         &id,
     )

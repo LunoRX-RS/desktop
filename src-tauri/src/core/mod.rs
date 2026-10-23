@@ -6,6 +6,7 @@ pub mod playlist;
 pub mod queue;
 pub mod registry;
 pub mod search;
+pub mod yt;
 
 pub mod analytics;
 pub mod library;

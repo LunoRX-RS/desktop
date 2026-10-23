@@ -3,8 +3,11 @@ use super::{
     audio::AudioQuality,
     extract::{self, ResolvedAudio},
 };
+use crate::core::{
+    errors::{HostRejectKind, PlaybackErrorKind},
+    yt::Yt,
+};
 use base64::{Engine, engine::general_purpose::STANDARD};
-use rustypipe::client::RustyPipe;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
@@ -33,6 +36,8 @@ pub enum CacheError {
     Busy,
     Unavailable,
     InUse,
+    /// YouTube asked for a sign-in or verification instead of giving a stream.
+    VerificationRequired,
 }
 type Result<T> = std::result::Result<T, CacheError>;
 
@@ -423,7 +428,7 @@ impl DiskCache {
     }
     pub async fn ensure(
         &self,
-        pipe: &RustyPipe,
+        yt: &Yt,
         mut track: OfflineTrack,
         q: AudioQuality,
     ) -> Result<Arc<CachedFile>> {
@@ -454,9 +459,14 @@ impl DiskCache {
             return Ok(file);
         }
         let _permit = self.downloads.acquire().await.map_err(storage)?;
-        let audio = extract::resolve_with_quality(pipe, &track.id, q)
+        let audio = extract::resolve_with_quality(yt, &track.id, q)
             .await
-            .map_err(|_| CacheError::Download)?;
+            .map_err(|kind| match kind {
+                PlaybackErrorKind::HostRejected(HostRejectKind::VerificationRequired) => {
+                    CacheError::VerificationRequired
+                }
+                _ => CacheError::Download,
+            })?;
         if audio.size > MAX_TRACK {
             return Err(CacheError::TooLarge);
         }
@@ -800,7 +810,7 @@ impl OfflineManager {
     }
     pub fn start(
         self: &Arc<Self>,
-        pipe: RustyPipe,
+        yt: Yt,
         id: String,
         name: String,
         tracks: Vec<OfflineTrack>,
@@ -834,11 +844,11 @@ impl OfflineManager {
                     let mut tasks = JoinSet::new();
                     for track in chunk {
                         let cache = manager.cache.clone();
-                        let pipe = pipe.clone();
+                        let yt = yt.clone();
                         let track = track.clone();
                         tasks.spawn(async move {
                             let id = track.id.clone();
-                            (id, cache.ensure(&pipe, track, q).await.map(|_| ()))
+                            (id, cache.ensure(&yt, track, q).await.map(|_| ()))
                         });
                     }
                     while let Some(result) = tasks.join_next().await {
@@ -1033,15 +1043,10 @@ mod tests {
         let dir = Fixture::new();
         let cache = dir.open();
         seed(&cache, "aaaaaaaaaaa", 100, 1);
-        let pipe = RustyPipe::builder()
-            .no_storage()
-            .no_reporter()
-            .timeout(Duration::from_nanos(1))
-            .build()
-            .unwrap();
+        let yt = Yt::new(Duration::from_nanos(1)).unwrap();
         assert_eq!(
             cache
-                .ensure(&pipe, track("aaaaaaaaaaa"), AudioQuality::High)
+                .ensure(&yt, track("aaaaaaaaaaa"), AudioQuality::High)
                 .await
                 .unwrap()
                 .size,
@@ -1079,17 +1084,12 @@ mod tests {
         let changed = Arc::new(tokio::sync::Notify::new());
         let callback = changed.clone();
         let manager = OfflineManager::new(cache, Arc::new(move || callback.notify_one()));
-        let pipe = RustyPipe::builder()
-            .no_storage()
-            .no_reporter()
-            .timeout(Duration::from_nanos(1))
-            .build()
-            .unwrap();
+        let yt = Yt::new(Duration::from_nanos(1)).unwrap();
         let mut unsupported = track("spotify-id");
         unsupported.provider = "Spotify".into();
         manager
             .start(
-                pipe.clone(),
+                yt.clone(),
                 "one".into(),
                 "Playlist".into(),
                 vec![track("aaaaaaaaaaa"), track("aaaaaaaaaaa"), unsupported],
@@ -1098,7 +1098,7 @@ mod tests {
             .unwrap();
         assert!(matches!(
             manager.start(
-                pipe.clone(),
+                yt.clone(),
                 "two".into(),
                 "Other".into(),
                 vec![],
@@ -1122,7 +1122,7 @@ mod tests {
         assert_eq!(status.used_bytes, 100);
         manager
             .start(
-                pipe,
+                yt,
                 "cancel".into(),
                 "Cancel".into(),
                 vec![track("bbbbbbbbbbb")],

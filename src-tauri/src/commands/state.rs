@@ -23,12 +23,12 @@ pub struct SearchState {
 
 impl SearchState {
     // Production uses direct YouTube Music search; the Data API adapter remains for compatibility tests.
-    pub fn production(pipe: Option<rustypipe::client::RustyPipe>) -> Self {
+    pub fn production(yt: Option<crate::core::yt::Yt>) -> Self {
         let mut state = Self::with_key_store(Arc::new(KeyringKeyStore::youtube()));
-        if let Some(pipe) = pipe {
+        if let Some(yt) = yt {
             let engine = state.engine.get_mut();
             engine.providers = vec![Arc::new(
-                crate::core::search::youtube_music::YouTubeMusicSearch::new(pipe),
+                crate::core::search::youtube_music::YouTubeMusicSearch::new(yt),
             )];
             engine
                 .registry

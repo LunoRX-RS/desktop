@@ -160,19 +160,44 @@ pub fn set_like_push(app: &AppHandle, enabled: bool) -> LikePushDto {
     like_push_state(app)
 }
 
+/// Queues a change when sending is on and the queue has room (or already holds this id). True when it was queued.
+fn enqueue(outbox: &mut Outbox, video_id: &str, liked: bool) -> bool {
+    if !outbox.enabled
+        || (outbox.pending.len() >= OUTBOX_MAX && !outbox.pending.contains_key(video_id))
+    {
+        return false;
+    }
+    outbox.pending.insert(video_id.to_owned(), liked);
+    true
+}
+
+/// Forgets a change once YouTube has it. A change made again while it was in flight stays for the next round.
+fn settle(outbox: &mut Outbox, video_id: &str, liked: bool) {
+    if outbox.pending.get(video_id) == Some(&liked) {
+        outbox.pending.remove(video_id);
+    }
+}
+
+/// Sends the changes in order and reports each delivered one. Stops at the first failure and keeps the rest.
+async fn deliver(
+    yt: &crate::core::yt::Yt,
+    waiting: Vec<(String, bool)>,
+    mut delivered: impl FnMut(&str, bool),
+) {
+    for (id, liked) in waiting {
+        if rate(yt, &id, liked).await.is_err() {
+            return; // offline or signed out: keep the rest for the next pass
+        }
+        delivered(&id, liked);
+    }
+}
+
 /// Called after a like or un-like is saved here. Does nothing unless the user turned sending on and the id is a video id.
 pub fn push_like(app: &AppHandle, video_id: &str, liked: bool) {
     if !crate::core::playback::extract::valid_id(video_id) {
         return;
     }
-    let queued = outbox_edit(app, |o| {
-        if !o.enabled || (o.pending.len() >= OUTBOX_MAX && !o.pending.contains_key(video_id)) {
-            return false;
-        }
-        o.pending.insert(video_id.to_owned(), liked);
-        true
-    })
-    .unwrap_or(false);
+    let queued = outbox_edit(app, |o| enqueue(o, video_id, liked)).unwrap_or(false);
     if queued {
         let app = app.clone();
         tauri::async_runtime::spawn(async move { flush_likes(&app).await });
@@ -183,7 +208,7 @@ pub fn push_like(app: &AppHandle, video_id: &str, liked: bool) {
 async fn flush_likes(app: &AppHandle) {
     let _one_at_a_time = SENDING.lock().await;
     let youtube = app.state::<YouTubeState>();
-    let Some(pipe) = youtube.pipe.clone().filter(|_| youtube.connected()) else {
+    let Some(yt) = youtube.yt.clone().filter(|_| youtube.connected()) else {
         return;
     };
     let waiting: Vec<(String, bool)> = outbox_edit(app, |o| {
@@ -192,16 +217,10 @@ async fn flush_likes(app: &AppHandle) {
     })
     .flatten()
     .unwrap_or_default();
-    for (id, liked) in waiting {
-        if rate(&pipe, &id, liked).await.is_err() {
-            return; // offline or signed out: keep the rest for the next pass
-        }
-        outbox_edit(app, |o| {
-            if o.pending.get(&id) == Some(&liked) {
-                o.pending.remove(&id);
-            }
-        });
-    }
+    deliver(&yt, waiting, |id, liked| {
+        outbox_edit(app, |o| settle(o, id, liked));
+    })
+    .await;
 }
 
 const MUSIC_MARKER: &str = "Imported from YouTube Music [";
@@ -333,9 +352,9 @@ async fn run_mode(app: &AppHandle, mode: Mode) -> Result<ImportReport, LibraryEr
 }
 
 async fn run_inner(app: &AppHandle, mode: Mode) -> Result<ImportReport, LibraryError> {
-    let pipe = app
+    let yt = app
         .state::<YouTubeState>()
-        .pipe
+        .yt
         .clone()
         .ok_or(LibraryError::Unavailable)?;
     if mode == Mode::Full {
@@ -350,7 +369,7 @@ async fn run_inner(app: &AppHandle, mode: Mode) -> Result<ImportReport, LibraryE
         HashMap::new()
     };
     flush_likes(app).await;
-    let mut import = fetch(&pipe, &known).await;
+    let mut import = fetch(&yt, &known).await;
     // A like or un-like made here and not yet delivered wins over what YouTube still says.
     let undelivered: BTreeSet<String> =
         outbox_edit(app, |o| o.pending.keys().cloned().collect()).unwrap_or_default();
@@ -487,11 +506,89 @@ pub async fn run_auto(app: &AppHandle, force: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::yt::Yt;
+    use innerlight::{Client, FixtureTransport};
+    use serde_json::json;
+    use std::sync::Arc;
+
     #[test]
     fn marker_round_trips_and_rejects_other_descriptions() {
         assert_eq!(marker_id(&marker(Origin::Music, "PL123")), Some("PL123"));
         assert_eq!(marker_id(&marker(Origin::YouTube, "WL")), Some("WL"));
         assert_eq!(marker_id("My own playlist"), None);
         assert_eq!(marker_id("Imported from YouTube Music [PL1"), None);
+    }
+
+    #[test]
+    fn changes_queue_only_when_sending_is_on_and_replace_older_ones() {
+        let mut outbox = Outbox::default();
+        assert!(!enqueue(&mut outbox, "r-G2pKr2_n8", true), "off by default");
+        outbox.enabled = true;
+        assert!(enqueue(&mut outbox, "r-G2pKr2_n8", true));
+        assert!(enqueue(&mut outbox, "r-G2pKr2_n8", false), "latest wins");
+        assert_eq!(outbox.pending.get("r-G2pKr2_n8"), Some(&false));
+        for i in 0..OUTBOX_MAX {
+            outbox.pending.insert(format!("{i:011}"), true);
+        }
+        assert!(!enqueue(&mut outbox, "aqz-KE-bpKQ", true), "full queue");
+        assert!(
+            enqueue(&mut outbox, "00000000001", false),
+            "known id still updates"
+        );
+    }
+
+    #[test]
+    fn a_change_made_again_in_flight_stays_queued() {
+        let mut outbox = Outbox {
+            enabled: true,
+            ..Default::default()
+        };
+        enqueue(&mut outbox, "r-G2pKr2_n8", true);
+        enqueue(&mut outbox, "r-G2pKr2_n8", false); // user flipped it while "true" was being sent
+        settle(&mut outbox, "r-G2pKr2_n8", true);
+        assert_eq!(outbox.pending.get("r-G2pKr2_n8"), Some(&false));
+        settle(&mut outbox, "r-G2pKr2_n8", false);
+        assert!(outbox.pending.is_empty());
+    }
+
+    #[tokio::test]
+    async fn flush_sends_in_order_reports_each_and_keeps_the_rest_after_a_failure() {
+        let transport = Arc::new(
+            FixtureTransport::new()
+                .with_match(
+                    "like/removelike",
+                    "aqz-KE-bpKQ",
+                    json!({"responseContext": {}}),
+                )
+                .with_match("like/like", "r-G2pKr2_n8", json!({"responseContext": {}}))
+                .with_raw("like/like", 500, b"{}"),
+        );
+        let client = Client::builder()
+            .transport(transport.clone())
+            .build()
+            .unwrap();
+        client.set_cookie("SAPISID=abc123; SID=x").unwrap();
+        let yt = Yt::from_client(client);
+        let waiting = vec![
+            ("r-G2pKr2_n8".to_owned(), true),
+            ("aqz-KE-bpKQ".to_owned(), false),
+            ("abcdefghijk".to_owned(), true), // the service fails this one
+            ("bbbbbbbbbbb".to_owned(), true), // never attempted
+        ];
+        let mut done = Vec::new();
+        deliver(&yt, waiting, |id, liked| done.push((id.to_owned(), liked))).await;
+        assert_eq!(
+            done,
+            [
+                ("r-G2pKr2_n8".to_owned(), true),
+                ("aqz-KE-bpKQ".to_owned(), false)
+            ]
+        );
+        let endpoints: Vec<_> = transport
+            .requests()
+            .iter()
+            .map(|r| r.endpoint.clone())
+            .collect();
+        assert_eq!(endpoints, ["like/like", "like/removelike", "like/like"]);
     }
 }

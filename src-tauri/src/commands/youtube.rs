@@ -1,6 +1,5 @@
 //! App-owned Google sign-in window. No remote IPC grants, password interception or OAuth flow.
-use crate::{commands::providers::KeyringKeyStore, sync::credentials::TokenStore};
-use rustypipe::client::RustyPipe;
+use crate::{commands::providers::KeyringKeyStore, core::yt::Yt, sync::credentials::TokenStore};
 use serde::Serialize;
 use std::{sync::Mutex, time::Duration};
 use tauri::{
@@ -38,20 +37,20 @@ pub enum ConnectionStatus {
 }
 
 pub struct YouTubeState {
-    pub pipe: Option<RustyPipe>,
+    pub yt: Option<Yt>,
     store: KeyringKeyStore,
     status: Mutex<ConnectionStatus>,
     operation: tokio::sync::Mutex<()>,
 }
 impl YouTubeState {
-    pub fn new(pipe: Option<RustyPipe>) -> Self {
-        let status = if pipe.is_some() {
+    pub fn new(yt: Option<Yt>) -> Self {
+        let status = if yt.is_some() {
             ConnectionStatus::Restoring
         } else {
             ConnectionStatus::Unavailable
         };
         Self {
-            pipe,
+            yt,
             store: KeyringKeyStore::youtube_session(),
             status: Mutex::new(status),
             operation: tokio::sync::Mutex::new(()),
@@ -64,10 +63,7 @@ impl YouTubeState {
         *self.status.lock().unwrap_or_else(|e| e.into_inner())
     }
     fn idle_status(&self) -> ConnectionStatus {
-        if self.pipe.as_ref().is_some_and(|pipe| {
-            pipe.query()
-                .auth_enabled(rustypipe::client::ClientType::DesktopMusic)
-        }) {
+        if self.yt.as_ref().is_some_and(Yt::signed_in) {
             ConnectionStatus::Connected
         } else {
             ConnectionStatus::Disconnected
@@ -80,19 +76,16 @@ impl YouTubeState {
     pub async fn restore(app: AppHandle) {
         let state = app.state::<Self>();
         let _guard = state.operation.lock().await;
-        let Some(pipe) = &state.pipe else {
+        let Some(yt) = &state.yt else {
             return;
         };
         let status = match state.store.get() {
-            Ok(Some(cookie)) => match tokio::time::timeout(
-                Duration::from_secs(20),
-                pipe.user_auth_set_cookie(cookie),
-            )
-            .await
-            {
-                Ok(Ok(())) => ConnectionStatus::Connected,
-                _ => ConnectionStatus::Expired,
-            },
+            Ok(Some(cookie)) => {
+                match tokio::time::timeout(Duration::from_secs(20), yt.connect(&cookie)).await {
+                    Ok(Ok(())) => ConnectionStatus::Connected,
+                    _ => ConnectionStatus::Expired,
+                }
+            }
             Ok(None) => ConnectionStatus::Disconnected,
             Err(_) => ConnectionStatus::StoreError,
         };
@@ -275,19 +268,15 @@ async fn capture(app: &AppHandle) -> Result<ConnectionStatus, YouTubeError> {
         );
     }
     let cookie = session_cookie(&cookies).ok_or(YouTubeError::SignInIncomplete)?;
-    let pipe = state.pipe.as_ref().ok_or(YouTubeError::Unavailable)?;
+    let yt = state.yt.as_ref().ok_or(YouTubeError::Unavailable)?;
     if !matches!(
-        tokio::time::timeout(
-            Duration::from_secs(20),
-            pipe.user_auth_set_cookie(cookie.clone())
-        )
-        .await,
+        tokio::time::timeout(Duration::from_secs(20), yt.connect(&cookie)).await,
         Ok(Ok(()))
     ) {
         return Err(YouTubeError::SessionRejected);
     }
     if state.store.set(&cookie).is_err() {
-        let _ = pipe.user_auth_remove_cookie().await;
+        yt.clear_session();
         state.publish(app, ConnectionStatus::StoreError);
         return Err(YouTubeError::StoreAccess);
     }
@@ -331,7 +320,7 @@ pub async fn youtube_connect(
 ) -> Result<ConnectionStatus, YouTubeError> {
     main_only(&window)?;
     let _guard = state.operation.lock().await;
-    if state.pipe.is_none() {
+    if state.yt.is_none() {
         return Err(YouTubeError::Unavailable);
     }
     state.publish(&app, ConnectionStatus::Connecting);
@@ -458,8 +447,8 @@ pub async fn youtube_disconnect(
     if let Some(login) = app.get_webview_window(LOGIN_WINDOW) {
         let _ = login.close();
     }
-    if let Some(pipe) = &state.pipe {
-        let _ = pipe.user_auth_remove_cookie().await;
+    if let Some(yt) = &state.yt {
+        yt.clear_session();
     }
     if state.store.clear().is_err() {
         state.publish(&app, ConnectionStatus::StoreError);

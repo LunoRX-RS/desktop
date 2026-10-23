@@ -57,9 +57,9 @@ pub fn run() {
                     .map(|dir| dir.join("listening-stats.json"))
                     .map_err(|_| core::library::LibraryError::Storage),
             ));
-            let pipe = core::playback::extract::resolver().ok();
-            app.manage(commands::state::SearchState::production(pipe.clone()));
-            app.manage(commands::youtube::YouTubeState::new(pipe));
+            let yt = core::playback::extract::resolver().ok();
+            app.manage(commands::state::SearchState::production(yt.clone()));
+            app.manage(commands::youtube::YouTubeState::new(yt));
             let offline = app
                 .path()
                 .app_data_dir()

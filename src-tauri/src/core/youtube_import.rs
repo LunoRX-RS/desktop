@@ -2,8 +2,10 @@
 //! Watch later and recent history.
 //! Reading never changes the account. The one write is `rate`, a like or un-like the user did here, sent only when they turned that on.
 //! Each section fails on its own, so a partial import still lands.
-use super::library::{LibraryError, SavedTrack, saved_track};
-use rustypipe::client::RustyPipe;
+use super::{
+    library::{LibraryError, SavedTrack, saved_track},
+    yt::{Yt, extend},
+};
 use std::{collections::HashMap, time::Duration};
 
 const LIKED_MAX: usize = 1000;
@@ -27,8 +29,13 @@ pub struct ImportedPlaylist {
 }
 
 /// A YouTube video as a saved track. Livestreams and Shorts are not music to play, so they are left out.
-fn video_track(v: rustypipe::model::VideoItem) -> Option<SavedTrack> {
-    if v.is_live || v.is_short || !super::playback::extract::valid_id(&v.id) {
+fn video_track(v: innerlight::youtube::Video) -> Option<SavedTrack> {
+    // A row with neither channel nor length is a deleted or private video: only its placeholder title is left.
+    if v.is_live
+        || v.is_short
+        || !super::playback::extract::valid_id(&v.id)
+        || (v.channel.is_none() && v.duration_ms.is_none())
+    {
         return None;
     }
     let (artists, artist_refs) = match v.channel {
@@ -36,7 +43,7 @@ fn video_track(v: rustypipe::model::VideoItem) -> Option<SavedTrack> {
             vec![c.name.clone()],
             vec![super::search::hit::ArtistRef {
                 provider: super::domain::ProviderId::YouTube,
-                id: Some(c.id).filter(|id| {
+                id: c.id.filter(|id| {
                     super::library::artist_id(&super::domain::ProviderId::YouTube, id)
                 }),
                 name: c.name,
@@ -49,15 +56,15 @@ fn video_track(v: rustypipe::model::VideoItem) -> Option<SavedTrack> {
         provider: super::domain::ProviderId::YouTube,
         provider_track_id: v.id.clone(),
         canonical_url: format!("https://www.youtube.com/watch?v={}", v.id),
-        title: v.name,
+        title: v.title,
         artists,
         artist_refs,
         artwork_url: v
-            .thumbnail
+            .thumbnails
             .into_iter()
             .max_by_key(|t| t.width)
             .and_then(|t| super::playback::track_info::artwork_url(&t.url)),
-        duration_ms: v.duration.map(|d| u64::from(d) * 1000),
+        duration_ms: v.duration_ms,
     };
     track.validate().ok().map(|()| track)
 }
@@ -76,7 +83,7 @@ pub struct Import {
 }
 
 async fn step<T>(
-    fut: impl std::future::Future<Output = Result<T, rustypipe::error::Error>>,
+    fut: impl std::future::Future<Output = Result<T, innerlight::Error>>,
 ) -> Result<T, LibraryError> {
     tokio::time::timeout(STEP_TIMEOUT, fut)
         .await
@@ -85,29 +92,42 @@ async fn step<T>(
 }
 
 /// Likes or un-likes one video on the signed-in account (`like/like`, `like/removelike`), as the YouTube site does.
-/// Needs the session cookie; rustypipe has no call for it, so this is the raw endpoint. `Err` means nothing was changed.
-pub async fn rate(pipe: &RustyPipe, video_id: &str, like: bool) -> Result<(), LibraryError> {
+/// Needs the session cookie. `Err` means nothing was changed.
+pub async fn rate(yt: &Yt, video_id: &str, like: bool) -> Result<(), LibraryError> {
     if !super::playback::extract::valid_id(video_id) {
         return Err(LibraryError::Validation);
     }
-    let endpoint = if like { "like/like" } else { "like/removelike" };
-    let body = serde_json::json!({ "target": { "videoId": video_id } });
-    step(pipe.query().authenticated().raw(
-        rustypipe::client::ClientType::DesktopMusic,
-        endpoint,
-        &body,
-    ))
-    .await
-    .map(|_| ())
+    let account = yt.account();
+    if like {
+        step(account.like_video(video_id)).await
+    } else {
+        step(account.unlike_video(video_id)).await
+    }
 }
 
-async fn liked(pipe: &RustyPipe) -> Result<(Vec<SavedTrack>, bool), LibraryError> {
-    let query = pipe.query();
-    let mut page = step(query.music_saved_tracks()).await?;
-    step(page.extend_limit(&query, LIKED_MAX)).await?;
-    let complete = page.items.len() < LIKED_MAX;
+/// The number in a count line such as "25 songs" or "1,204 videos".
+fn count_of(text: Option<&str>) -> Option<u64> {
+    let digits: String = text?.chars().filter(char::is_ascii_digit).collect();
+    digits.parse().ok().filter(|_| digits.len() <= 15)
+}
+
+async fn liked(yt: &Yt) -> Result<(Vec<SavedTrack>, bool), LibraryError> {
+    let music = yt.music();
+    let first = step(music.saved_tracks()).await?;
+    let mut items = first.items;
+    step(extend(
+        &mut items,
+        first.continuation,
+        LIKED_MAX,
+        |t| async move {
+            let page = music.saved_tracks_more(&t).await?;
+            Ok((page.items, page.continuation))
+        },
+    ))
+    .await?;
+    let complete = items.len() < LIKED_MAX;
     Ok((
-        page.items
+        items
             .into_iter()
             .take(LIKED_MAX)
             .filter_map(|t| saved_track(t, None))
@@ -116,33 +136,42 @@ async fn liked(pipe: &RustyPipe) -> Result<(Vec<SavedTrack>, bool), LibraryError
     ))
 }
 
-async fn history(pipe: &RustyPipe) -> Result<Vec<SavedTrack>, LibraryError> {
-    let query = pipe.query();
-    let page = step(query.music_history()).await?;
+async fn history(yt: &Yt) -> Result<Vec<SavedTrack>, LibraryError> {
+    let page = step(yt.music().history()).await?;
     Ok(page
         .items
         .into_iter()
         .take(HISTORY_MAX)
-        .filter_map(|h| saved_track(h.item, None))
+        .filter_map(|t| saved_track(t, None))
         .collect())
 }
 
 async fn playlists(
-    pipe: &RustyPipe,
+    yt: &Yt,
     known: &HashMap<String, u64>,
     counts: &mut HashMap<String, u64>,
 ) -> Result<Vec<ImportedPlaylist>, LibraryError> {
-    let query = pipe.query();
-    let mut saved = step(query.music_saved_playlists()).await?;
-    step(saved.extend_limit(&query, PLAYLISTS_MAX)).await?;
+    let music = yt.music();
+    let first = step(music.saved_playlists()).await?;
+    let mut saved = first.items;
+    step(extend(
+        &mut saved,
+        first.continuation,
+        PLAYLISTS_MAX,
+        |t| async move {
+            let page = music.saved_playlists_more(&t).await?;
+            Ok((page.items, page.continuation))
+        },
+    ))
+    .await?;
     let mut out = Vec::new();
+    // "LM" is the liked-songs list, which the likes section already brings over.
     for item in saved
-        .items
         .into_iter()
-        .filter(|p| !p.is_podcast)
+        .filter(|p| p.id != "LM")
         .take(PLAYLISTS_MAX)
     {
-        if let Some(n) = item.track_count {
+        if let Some(n) = count_of(item.count_text.as_deref()) {
             counts.insert(item.id.clone(), n);
             // A quick pass reads only playlists whose size changed since the last pass.
             if known.get(&item.id) == Some(&n) {
@@ -150,18 +179,25 @@ async fn playlists(
             }
         }
         // One unreadable playlist must not drop the others.
-        let Ok(mut playlist) = step(query.music_playlist(&item.id)).await else {
+        let Ok(playlist) = step(music.playlist(&item.id)).await else {
             continue;
         };
-        if step(playlist.tracks.extend_limit(&query, PLAYLIST_TRACKS_MAX))
-            .await
-            .is_err()
+        let mut items = playlist.tracks.items;
+        if step(extend(
+            &mut items,
+            playlist.tracks.continuation,
+            PLAYLIST_TRACKS_MAX,
+            |t| async move {
+                let page = music.playlist_more(&t).await?;
+                Ok((page.items, page.continuation))
+            },
+        ))
+        .await
+        .is_err()
         {
             continue;
         }
-        let tracks: Vec<SavedTrack> = playlist
-            .tracks
-            .items
+        let tracks: Vec<SavedTrack> = items
             .into_iter()
             .take(PLAYLIST_TRACKS_MAX)
             .filter_map(|t| saved_track(t, None))
@@ -169,7 +205,7 @@ async fn playlists(
         if !tracks.is_empty() {
             out.push(ImportedPlaylist {
                 id: item.id,
-                name: item.name,
+                name: item.title,
                 origin: Origin::Music,
                 tracks,
             });
@@ -178,15 +214,23 @@ async fn playlists(
     Ok(out)
 }
 
-/// `known` holds playlist sizes from the last pass; pass an empty map to read every playlist.
-async fn youtube_liked(pipe: &RustyPipe) -> Result<(Vec<SavedTrack>, bool), LibraryError> {
-    let query = pipe.query();
-    let mut list = step(query.liked_videos()).await?;
-    step(list.videos.extend_limit(&query, LIKED_MAX)).await?;
-    let complete = list.videos.items.len() < LIKED_MAX;
+async fn youtube_liked(yt: &Yt) -> Result<(Vec<SavedTrack>, bool), LibraryError> {
+    let youtube = yt.youtube();
+    let first = step(youtube.liked_videos(None)).await?;
+    let mut videos = first.items;
+    step(extend(
+        &mut videos,
+        first.continuation,
+        LIKED_MAX,
+        |t| async move {
+            let page = youtube.liked_videos(Some(&t)).await?;
+            Ok((page.items, page.continuation))
+        },
+    ))
+    .await?;
+    let complete = videos.len() < LIKED_MAX;
     Ok((
-        list.videos
-            .items
+        videos
             .into_iter()
             .take(LIKED_MAX)
             .filter_map(video_track)
@@ -195,33 +239,40 @@ async fn youtube_liked(pipe: &RustyPipe) -> Result<(Vec<SavedTrack>, bool), Libr
     ))
 }
 
-async fn youtube_history(pipe: &RustyPipe) -> Result<Vec<SavedTrack>, LibraryError> {
-    let query = pipe.query();
-    let page = step(query.history()).await?;
+async fn youtube_history(yt: &Yt) -> Result<Vec<SavedTrack>, LibraryError> {
+    let page = step(yt.youtube().history(None)).await?;
     Ok(page
         .items
         .into_iter()
         .take(HISTORY_MAX)
-        .filter_map(|h| video_track(h.item))
+        .filter_map(video_track)
         .collect())
 }
 
-async fn video_playlist(
-    query: &rustypipe::client::RustyPipeQuery,
-    id: &str,
-    watch_later: bool,
-) -> Option<Vec<SavedTrack>> {
-    let mut list = if watch_later {
-        step(query.watch_later()).await.ok()?
+async fn video_playlist(yt: &Yt, id: &str, watch_later: bool) -> Option<Vec<SavedTrack>> {
+    let youtube = yt.youtube();
+    let first = if watch_later {
+        step(youtube.watch_later(None)).await.ok()?
     } else {
-        step(query.playlist(id)).await.ok()?
+        step(youtube.playlist(id, None)).await.ok()?
     };
-    step(list.videos.extend_limit(query, PLAYLIST_TRACKS_MAX))
-        .await
-        .ok()?;
-    let tracks: Vec<SavedTrack> = list
-        .videos
-        .items
+    let mut videos = first.items;
+    step(extend(
+        &mut videos,
+        first.continuation,
+        PLAYLIST_TRACKS_MAX,
+        |t| async move {
+            let page = if watch_later {
+                youtube.watch_later(Some(&t)).await?
+            } else {
+                youtube.playlist(id, Some(&t)).await?
+            };
+            Ok((page.items, page.continuation))
+        },
+    ))
+    .await
+    .ok()?;
+    let tracks: Vec<SavedTrack> = videos
         .into_iter()
         .take(PLAYLIST_TRACKS_MAX)
         .filter_map(video_track)
@@ -231,17 +282,26 @@ async fn video_playlist(
 
 /// Saved YouTube playlists and Watch later. Playlists already read through YouTube Music (`skip`) are not read twice.
 async fn youtube_playlists(
-    pipe: &RustyPipe,
+    yt: &Yt,
     known: &HashMap<String, u64>,
     counts: &mut HashMap<String, u64>,
     skip: &std::collections::HashSet<String>,
 ) -> Result<Vec<ImportedPlaylist>, LibraryError> {
-    let query = pipe.query();
-    let mut saved = step(query.saved_playlists()).await?;
-    step(saved.extend_limit(&query, PLAYLISTS_MAX)).await?;
+    let youtube = yt.youtube();
+    let first = step(youtube.saved_playlists(None)).await?;
+    let mut saved = first.items;
+    step(extend(
+        &mut saved,
+        first.continuation,
+        PLAYLISTS_MAX,
+        |t| async move {
+            let page = youtube.saved_playlists(Some(&t)).await?;
+            Ok((page.items, page.continuation))
+        },
+    ))
+    .await?;
     let mut out = Vec::new();
     for item in saved
-        .items
         .into_iter()
         .filter(|p| !skip.contains(&p.id))
         .take(PLAYLISTS_MAX)
@@ -252,16 +312,16 @@ async fn youtube_playlists(
                 continue;
             }
         }
-        if let Some(tracks) = video_playlist(&query, &item.id, false).await {
+        if let Some(tracks) = video_playlist(yt, &item.id, false).await {
             out.push(ImportedPlaylist {
                 id: item.id,
-                name: item.name,
+                name: item.title,
                 origin: Origin::YouTube,
                 tracks,
             });
         }
     }
-    if let Some(tracks) = video_playlist(&query, "WL", true).await {
+    if let Some(tracks) = video_playlist(yt, "WL", true).await {
         out.push(ImportedPlaylist {
             id: "WL".into(),
             name: "Watch later".into(),
@@ -273,16 +333,16 @@ async fn youtube_playlists(
 }
 
 /// `known` holds playlist sizes from the last pass; pass an empty map to read every playlist.
-pub async fn fetch(pipe: &RustyPipe, known: &HashMap<String, u64>) -> Import {
+pub async fn fetch(yt: &Yt, known: &HashMap<String, u64>) -> Import {
     let mut import = Import::default();
-    match liked(pipe).await {
+    match liked(yt).await {
         Ok((v, complete)) => {
             import.liked = v;
             import.liked_complete = complete;
         }
         Err(_) => import.failed.push("likes"),
     }
-    match youtube_liked(pipe).await {
+    match youtube_liked(yt).await {
         Ok((videos, complete)) => {
             let seen: std::collections::HashSet<String> = import
                 .liked
@@ -303,22 +363,22 @@ pub async fn fetch(pipe: &RustyPipe, known: &HashMap<String, u64>) -> Import {
         }
     }
     let mut counts = HashMap::new();
-    let result = playlists(pipe, known, &mut counts).await;
+    let result = playlists(yt, known, &mut counts).await;
     match result {
         Ok(v) => import.playlists = v,
         Err(_) => import.failed.push("playlists"),
     }
     let music_ids: std::collections::HashSet<String> = counts.keys().cloned().collect();
-    match youtube_playlists(pipe, known, &mut counts, &music_ids).await {
+    match youtube_playlists(yt, known, &mut counts, &music_ids).await {
         Ok(v) => import.playlists.extend(v),
         Err(_) => import.failed.push("ytPlaylists"),
     }
     import.counts = counts;
-    match history(pipe).await {
+    match history(yt).await {
         Ok(v) => import.history = v,
         Err(_) => import.failed.push("history"),
     }
-    match youtube_history(pipe).await {
+    match youtube_history(yt).await {
         Ok(v) => {
             let seen: std::collections::HashSet<String> = import
                 .history
@@ -338,15 +398,125 @@ pub async fn fetch(pipe: &RustyPipe, known: &HashMap<String, u64>) -> Import {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use innerlight::{Client, FixtureTransport};
+    use serde_json::json;
+    use std::sync::Arc;
+
+    fn signed_in(transport: FixtureTransport) -> (Yt, Arc<FixtureTransport>) {
+        let transport = Arc::new(transport);
+        let client = Client::builder()
+            .transport(transport.clone())
+            .build()
+            .unwrap();
+        client.set_cookie("SAPISID=abc123; SID=x").unwrap();
+        (Yt::from_client(client), transport)
+    }
 
     #[tokio::test]
     async fn rate_refuses_a_bad_video_id_before_any_request() {
-        let pipe = RustyPipe::new();
+        let (yt, transport) = signed_in(FixtureTransport::new());
         for bad in ["", "short", "has space!!", "../../etc/pa"] {
             assert!(matches!(
-                rate(&pipe, bad, true).await,
+                rate(&yt, bad, true).await,
                 Err(LibraryError::Validation)
             ));
         }
+        assert!(transport.requests().is_empty());
+    }
+
+    #[tokio::test]
+    async fn rate_sends_like_and_removelike_signed_in_and_nothing_without_a_session() {
+        let (yt, transport) = signed_in(
+            FixtureTransport::new()
+                .with("like/like", json!({"responseContext": {}}))
+                .with("like/removelike", json!({"responseContext": {}})),
+        );
+        rate(&yt, "r-G2pKr2_n8", true).await.unwrap();
+        rate(&yt, "aqz-KE-bpKQ", false).await.unwrap();
+        let sent = transport.requests();
+        assert_eq!(
+            sent.iter()
+                .map(|r| (
+                    r.endpoint.as_str(),
+                    r.body["target"]["videoId"].as_str().unwrap()
+                ))
+                .collect::<Vec<_>>(),
+            [
+                ("like/like", "r-G2pKr2_n8"),
+                ("like/removelike", "aqz-KE-bpKQ")
+            ]
+        );
+        assert!(sent[0].header("authorization").is_some());
+
+        yt.clear_session();
+        assert!(rate(&yt, "r-G2pKr2_n8", true).await.is_err());
+        assert_eq!(transport.requests().len(), 2, "no request without a cookie");
+    }
+
+    #[test]
+    fn count_lines_become_numbers() {
+        assert_eq!(count_of(Some("25 songs")), Some(25));
+        assert_eq!(count_of(Some("1,204 videos")), Some(1204));
+        assert_eq!(count_of(Some("No videos")), None);
+        assert_eq!(count_of(None), None);
+    }
+
+    #[test]
+    fn deleted_private_live_and_short_rows_are_not_tracks() {
+        use innerlight::youtube::{ChannelRef, Video};
+        let video = |id: &str| Video {
+            id: id.into(),
+            title: "Title".into(),
+            channel: Some(ChannelRef {
+                id: Some("UCuAXFkgsw1L7xaCfnd5JJOw".into()),
+                name: "Channel".into(),
+            }),
+            duration_ms: Some(200_000),
+            thumbnails: vec![],
+            is_live: false,
+            is_short: false,
+            set_video_id: None,
+        };
+        let ok = video_track(video("r-G2pKr2_n8")).unwrap();
+        assert_eq!(ok.artists, ["Channel"]);
+        assert_eq!(ok.duration_ms, Some(200_000));
+        assert!(
+            video_track(Video {
+                is_live: true,
+                ..video("r-G2pKr2_n8")
+            })
+            .is_none()
+        );
+        assert!(
+            video_track(Video {
+                is_short: true,
+                ..video("r-G2pKr2_n8")
+            })
+            .is_none()
+        );
+        assert!(video_track(video("bad id")).is_none());
+        let deleted = Video {
+            channel: None,
+            duration_ms: None,
+            title: "[Deleted video]".into(),
+            ..video("r-G2pKr2_n8")
+        };
+        assert!(video_track(deleted).is_none());
+    }
+
+    #[tokio::test]
+    async fn a_failed_section_is_reported_and_the_others_still_land() {
+        // Every endpoint answers with something unreadable: each section fails on its own, nothing panics.
+        let (yt, _) = signed_in(
+            FixtureTransport::new()
+                .with("browse", json!({"unexpected": [1, 2, 3]}))
+                .with_raw("like/like", 500, b"{}"),
+        );
+        let import = fetch(&yt, &HashMap::new()).await;
+        assert!(
+            import.liked.is_empty() && import.history.is_empty() && import.playlists.is_empty()
+        );
+        assert!(!import.liked_complete);
+        assert!(import.failed.contains(&"likes") && import.failed.contains(&"history"));
     }
 }

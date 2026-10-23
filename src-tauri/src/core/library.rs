@@ -3,7 +3,9 @@ use super::{
     domain::ProviderId,
     playback::{extract, track_info::artwork_url},
     search::hit::ArtistRef,
+    yt::Yt,
 };
+use innerlight::music::AlbumKind;
 use serde::{Deserialize, Serialize};
 use std::{fs, io::Write, path::PathBuf, sync::Mutex};
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -273,7 +275,7 @@ pub struct ArtistAlbum {
 }
 /// A YouTube Music track item as a saved-track record. `fallback_cover` fills in when the item has no cover (album pages).
 pub(crate) fn saved_track(
-    t: rustypipe::model::TrackItem,
+    t: innerlight::music::Track,
     fallback_cover: Option<&str>,
 ) -> Option<SavedTrack> {
     if !extract::valid_id(&t.id) {
@@ -284,7 +286,7 @@ pub(crate) fn saved_track(
         provider: ProviderId::YouTube,
         provider_track_id: t.id.clone(),
         canonical_url: format!("https://www.youtube.com/watch?v={}", t.id),
-        title: t.name,
+        title: t.title,
         artists: t.artists.iter().map(|a| a.name.clone()).collect(),
         artist_refs: t
             .artists
@@ -296,12 +298,12 @@ pub(crate) fn saved_track(
             })
             .collect(),
         artwork_url: t
-            .cover
+            .thumbnails
             .into_iter()
             .max_by_key(|c| c.width)
             .and_then(|c| artwork_url(&c.url))
             .or_else(|| fallback_cover.and_then(artwork_url)),
-        duration_ms: t.duration.map(|d| u64::from(d) * 1000),
+        duration_ms: t.duration_ms,
     })
 }
 /// YouTube Music album ids look like `MPREb_` plus url-safe characters.
@@ -325,26 +327,19 @@ pub struct AlbumProfile {
     pub artwork_url: Option<String>,
     pub tracks: Vec<SavedTrack>,
 }
-pub async fn album(
-    pipe: &rustypipe::client::RustyPipe,
-    provider: ProviderId,
-    id: &str,
-) -> Result<AlbumProfile, LibraryError> {
+pub async fn album(yt: &Yt, provider: ProviderId, id: &str) -> Result<AlbumProfile, LibraryError> {
     if provider != ProviderId::YouTube {
         return Err(LibraryError::UnsupportedProvider);
     }
     if !album_id(&provider, id) {
         return Err(LibraryError::Validation);
     }
-    let a = tokio::time::timeout(
-        std::time::Duration::from_secs(20),
-        pipe.query().music_album(id),
-    )
-    .await
-    .map_err(|_| LibraryError::Unavailable)?
-    .map_err(|_| LibraryError::Unavailable)?;
+    let a = tokio::time::timeout(std::time::Duration::from_secs(20), yt.music().album(id))
+        .await
+        .map_err(|_| LibraryError::Unavailable)?
+        .map_err(|_| LibraryError::Unavailable)?;
     let cover = a
-        .cover
+        .thumbnails
         .into_iter()
         .max_by_key(|c| c.width)
         .and_then(|c| artwork_url(&c.url));
@@ -357,8 +352,14 @@ pub async fn album(
     Ok(AlbumProfile {
         provider,
         id: a.id,
-        name: a.name,
-        kind: format!("{:?}", a.album_type),
+        name: a.title,
+        kind: match a.kind {
+            AlbumKind::Album => "Album",
+            AlbumKind::Single => "Single",
+            AlbumKind::Ep => "Ep",
+            AlbumKind::Unknown => "",
+        }
+        .into(),
         year: a.year,
         artists: a
             .artists
@@ -373,8 +374,24 @@ pub async fn album(
         tracks,
     })
 }
+/// "1.2M subscribers", "34K", "1,234" as a number. English abbreviations only; anything else is `None`.
+fn subscriber_count(text: &str) -> Option<u64> {
+    let text = text.trim();
+    let end = text
+        .find(|c: char| !(c.is_ascii_digit() || c == '.' || c == ','))
+        .unwrap_or(text.len());
+    let number: f64 = text[..end].replace(',', "").parse().ok()?;
+    let scale = match text[end..].trim_start().chars().next() {
+        Some('K' | 'k') => 1e3,
+        Some('M' | 'm') => 1e6,
+        Some('B' | 'b') => 1e9,
+        _ => 1.0,
+    };
+    let value = (number * scale).round();
+    (value.is_finite() && (0.0..9e15).contains(&value)).then_some(value as u64)
+}
 pub async fn profile(
-    pipe: &rustypipe::client::RustyPipe,
+    yt: &Yt,
     provider: ProviderId,
     id: &str,
 ) -> Result<ArtistProfile, LibraryError> {
@@ -384,15 +401,12 @@ pub async fn profile(
     if provider != ProviderId::YouTube {
         return Err(LibraryError::UnsupportedProvider);
     }
-    let a = tokio::time::timeout(
-        std::time::Duration::from_secs(20),
-        pipe.query().music_artist(id, false),
-    )
-    .await
-    .map_err(|_| LibraryError::Unavailable)?
-    .map_err(|_| LibraryError::Unavailable)?;
+    let a = tokio::time::timeout(std::time::Duration::from_secs(20), yt.music().artist(id))
+        .await
+        .map_err(|_| LibraryError::Unavailable)?
+        .map_err(|_| LibraryError::Unavailable)?;
     let tracks = a
-        .tracks
+        .top_songs
         .into_iter()
         .take(30)
         .filter_map(|t| saved_track(t, None))
@@ -403,22 +417,23 @@ pub async fn profile(
         name: a.name,
         description: a.description,
         artwork_url: a
-            .header_image
+            .thumbnails
             .into_iter()
             .max_by_key(|c| c.width)
             .and_then(|c| artwork_url(&c.url)),
-        subscribers: a.subscriber_count,
+        subscribers: a.subscribers.as_deref().and_then(subscriber_count),
         tracks,
         albums: a
             .albums
             .into_iter()
+            .chain(a.singles)
             .take(30)
             .map(|a| ArtistAlbum {
                 id: a.id,
-                name: a.name,
+                name: a.title,
                 year: a.year,
                 artwork_url: a
-                    .cover
+                    .thumbnails
                     .into_iter()
                     .max_by_key(|c| c.width)
                     .and_then(|c| artwork_url(&c.url)),
@@ -430,6 +445,59 @@ pub async fn profile(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn subscriber_text_becomes_a_count() {
+        assert_eq!(subscriber_count("1.2M subscribers"), Some(1_200_000));
+        assert_eq!(subscriber_count("34K"), Some(34_000));
+        assert_eq!(subscriber_count("1,234 subscribers"), Some(1234));
+        assert_eq!(subscriber_count("2.5B"), Some(2_500_000_000));
+        assert_eq!(subscriber_count("No subscribers"), None);
+        assert_eq!(subscriber_count(""), None);
+        assert_eq!(subscriber_count("....M"), None);
+    }
+    #[test]
+    fn a_track_row_becomes_a_saved_track_with_the_widest_cover() {
+        use innerlight::music::{ArtistRef as MusicArtist, Thumbnail, Track, TrackKind};
+        let thumb = |url: &str, width| Thumbnail {
+            url: url.into(),
+            width,
+            height: width,
+        };
+        let row = |id: &str| Track {
+            id: id.into(),
+            title: "Song".into(),
+            artists: vec![MusicArtist {
+                id: Some("UCuAXFkgsw1L7xaCfnd5JJOw".into()),
+                name: "Artist".into(),
+            }],
+            album: None,
+            duration_ms: Some(166_000),
+            thumbnails: vec![
+                thumb("https://i.ytimg.com/vi/a/small.jpg", 60),
+                thumb("https://i.ytimg.com/vi/a/large.jpg", 544),
+                thumb("https://evil.test/huge.jpg", 9999),
+            ],
+            is_explicit: false,
+            kind: TrackKind::Audio,
+        };
+        // The widest cover is on a host the app does not accept, so the fallback cover is used.
+        let saved = saved_track(
+            row("r-G2pKr2_n8"),
+            Some("https://i.ytimg.com/vi/b/cover.jpg"),
+        )
+        .unwrap();
+        assert_eq!(saved.title, "Song");
+        assert_eq!(saved.duration_ms, Some(166_000));
+        assert_eq!(
+            saved.artist_refs[0].id.as_deref(),
+            Some("UCuAXFkgsw1L7xaCfnd5JJOw")
+        );
+        assert_eq!(
+            saved.artwork_url.as_deref(),
+            Some("https://i.ytimg.com/vi/b/cover.jpg")
+        );
+        assert!(saved_track(row("bad id"), None).is_none());
+    }
     fn track() -> SavedTrack {
         SavedTrack {
             source: None,

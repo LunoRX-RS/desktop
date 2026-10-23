@@ -9,9 +9,9 @@ use super::{
 use crate::core::{
     domain::ProviderId,
     errors::{HostRejectKind, PlaybackErrorKind},
+    yt::Yt,
 };
 use libmpv2::{Mpv, events::Event, mpv_end_file_reason};
-use rustypipe::client::RustyPipe;
 use std::{
     sync::mpsc,
     thread,
@@ -34,7 +34,7 @@ struct Request {
 }
 pub struct NativeHost {
     pub audio: AudioControl,
-    pipe: RustyPipe,
+    yt: Yt,
     cache: Option<std::sync::Arc<super::cache::DiskCache>>,
     file: tokio::sync::Mutex<Option<std::sync::Arc<super::cache::CachedFile>>>,
     sender: mpsc::SyncSender<Request>,
@@ -46,12 +46,12 @@ impl NativeHost {
         self
     }
     pub fn new(reports: UnboundedSender<NativeReport>) -> Result<Self, PlaybackErrorKind> {
-        let pipe = extract::resolver()?;
-        Self::with_pipe(pipe, reports)
+        let yt = extract::resolver()?;
+        Self::with_yt(yt, reports)
     }
 
-    pub fn with_pipe(
-        pipe: RustyPipe,
+    pub fn with_yt(
+        yt: Yt,
         reports: UnboundedSender<NativeReport>,
     ) -> Result<Self, PlaybackErrorKind> {
         let (sender, receiver) = mpsc::sync_channel(1);
@@ -97,7 +97,7 @@ impl NativeHost {
             .map_err(|_| extract::failed())??;
         Ok(Self {
             audio,
-            pipe,
+            yt,
             cache: None,
             file: tokio::sync::Mutex::new(None),
             sender,
@@ -132,7 +132,7 @@ impl PlayerHost for NativeHost {
                     if let Some(cache) = &self.cache {
                         let file = cache
                             .ensure(
-                                &self.pipe,
+                                &self.yt,
                                 super::cache::OfflineTrack {
                                     provider: "YouTube".into(),
                                     id: track.provider_track_id.clone(),
@@ -142,7 +142,14 @@ impl PlayerHost for NativeHost {
                                 settings.quality,
                             )
                             .await
-                            .map_err(|_| extract::failed())?;
+                            .map_err(|e| match e {
+                                super::cache::CacheError::VerificationRequired => {
+                                    PlaybackErrorKind::HostRejected(
+                                        HostRejectKind::VerificationRequired,
+                                    )
+                                }
+                                _ => extract::failed(),
+                            })?;
                         let url = reqwest::Url::from_file_path(&file.path)
                             .map_err(|_| extract::failed())?
                             .to_string();
@@ -150,7 +157,7 @@ impl PlayerHost for NativeHost {
                         Some(url)
                     } else {
                         let audio = extract::resolve_with_quality(
-                            &self.pipe,
+                            &self.yt,
                             &track.provider_track_id,
                             settings.quality,
                         )
