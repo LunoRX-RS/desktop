@@ -23,7 +23,7 @@ A desktop music player for YouTube Music. A Rust core handles search, playback, 
 >
 > **Third-party services.** The app talks to YouTube Music directly and, for lyrics, to several unofficial endpoints. These services have their own terms and may change, restrict or stop working without notice. You are responsible for using the app in a way that complies with the terms that apply to you. [Security model](#security-model) and [Lyrics](#lyrics) describe exactly what is sent where.
 >
-> **Limitation of liability.** The software is provided "AS IS", without warranty of any kind, and you use it at your own risk. In no event shall the authors or contributors be liable for any claim, damages or other liability, including any legal consequences, whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software or the use of or other dealings in it. You are responsible for any outcome of using this software. The [GPL-3.0 licence](LICENSE) covers this repository.
+> **Limitation of liability.** The software is provided "AS IS", without warranty of any kind, and you use it at your own risk. In no event shall the authors or contributors be liable for any claim, damages or other liability, including any legal consequences, whether in an action of contract, tort or otherwise, arising from, out of or in connection with the software or the use of or other dealings in it. You are responsible for any outcome of using this software. The [MIT licence](LICENSE) covers this repository.
 
 ## Contents
 
@@ -115,7 +115,7 @@ Three rules shape the code:
 | Linux | Runs from source on Arch Linux under Hyprland (Wayland), with playback and MPRIS media controls. Other distributions, X11 and other window managers are targets that have not been run. Installers are not verified. Sign-in needs a Secret Service (GNOME Keyring or KWallet). See [Linux notes](#linux-notes). |
 | Windows | Target. Not verified on a real machine. |
 | Release signing | macOS apps are ad-hoc signed unless signing secrets are set. Windows installers are unsigned. |
-| Licences | This repository is GPL-3.0, because it links `rustypipe` (GPL-3.0). `libmpv` is LGPL. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists every component and licence. |
+| Licences | This repository is MIT. YouTube access comes from `innerlight` (MIT, in the sibling `innerlight` repository). `libmpv` is LGPL. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists every component and licence. |
 
 ## Quick start
 
@@ -263,7 +263,7 @@ UI intent ─► player_load ─► core state machine ─► native host (libmp
 ```
 
 - The state machine rejects stale events by revision number, and the UI draws only what the core has confirmed.
-- RustyPipe resolves YouTube audio, a bounded-range loopback proxy fetches it, and libmpv plays it. This path relies on the project-owner exception described under [Security model](#security-model).
+- `innerlight` resolves YouTube audio (one standard request, the signed-in cookie when connected; a sign-in or verification challenge is reported and not worked around), a bounded-range loopback proxy fetches it, and libmpv plays it. This path relies on the project-owner exception described under [Security model](#security-model).
 - Autoplay is a single bounded radio session, and the host's confirmed end-of-file is the only thing that advances it. The next track is prepared, and its lyrics prefetched, before it is needed. Preparation has a timeout and a bounded retry.
 - Volume and seek commands are latest-wins, so dragging a slider does not queue stale commands.
 - The offline cache is a disk cache with a size limit. Playlists you keep offline are pinned and never evicted.
@@ -378,7 +378,7 @@ A release is a version tag. Pushing the tag builds the installers and publishes 
 | [SECURITY.md](SECURITY.md) | How to report a vulnerability (privately, through GitHub) |
 | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) | Components, licences and what needs attention |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community rules |
-| [LICENSE](LICENSE) | GPL-3.0, covering this repository |
+| [LICENSE](LICENSE) | MIT, covering this repository |
 
 ## Star History
 

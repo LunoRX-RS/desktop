@@ -42,6 +42,6 @@ Windows installers are not code-signed.
 
 ## Before a public release
 
-- The project is GPL-3.0 because it links `rustypipe` (GPL-3.0); `libmpv` is LGPL. Keep the source of every released build available, ship the `LICENSE` file with it, and check [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the bundled `libmpv` build's licence.
+- The project is MIT and links `innerlight` (MIT, sibling repository). `libmpv` is LGPL: ship the `LICENSE` file, keep the means to obtain `libmpv`'s source, and check [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the bundled `libmpv` build's licence.
 - The notices file ships with the source. Copy it into the installers too once the licence question is settled.
 - Run the app from each installer on a clean machine. Only the macOS bundling step has been run locally, on a debug build.
