@@ -256,12 +256,18 @@ jobs:
           gh release create "$GITHUB_REF_NAME" dist/* \
             --title "LunoRX ${GITHUB_REF_NAME#v}" \
             --generate-notes --verify-tag $flag
-      # The app reads releases/download/updates/latest.json: one fixed place that also covers pre-releases, which
-      # GitHub's "latest" link skips.
+      # Two update channels, one feed file each, on a fixed release (GitHub's "latest" link skips pre-releases):
+      #   dev.json    every tag (full releases and release candidates)
+      #   stable.json full releases only
+      # latest.json is the same as dev.json, for rc.5, which was built before the channels existed.
       - name: Point the updater at this release
         env:
           GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
         run: |
           gh release view updates >/dev/null 2>&1 || gh release create updates --title "Updater feed" \
-            --notes "Holds latest.json for the in-app updater. Not an installer." --prerelease --target "$GITHUB_SHA"
-          gh release upload updates feed/latest.json --clobber
+            --notes "Holds the update feeds (dev.json, stable.json) for the in-app updater. Not an installer." --prerelease --target "$GITHUB_SHA"
+          cp feed/latest.json feed/dev.json
+          files="feed/latest.json feed/dev.json"
+          if [ "$PRERELEASE" != "true" ]; then cp feed/latest.json feed/stable.json; files="$files feed/stable.json"; fi
+          gh release upload updates $files --clobber

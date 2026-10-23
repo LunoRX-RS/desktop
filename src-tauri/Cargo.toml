@@ -38,6 +38,7 @@ futures-util = { version = "0.3", default-features = false, features = ["sink"] 
 tauri-plugin-single-instance = "=2.5.4"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+url = "2"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

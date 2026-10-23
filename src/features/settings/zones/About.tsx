@@ -1,9 +1,10 @@
 "use client";
 
+import { useEffect } from "react";
 import pkg from "../../../../package.json";
 import { usePlayback } from "../../../lib/playback";
-import { Button } from "../../../components/ui";
-import { checkForUpdate, installUpdate, restartApp, useUpdater } from "../../../lib/updater";
+import { Button, Segmented } from "../../../components/ui";
+import { checkForUpdate, installUpdate, readChannel, restartApp, setChannel, useUpdater, type UpdateChannel } from "../../../lib/updater";
 import { Inset, NoteRow, SettingRow, StatusRow } from "../rows";
 
 export function About({ platform }: { platform: string }) {
@@ -27,6 +28,9 @@ export function About({ platform }: { platform: string }) {
 
 function UpdateRow() {
   const state = useUpdater((s) => s.state);
+  const channel = useUpdater((s) => s.channel);
+  // The About page can open before the launch check ran; read the saved choice once.
+  useEffect(() => { if (useUpdater.getState().state.kind === "idle") useUpdater.setState({ channel: readChannel() }); }, []);
   const hint =
     state.kind === "checking" ? "Checking…"
     : state.kind === "upToDate" ? "You have the latest version."
@@ -36,6 +40,17 @@ function UpdateRow() {
     : "Only updates signed by the LunoRX team are installed. Checked once at launch.";
   return (
     <>
+      <SettingRow
+        label="Update channel"
+        hint={channel === "dev" ? "Dev: pre-release builds too. Newer sooner, less tested." : "Stable: full releases only."}
+      >
+        <Segmented<UpdateChannel>
+          label="Update channel"
+          value={channel}
+          options={[{ key: "stable", label: "Stable" }, { key: "dev", label: "Dev" }]}
+          onChange={setChannel}
+        />
+      </SettingRow>
       <SettingRow label="Updates" hint={hint}>
         {state.kind === "available" ? (
           <Button variant="primary" onClick={() => void installUpdate()}>Install update</Button>

@@ -1,7 +1,9 @@
 // Self-update. Only releases signed with the project's key are accepted (public key in tauri.conf.json); the plugin
 // checks the signature before installing. Nothing installs without the user pressing Install.
 import { create } from "zustand";
-import { check, type Update } from "@tauri-apps/plugin-updater";
+import pkg from "../../package.json";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { relaunch } from "@tauri-apps/plugin-process";
 
 export type UpdateState =
@@ -13,48 +15,74 @@ export type UpdateState =
   | { kind: "installed"; version: string }
   | { kind: "failed"; message: string };
 
-let pending: Update | null = null;
+const CHANNEL_KEY = "lunorx.updateChannel";
 
-export const useUpdater = create<{ state: UpdateState; dismissed: boolean }>(() => ({ state: { kind: "idle" }, dismissed: false }));
+/** `stable`: full releases. `dev`: pre-releases too (release candidates), which can be less finished. */
+export type UpdateChannel = "stable" | "dev";
+
+/** A pre-release build follows the dev channel until the user chooses; a full release follows stable. */
+export function readChannel(): UpdateChannel {
+  try {
+    const v = localStorage.getItem(CHANNEL_KEY);
+    if (v === "stable" || v === "dev") return v;
+  } catch {
+    /* storage blocked: use the default */
+  }
+  return pkg.version.includes("-") ? "dev" : "stable";
+}
+
+export function setChannel(channel: UpdateChannel) {
+  try {
+    localStorage.setItem(CHANNEL_KEY, channel);
+  } catch {
+    /* the choice lasts for this session */
+  }
+  useUpdater.setState({ channel, dismissed: false });
+  set({ kind: "idle" });
+}
+
+type Reject = "validation" | "unavailable" | "nothingToInstall" | "installFailed";
+
+export const useUpdater = create<{ state: UpdateState; dismissed: boolean; channel: UpdateChannel }>(() => ({
+  state: { kind: "idle" },
+  dismissed: false,
+  channel: "stable",
+}));
 const set = (state: UpdateState) => useUpdater.setState({ state });
 
-/** Asks the release feed for a newer signed version. `quiet`: a failure at launch is not shown as an error. */
+/** Asks the channel's feed for a newer signed version. `quiet`: a failure at launch is not shown as an error. */
 export async function checkForUpdate(quiet = false) {
   const now = useUpdater.getState().state.kind;
   if (now === "checking" || now === "downloading" || now === "installed") return;
   set({ kind: "checking" });
   try {
-    const update = await check();
-    pending = update;
-    if (update) {
+    const found = await invoke<{ version: string; notes: string | null } | null>("update_check", { channel: useUpdater.getState().channel });
+    if (found) {
       useUpdater.setState({ dismissed: false });
-      set({ kind: "available", version: update.version, notes: update.body?.trim() || null });
+      set({ kind: "available", version: found.version, notes: found.notes });
     } else {
       set({ kind: "upToDate" });
     }
   } catch {
-    set(quiet ? { kind: "idle" } : { kind: "failed", message: "Could not check for updates. Check your connection and try again." });
+    set(quiet ? { kind: "idle" } : { kind: "failed", message: "No update information is published for this channel yet, or the connection failed. Try again later." });
   }
 }
 
-/** Downloads, verifies and installs the pending update, then the app restarts on request. */
+/** Downloads, verifies and installs the update found by the last check, then the app restarts on request. */
 export async function installUpdate() {
-  if (!pending) return;
-  const version = pending.version;
-  let total: number | null = null;
-  let done = 0;
+  const cur = useUpdater.getState().state;
+  if (cur.kind !== "available") return;
+  const version = cur.version;
   set({ kind: "downloading", version, percent: null });
+  const off = await listen<number | null>("update-progress", (e) => set({ kind: "downloading", version, percent: e.payload }));
   try {
-    await pending.downloadAndInstall((event) => {
-      if (event.event === "Started") total = event.data.contentLength ?? null;
-      else if (event.event === "Progress") {
-        done += event.data.chunkLength;
-        set({ kind: "downloading", version, percent: total ? Math.min(100, Math.round((done / total) * 100)) : null });
-      }
-    });
+    await invoke("update_install");
     set({ kind: "installed", version });
-  } catch {
-    set({ kind: "failed", message: "The update could not be installed. Nothing was changed; try again later." });
+  } catch (e) {
+    const why = e as Reject;
+    set({ kind: "failed", message: why === "installFailed" ? "The update could not be installed. Nothing was changed; try again later." : "That update is no longer available. Check again." });
+  } finally {
+    off();
   }
 }
 
@@ -64,5 +92,6 @@ export const restartApp = () => relaunch();
 export function initUpdater() {
   if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
   if (process.env.NODE_ENV !== "production") return;
+  useUpdater.setState({ channel: readChannel() });
   window.setTimeout(() => void checkForUpdate(true), 5000);
 }

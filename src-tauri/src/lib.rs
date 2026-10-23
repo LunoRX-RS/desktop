@@ -25,6 +25,7 @@ pub fn run() {
         // Self-update: signed releases only (public key in tauri.conf.json); the user confirms before installing.
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .manage(commands::update::UpdateState::default())
         .setup(|app| {
             let library_path = app
                 .path()
@@ -147,6 +148,8 @@ pub fn run() {
             commands::sync::sync_upload_playlist,
             commands::sync::sync_list_local_playlists,
             commands::sync::sync_check_playlists,
+            commands::update::update_check,
+            commands::update::update_install,
             commands::sync::sync_playlist_entries,
             commands::sync::sync_delete_local_playlist,
             commands::sync::sync_rename_local_playlist,
