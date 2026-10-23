@@ -63,6 +63,7 @@ function errorText(error: unknown): string {
   if (category === "storageInUse") return "Media storage is open in another LUNOR-X instance. Close it and restart this app.";
   if (category === "storageUnavailable") return "Media storage could not be opened. Check disk access and free space, then restart this app.";
   if (category === "unsupportedCapability") return "Native playback or media storage is unavailable. Check libmpv and local storage access.";
+  if (category === "verificationRequired") return "YouTube asked for verification; sign in with Google in Connections.";
   if (category === "timeout") return "YouTube or the audio player took too long. Try the track again.";
   if (category === "validation") return "This track has an invalid YouTube ID.";
   return "Could not load this track. Check the connection, free disk space, and audio output, then try again.";
