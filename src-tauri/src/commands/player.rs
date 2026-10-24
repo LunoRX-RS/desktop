@@ -1000,6 +1000,27 @@ pub async fn player_queue_edit(
     Ok(())
 }
 
+/// Adds more related songs to the end of the up-next list. The webview asks for them as the user scrolls down.
+#[tauri::command]
+pub async fn player_queue_more(
+    app: AppHandle,
+    state: State<'_, PlayerState>,
+) -> Result<usize, PlayerError> {
+    let Some(yt) = app
+        .state::<crate::commands::youtube::YouTubeState>()
+        .yt
+        .clone()
+    else {
+        return Err(PlayerError::new(PlayerErrorCategory::UnsupportedCapability));
+    };
+    let added = crate::core::playback::autoplay::load_more(&state.autoplay_status, &yt).await;
+    if added > 0 {
+        let dto = progress(&state).await;
+        let _ = app.emit_to("main", "core://player/progress", dto);
+    }
+    Ok(added)
+}
+
 #[tauri::command]
 pub async fn player_play(
     app: AppHandle,

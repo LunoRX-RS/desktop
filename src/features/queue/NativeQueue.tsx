@@ -1,7 +1,7 @@
 "use client";
 
 import { GripVertical, ListMusic, Loader2, X } from "lucide-react";
-import { playerQueueEdit } from "../../services/tauri/player";
+import { playerQueueEdit, playerQueueMore } from "../../services/tauri/player";
 import { attempt } from "../../lib/notice";
 import { usePlayback, playTrack } from "../../lib/playback";
 import { useUi } from "../../lib/store";
@@ -10,7 +10,7 @@ import { LikeButton } from "../../components/LibraryActions";
 import { formatDuration } from "../../lib/media";
 import { Button, EmptyState, IconButton, cx } from "../../components/ui";
 import { VibePicker } from "../../components/PlayModeButtons";
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type Ref, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type Ref, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { OfflineTrack } from "../../services/tauri/offline";
 import { addToPlaylist } from "../../lib/playlistActions";
 import { syncCreateLocalPlaylist } from "../../services/tauri/sync";
@@ -24,6 +24,8 @@ const NEXT_STATUS: Record<string, string> = {
 
 // Rows are drawn a screenful at a time. The next batch is added when a row a little before the end of what is drawn comes
 // into view, so a normal scroll never reaches the edge; only a very fast one shows the placeholder rows for a moment.
+/** The most songs core keeps up next (QUEUE_MAX in autoplay.rs); at this size there is nothing more to load. */
+const QUEUE_CAP = 500;
 const FIRST_ROWS = 12;
 const MORE_ROWS = 16;
 const LOOKAHEAD_ROWS = 6;
@@ -85,6 +87,40 @@ function PlaceholderRows({ liRef }: { liRef: Ref<HTMLLIElement> }) {
   return <li ref={liRef} aria-hidden="true" className="flex flex-col gap-2 px-2 py-2">
     {[0, 1].map((i) => <div key={i} className="flex items-center gap-3"><div className="size-10 rounded-[6px] bg-frost-200" /><div className="flex flex-1 flex-col gap-1.5"><div className="h-3 w-3/5 rounded bg-frost-200" /><div className="h-3 w-2/5 rounded bg-frost-100" /></div></div>)}
   </li>;
+}
+
+/** Loads more related songs when the end of the list scrolls into view, one request at a time. It never gives up:
+ * after an empty answer it waits a little longer each time and asks again while the end is still on screen. */
+function useLoadMore(enabled: boolean, resetKey: string | undefined, remaining: number) {
+  // State, not a plain ref: the effect below runs again when the sentinel is drawn later or replaced.
+  const [sentinel, setSentinel] = useState<HTMLLIElement | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const misses = useRef(0);
+  const inFlight = useRef(false);
+  useEffect(() => { misses.current = 0; }, [resetKey]);
+  const load = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setLoading(true);
+    let added = 0;
+    try { added = await playerQueueMore(); } catch { /* counted as a miss below */ }
+    misses.current = added > 0 ? 0 : misses.current + 1;
+    inFlight.current = false;
+    setLoading(false);
+    // Always look again once a load ends: core reports the longer queue before this call returns, so the "fewer than 30
+    // left" check may already have run while this load was in flight. After an empty answer wait a little longer each time.
+    window.setTimeout(() => setRetry((n) => n + 1), added > 0 ? 0 : Math.min(800 * 2 ** (misses.current - 1), 8000));
+  }, []);
+  useEffect(() => {
+    if (!enabled || !sentinel) return;
+    const observer = new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) void load(); }, { rootMargin: "900px" });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [enabled, sentinel, load, retry]); // not `loading`: the observer stays put while a load runs; `retry` re-arms it after an empty answer
+  // Keep a good stretch of songs ready ahead of the scroll, so the end of the list is rarely reached.
+  useEffect(() => { if (enabled && remaining < 30) void load(); }, [enabled, remaining, load, retry]);
+  return { sentinel: setSentinel, loading };
 }
 
 export default function NativeQueue() {
@@ -191,6 +227,7 @@ export default function NativeQueue() {
     els.forEach((el) => observer.observe(el));
     return () => observer.disconnect();
   }, [shown, total, lookahead, upcoming]); // upcoming: a reorder puts another row at the lookahead index
+  const more = useLoadMore(total > 0 && total < QUEUE_CAP && next.state !== "finding", track?.providerTrackId, total);
   async function saveQueue() {
     if (!track) return;
     // Read before the first await: the song can change while the playlist is being created.
@@ -255,6 +292,7 @@ export default function NativeQueue() {
               onDown={onHandleDown} onMove={onHandleMove} onUp={onHandleUp} onCancel={onHandleCancel} onKey={onHandleKey} />;
           })}
           {shown < total && <PlaceholderRows liRef={placeholder} />}
+          {shown >= total && total < QUEUE_CAP && next.state !== "finding" && <li ref={more.sentinel} className="flex h-12 items-center justify-center text-[12px] text-secondary-text"><span role="status" className="flex items-center gap-2"><Loader2 size={14} className="lx-spin" aria-hidden="true" />Loading more…</span></li>}
         </ol> : next.state !== "finding" && <p role="status" className="px-2 py-2 text-[13px] text-secondary-text">{NEXT_STATUS[next.state] ?? "Nothing after this song yet."}</p>}
 
       </section>
