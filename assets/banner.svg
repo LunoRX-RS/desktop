@@ -37,7 +37,7 @@
     <g transform="translate(72 342)"><rect width="92" height="32" rx="16" fill="#ffffff" fill-opacity="0.09"/><text x="46" y="21" text-anchor="middle" fill="#e4e4e7">Tauri 2</text></g>
     <g transform="translate(174 342)"><rect width="104" height="32" rx="16" fill="#ffffff" fill-opacity="0.09"/><text x="52" y="21" text-anchor="middle" fill="#e4e4e7">Rust 2024</text></g>
     <g transform="translate(288 342)"><rect width="116" height="32" rx="16" fill="#ffffff" fill-opacity="0.09"/><text x="58" y="21" text-anchor="middle" fill="#e4e4e7">Next.js 16</text></g>
-    <g transform="translate(414 342)"><rect width="130" height="32" rx="16" fill="#c5b4ff" fill-opacity="0.18"/><text x="65" y="21" text-anchor="middle" fill="#c5b4ff">pre-release</text></g>
+    <!-- <g transform="translate(414 342)"><rect width="130" height="32" rx="16" fill="#c5b4ff" fill-opacity="0.18"/><text x="65" y="21" text-anchor="middle" fill="#c5b4ff">pre-release</text></g> -->
   </g>
 
   <!-- right: real screenshot of the full-window lyrics view -->
