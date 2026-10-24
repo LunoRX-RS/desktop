@@ -8,12 +8,12 @@ use crate::{
         sync::SyncEngineState,
         youtube::YouTubeState,
     },
-    sync::engine::ErrorCategory,
     core::youtube_import::rate,
     core::{
         library::{LibraryError, SavedTrack},
         youtube_import::{Import, Origin, fetch},
     },
+    sync::engine::ErrorCategory,
     sync::{api::Provider, local_store::LocalEntry},
 };
 use serde::{Deserialize, Serialize};
@@ -646,8 +646,15 @@ pub async fn youtube_import_playlist_from_url(
         .state::<crate::commands::youtube::YouTubeState>()
         .yt
         .clone()
-        .filter(|_| app.state::<crate::commands::youtube::YouTubeState>().connected())
-        .unwrap_or_else(|| crate::core::yt::Yt::new(std::time::Duration::from_secs(30)).unwrap_or_else(|_| crate::core::yt::Yt::from_client(innerlight::Client::builder().build().unwrap())));
+        .filter(|_| {
+            app.state::<crate::commands::youtube::YouTubeState>()
+                .connected()
+        })
+        .unwrap_or_else(|| {
+            crate::core::yt::Yt::new(std::time::Duration::from_secs(30)).unwrap_or_else(|_| {
+                crate::core::yt::Yt::from_client(innerlight::Client::builder().build().unwrap())
+            })
+        });
     let mut videos = Vec::new();
     let mut cont: Option<String> = None;
     let mut pages = 0u32;

@@ -33,10 +33,7 @@ pub fn token_from_url(raw: &str) -> Option<String> {
         }
 
         // Web share routes: /s/{token}, /embed/{token}, /og/{token}
-        let segments: Vec<&str> = url
-            .path_segments()
-            .map(|s| s.collect())
-            .unwrap_or_default();
+        let segments: Vec<&str> = url.path_segments().map(|s| s.collect()).unwrap_or_default();
         if segments.len() >= 2 {
             let last = segments[segments.len() - 1];
             let prev = segments[segments.len() - 2];
@@ -95,7 +92,7 @@ mod tests {
     fn rejects_tokens_of_the_wrong_shape() {
         assert_eq!(token_from_url("short"), None);
         assert_eq!(
-            token_from_url(&format!("https://x.test/s/SIB1x3ILmH3J9aRSASqqls3ZR3BPfYhh2JC6OGu7Uj%2F")),
+            token_from_url("https://x.test/s/SIB1x3ILmH3J9aRSASqqls3ZR3BPfYhh2JC6OGu7Uj%2F"),
             None
         );
         assert_eq!(token_from_url("not a url"), None);
