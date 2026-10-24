@@ -435,6 +435,7 @@ pub enum PlayerErrorCategory {
     StaleOutcome,
     Internal,
     VerificationRequired,
+    MediaRefused,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -462,6 +463,9 @@ impl PlayerError {
             Internal => "playback failed",
             VerificationRequired => {
                 "YouTube asked for verification; sign in with Google in Connections"
+            }
+            MediaRefused => {
+                "the media host refused the audio bytes; YouTube serves a stream in full only to a signed-in session"
             }
         };
         Self { category, message }
@@ -495,6 +499,7 @@ fn from_core(e: &CoreError) -> PlayerError {
             PlaybackErrorKind::HostRejected(HostRejectKind::VerificationRequired) => {
                 C::VerificationRequired
             }
+            PlaybackErrorKind::HostRejected(HostRejectKind::MediaRefused) => C::MediaRefused,
             PlaybackErrorKind::StaleOutcome => C::StaleOutcome,
             PlaybackErrorKind::Validation(_) => C::Validation,
         },
@@ -1297,6 +1302,23 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&e).unwrap(),
             serde_json::json!({ "category": "hostRejected", "message": "the player rejected the request" })
+        );
+    }
+
+    #[test]
+    fn a_refused_media_host_is_its_own_category_not_a_generic_failure() {
+        let refused = from_core(&CoreError::Playback(PlaybackErrorKind::HostRejected(
+            HostRejectKind::MediaRefused,
+        )));
+        assert_eq!(refused.category, PlayerErrorCategory::MediaRefused);
+        assert!(
+            refused.message.contains("signed-in session"),
+            "{}",
+            refused.message
+        );
+        assert_eq!(
+            serde_json::to_value(&refused).unwrap()["category"],
+            "mediaRefused"
         );
     }
 

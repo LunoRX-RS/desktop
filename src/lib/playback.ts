@@ -7,6 +7,8 @@ import {
   type LoadedTrack, type PlayerProgressDto, type PlayerStateDto, type TrackInfo,
 } from "../services/tauri/player";
 import { useUi } from "./store";
+import { useDevLog } from "./devLog";
+import { useSettingsStore } from "./settingsStore";
 
 interface PlaybackUi {
   info: TrackInfo | null;
@@ -59,21 +61,39 @@ export const usePlayback = create<PlaybackUi>((set, get) => ({
 }));
 
 function errorText(error: unknown): string {
-  const category = (error as { category?: string } | null)?.category;
+  const e = error as { category?: string; message?: string } | null;
+  const category = e?.category;
+  const debug = e?.message ?? "";
+  const devMode = useSettingsStore.getState().devMode;
+  // Dev Mode appends the typed error, so a report can name the real cause instead of a paraphrase.
+  const note = devMode ? ` [debug: ${category ?? "unknown"}${debug ? `: ${debug}` : ""}]` : "";
   if (category === "storageInUse") return "Media storage is open in another LUNOR-X instance. Close it and restart this app.";
   if (category === "storageUnavailable") return "Media storage could not be opened. Check disk access and free space, then restart this app.";
   if (category === "unsupportedCapability") return "Native playback or media storage is unavailable. Check libmpv and local storage access.";
   if (category === "verificationRequired") return "YouTube asked for verification; sign in with Google in Connections.";
+  if (category === "mediaRefused") return `YouTube refused the audio bytes for this track. Sign in with Google in Connections, then try again.${note}`;
   if (category === "timeout") return "YouTube or the audio player took too long. Try the track again.";
   if (category === "validation") return "This track has an invalid YouTube ID.";
-  return "Could not load this track. Check the connection, free disk space, and audio output, then try again.";
+  if (category === "hostRejected") {
+    if (debug.includes("age") || debug.includes("Age")) return `This video is age-restricted. Sign in with Google to verify your age.${note}`;
+    if (debug.includes("region") || debug.includes("Region")) return `This video is not available in your region.${note}`;
+    if (debug.includes("sign.in") || debug.includes("verify")) return `YouTube asked for verification. Sign in with Google in Connections.${note}`;
+    return `The audio player refused this track. Try another track.${note}`;
+  }
+  return `Could not load this track. Try again.${note}`;
+}
+
+// One place records the raw failure for Dev Mode and shows the plain-words version in the Player.
+function reportFailure(where: string, error: unknown) {
+  useDevLog.getState().record(where, error);
+  usePlayback.setState({ error: errorText(error) });
 }
 
 async function run(action: () => Promise<PlayerStateDto>) {
   if (usePlayback.getState().busy) return;
   usePlayback.setState({ busy: true, error: null });
   try { usePlayback.getState().acceptState(await action()); }
-  catch (error) { usePlayback.setState({ error: errorText(error) }); }
+  catch (error) { reportFailure("player command", error); }
   finally { usePlayback.setState({ busy: false }); }
 }
 
@@ -137,7 +157,7 @@ export function seekPlayback(seconds: number) {
         const value = pendingSeek;
         pendingSeek = null;
         try { usePlayback.getState().acceptState(await playerSeek(value * 1000)); }
-        catch (error) { pendingSeek = null; usePlayback.setState({ error: errorText(error) }); }
+        catch (error) { pendingSeek = null; reportFailure("seek", error); }
       }
     } finally {
       seekInFlight = false;
@@ -178,7 +198,7 @@ export function setPlaybackVolume(volume: number) {
         const value = pendingVolume;
         pendingVolume = null;
         try { usePlayback.getState().acceptState(await playerSetVolume(value)); }
-        catch (error) { pendingVolume = null; usePlayback.setState({ error: errorText(error) }); }
+        catch (error) { pendingVolume = null; reportFailure("volume", error); }
       }
     } finally {
       volumeInFlight = false;

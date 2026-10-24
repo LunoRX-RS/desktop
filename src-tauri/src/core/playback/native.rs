@@ -148,6 +148,9 @@ impl PlayerHost for NativeHost {
                                         HostRejectKind::VerificationRequired,
                                     )
                                 }
+                                super::cache::CacheError::Refused => {
+                                    PlaybackErrorKind::HostRejected(HostRejectKind::MediaRefused)
+                                }
                                 _ => extract::failed(),
                             })?;
                         let url = reqwest::Url::from_file_path(&file.path)

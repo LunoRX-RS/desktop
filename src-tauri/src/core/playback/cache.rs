@@ -38,6 +38,8 @@ pub enum CacheError {
     InUse,
     /// YouTube asked for a sign-in or verification instead of giving a stream.
     VerificationRequired,
+    /// The media host refused the audio bytes. It serves a stream in full only to an authorised session.
+    Refused,
 }
 type Result<T> = std::result::Result<T, CacheError>;
 
@@ -703,9 +705,15 @@ async fn download(audio: &ResolvedAudio, path: &Path) -> Result<()> {
         .get(url)
         .send()
         .await
-        .map_err(|_| CacheError::Download)?
-        .error_for_status()
         .map_err(|_| CacheError::Download)?;
+    let status = response.status();
+    if !status.is_success() {
+        return Err(if matches!(status.as_u16(), 401 | 403 | 404 | 410) {
+            CacheError::Refused
+        } else {
+            CacheError::Download
+        });
+    }
     let mut options = fs::OpenOptions::new();
     options.write(true).create_new(true);
     #[cfg(unix)]
@@ -1075,6 +1083,37 @@ mod tests {
         drop(part);
         upstream.await.unwrap();
         assert!(!dir.0.join("broken.part").exists());
+    }
+    #[tokio::test]
+    async fn a_refused_download_is_reported_as_a_refusal_not_a_network_failure() {
+        use tokio::io::AsyncReadExt;
+        let dir = Fixture::new();
+        let _cache = dir.open();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/audio", listener.local_addr().unwrap());
+        let upstream = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut header = Vec::new();
+            while !header.ends_with(b"\r\n\r\n") {
+                header.push(socket.read_u8().await.unwrap());
+            }
+            socket
+                .write_all(
+                    b"HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+                )
+                .await
+                .unwrap();
+        });
+        let part = Partial(dir.0.join("refused.part"));
+        assert!(
+            matches!(
+                download(&ResolvedAudio { url, size: 10 }, &part.0).await,
+                Err(CacheError::Refused)
+            ),
+            "a refused stream is a session question, not a connectivity one"
+        );
+        drop(part);
+        upstream.await.unwrap();
     }
     #[tokio::test]
     async fn playlist_jobs_deduplicate_reuse_cache_skip_unsupported_and_cancel() {
