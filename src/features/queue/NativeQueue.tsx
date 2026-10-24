@@ -2,6 +2,7 @@
 
 import { GripVertical, ListMusic, Loader2, X } from "lucide-react";
 import { playerQueueEdit } from "../../services/tauri/player";
+import { attempt } from "../../lib/notice";
 import { usePlayback, playTrack } from "../../lib/playback";
 import { useUi } from "../../lib/store";
 import { TrackCover } from "../../components/TrackCover";
@@ -68,7 +69,7 @@ const QueueRow = memo(function QueueRow({ item, index, busy, dragging, target, d
     </button>
     <div className="flex items-center gap-1">
       <span className="text-[11px] tabular-nums text-secondary-text">{item.durationMs != null ? formatDuration(item.durationMs / 1000) : ""}</span>
-      <IconButton label={`Remove ${item.title} from the queue`} onClick={() => void playerQueueEdit({ op: "remove", id: item.id }).catch(() => {})} className="size-7"><X size={14} /></IconButton>
+      <IconButton label={`Remove ${item.title} from the queue`} onClick={() => attempt(playerQueueEdit({ op: "remove", id: item.id }), "Could not remove the song from the queue.")} className="size-7"><X size={14} /></IconButton>
       <LikeButton track={hit} />
     </div>
   </li>;

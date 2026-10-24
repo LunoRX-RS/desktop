@@ -89,6 +89,38 @@ pub struct LocalStore {
     refresh: HashSet<String>,
 }
 
+/// The first lines of a description written by a YouTube import. The marker is the last line of a description, after
+/// any text the user wrote; a later import finds its playlist again by it.
+pub const MUSIC_MARKER: &str = "Imported from YouTube Music [";
+pub const YOUTUBE_MARKER: &str = "Imported from YouTube [";
+
+/// The playlist id inside an import marker line, if `line` is one.
+pub fn marker_id(line: &str) -> Option<&str> {
+    line.strip_prefix(MUSIC_MARKER)
+        .or_else(|| line.strip_prefix(YOUTUBE_MARKER))
+        .and_then(|rest| rest.strip_suffix(']'))
+}
+
+/// Splits a description into the text the user wrote and its import marker line, if it ends with one.
+pub fn split_note(description: &str) -> (&str, Option<&str>) {
+    let (text, last) = description.rsplit_once('\n').unwrap_or(("", description));
+    if marker_id(last).is_some() {
+        (text.trim_end(), Some(last))
+    } else {
+        (description, None)
+    }
+}
+
+/// The user's text with the marker (if any) kept as the last line.
+pub fn join_note(text: Option<&str>, marker: Option<&str>) -> Option<String> {
+    match (text.filter(|t| !t.is_empty()), marker) {
+        (Some(t), Some(m)) => Some(format!("{t}\n{m}")),
+        (Some(t), None) => Some(t.to_string()),
+        (None, Some(m)) => Some(m.to_string()),
+        (None, None) => None,
+    }
+}
+
 /// Same limits as backend/src/playlists/mod.rs (name 1..=200 after trim, description <= 2000).
 const NAME_MAX: usize = 200;
 const DESCRIPTION_MAX: usize = 2000;
@@ -350,27 +382,44 @@ impl LocalStore {
         Ok(())
     }
 
-    /// Sets or clears the description of a playlist that is not on the server. An uploaded one is refused for now:
-    /// changing it there needs a queued update with a version check, like entries have.
+    /// Sets or clears the text of a playlist's description; an import marker on its last line is kept. `synced` is for
+    /// an uploaded playlist whose server copy already took the change; otherwise an uploaded one is refused.
     pub fn set_description(
         &mut self,
         local_id: &str,
-        description: Option<&str>,
+        text: Option<&str>,
+        synced: bool,
     ) -> Result<(), SyncError> {
-        let description = description.map(str::trim).filter(|d| !d.is_empty());
-        if description.is_some_and(|d| d.chars().count() > DESCRIPTION_MAX) {
+        let text = text.map(str::trim).filter(|d| !d.is_empty());
+        if text.is_some_and(|d| d.chars().count() > DESCRIPTION_MAX || marker_id(d).is_some()) {
             return Err(SyncError::Local(
                 "description must be at most 2000 characters",
             ));
         }
         let pl = self.find_mut(local_id)?;
-        if pl.remote_id.is_some() {
+        if pl.remote_id.is_some() && !synced {
             return Err(SyncError::Local(
-                "an uploaded playlist's description cannot be changed yet",
+                "an uploaded playlist's description is changed on the server first",
             ));
         }
-        pl.description = description.map(str::to_string);
+        let marker = pl
+            .description
+            .as_deref()
+            .and_then(|d| split_note(d).1.map(str::to_string));
+        pl.description = join_note(text, marker.as_deref());
         Ok(())
+    }
+
+    /// The text part of a playlist's description (without an import marker), for showing and for the server copy.
+    pub fn description_text(&self, local_id: &str) -> Option<String> {
+        self.find(local_id)
+            .ok()
+            .and_then(|p| {
+                p.description
+                    .as_deref()
+                    .map(|d| split_note(d).0.to_string())
+            })
+            .filter(|t| !t.is_empty())
     }
 
     /// Moves entries[from] so it ends up at `to`. Only for a playlist that is not on the server, since the server
@@ -458,7 +507,12 @@ impl LocalStore {
         let Some(remote) = pl.remote_id.clone() else {
             return Ok(UploadStep::Create {
                 name: pl.name.clone(),
-                description: pl.description.clone(),
+                // The import marker is for this device's importer; the server copy shows only the user's text.
+                description: pl
+                    .description
+                    .as_deref()
+                    .map(|d| split_note(d).0.to_string())
+                    .filter(|t| !t.is_empty()),
             });
         };
         // Queued adds (the last `queued` entries) are sent by the queue, never here.
@@ -672,24 +726,60 @@ mod tests {
     }
 
     #[test]
-    fn a_local_description_is_trimmed_cleared_and_bounded_and_an_uploaded_one_is_refused() {
+    fn a_description_is_trimmed_cleared_bounded_and_keeps_an_import_marker() {
         let mut store = LocalStore::default();
         let id = store.create_local("P", None).unwrap();
-        store.set_description(&id, Some("  my notes \n")).unwrap();
+        store
+            .set_description(&id, Some("  my notes \n"), false)
+            .unwrap();
         assert_eq!(
             store.playlists()[0].description.as_deref(),
             Some("my notes")
         );
-        store.set_description(&id, Some("   ")).unwrap();
+        store.set_description(&id, Some("   "), false).unwrap();
         assert_eq!(store.playlists()[0].description, None);
-        store.set_description(&id, Some("x")).unwrap();
-        store.set_description(&id, None).unwrap();
-        assert_eq!(store.playlists()[0].description, None);
-        assert!(store.set_description(&id, Some(&"a".repeat(2001))).is_err());
-        assert!(store.set_description(&id, Some(&"ก".repeat(2000))).is_ok());
-        assert!(store.set_description("missing", Some("x")).is_err());
+        assert!(
+            store
+                .set_description(&id, Some(&"a".repeat(2001)), false)
+                .is_err()
+        );
+        assert!(
+            store
+                .set_description(&id, Some(&"ก".repeat(2000)), false)
+                .is_ok()
+        );
+        assert!(store.set_description("missing", Some("x"), false).is_err());
+        // Text cannot pose as a marker.
+        assert!(
+            store
+                .set_description(&id, Some("Imported from YouTube [x]"), false)
+                .is_err()
+        );
+
+        // An imported playlist keeps its marker as the last line; the text part is what the user edits and what uploads.
+        let marked = "Imported from YouTube Music [PL1]";
+        let imp = store.create_local("Imp", Some(marked)).unwrap();
+        assert_eq!(store.description_text(&imp), None);
+        store
+            .set_description(&imp, Some("road trip"), false)
+            .unwrap();
+        assert_eq!(
+            store.playlists()[1].description.as_deref(),
+            Some("road trip\nImported from YouTube Music [PL1]")
+        );
+        assert_eq!(store.description_text(&imp).as_deref(), Some("road trip"));
+        store.set_description(&imp, None, false).unwrap();
+        assert_eq!(store.playlists()[1].description.as_deref(), Some(marked));
+        assert_eq!(marker_id(split_note("a\nb\n".trim_end()).0), None);
+        assert_eq!(
+            split_note("x\nImported from YouTube [WL]"),
+            ("x", Some("Imported from YouTube [WL]"))
+        );
+
+        // An uploaded playlist is refused unless the server copy already changed.
         store.find_mut(&id).unwrap().remote_id = Some("r".into());
-        assert!(store.set_description(&id, Some("y")).is_err());
+        assert!(store.set_description(&id, Some("y"), false).is_err());
+        assert!(store.set_description(&id, Some("y"), true).is_ok());
     }
 
     /// Spotify entry carrying ids only (the only shape the backend accepts for Spotify).

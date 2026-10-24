@@ -21,10 +21,10 @@ const SKIP_KEY = "lunorx.loginSkipped";
 const TONES: Tone[] = ["violet", "slate", "rose", "amber", "moss", "ink"];
 const COVERS = Array.from({ length: 30 }, (_, i) => ({ seed: `lunor-gate-${i}`, tone: TONES[(i * 7) % TONES.length] }));
 
-// Legal pages live on the website. Build-time overridable; the opener capability allows https://lunorx.xyz/* only,
+// Legal pages live on the website. Build-time overridable; the opener capability allows https://www.lunorx.xyz/* and https://lunorx.xyz/* only,
 // so a different host also needs adding to src-tauri/capabilities/default.json.
-const TERMS_URL = process.env.NEXT_PUBLIC_TERMS_URL?.trim() || "https://lunorx.xyz/terms";
-const PRIVACY_URL = process.env.NEXT_PUBLIC_PRIVACY_URL?.trim() || "https://lunorx.xyz/privacy";
+const TERMS_URL = process.env.NEXT_PUBLIC_TERMS_URL?.trim() || "https://www.lunorx.xyz/legal/terms/";
+const PRIVACY_URL = process.env.NEXT_PUBLIC_PRIVACY_URL?.trim() || "https://www.lunorx.xyz/legal/privacy/";
 
 // Opens in the system browser, never inside the app's webview.
 function LegalLink({ href, children }: { href: string; children: ReactNode }) {

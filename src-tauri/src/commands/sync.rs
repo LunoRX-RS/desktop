@@ -146,11 +146,8 @@ pub struct LocalPlaylistDto {
     pub queued_writes: usize,
     /// Entries past the server-held and queued ones: the unsent partial-upload tail.
     pub unsent_entries: usize,
-    /// The note under the title. Absent for an import marker, which is bookkeeping and not text to show.
+    /// The note under the title, without the import marker (a line only the importer reads).
     pub description: Option<String>,
-    /// True when the description cannot be edited here: an import marker (editing it would make the next import create a
-    /// duplicate). Uploaded playlists are refused by core with a message.
-    pub description_locked: bool,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -314,27 +311,15 @@ pub async fn run_rename_local_playlist(
     co.engine().rename_local(local_id, name)
 }
 
-/// Sets or clears a playlist's description. An import marker, in the old text or the new, is refused: the marker is how a
-/// later import finds its playlist again.
+/// Sets or clears a playlist's description text. Works for a playlist that is only on this device and, online, for an
+/// uploaded one (the server changes first).
 pub async fn run_set_playlist_description(
     state: &SyncEngineState,
     local_id: &str,
     description: Option<&str>,
 ) -> Result<(), ErrorCategory> {
-    use crate::commands::youtube_import::marker_id;
-    let mut co = state.checkout().await?;
-    let engine = co.engine();
-    let old = engine
-        .local_playlists()
-        .iter()
-        .find(|p| p.id == local_id)
-        .and_then(|p| p.description.clone());
-    if old.as_deref().is_some_and(|d| marker_id(d).is_some())
-        || description.is_some_and(|d| marker_id(d.trim()).is_some())
-    {
-        return Err(ErrorCategory::Validation);
-    }
-    engine.set_description(local_id, description)
+    let _net = state.net.lock().await;
+    engine::set_description(&mut Host::Shared(state), local_id, description).await
 }
 
 pub async fn run_move_local_entry(
@@ -483,12 +468,9 @@ pub async fn run_list_local_playlists(
             unsent_entries: p.entries.len() - p.uploaded - p.queued,
             description: p
                 .description
-                .clone()
-                .filter(|d| crate::commands::youtube_import::marker_id(d).is_none()),
-            description_locked: p
-                .description
                 .as_deref()
-                .is_some_and(|d| crate::commands::youtube_import::marker_id(d).is_some()),
+                .map(|d| crate::sync::local_store::split_note(d).0.to_string())
+                .filter(|t| !t.is_empty()),
         })
         .collect())
 }

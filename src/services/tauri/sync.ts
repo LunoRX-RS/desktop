@@ -60,6 +60,8 @@ export interface LocalPlaylistDto {
   queuedWrites: number;
   // Entries past the server-held and queued ones: the unsent partial-upload tail.
   unsentEntries: number;
+  /** The note under the title; null for none. An import marker is never shown here. */
+  description: string | null;
 }
 
 export type ResolutionDto = "keepServer" | "keepMine";
@@ -164,6 +166,13 @@ export function syncDeleteLocalPlaylist(localId: string): Promise<void> {
 /** Renames a playlist that is not on the server. Rejects with "validation" for an uploaded one or a bad name. */
 export function syncRenameLocalPlaylist(localId: string, name: string): Promise<void> {
   return invoke<void>("sync_rename_local_playlist", { localId, name });
+}
+
+/** Sets (or, with null or empty text, clears) a playlist's description. An uploaded playlist changes on the server first,
+ *  so it needs a connection: rejects with "offline", "conflict" (changed elsewhere) or "validation" (text over 2000
+ *  characters, or changes are waiting to be sent). */
+export function syncSetPlaylistDescription(localId: string, description: string | null): Promise<void> {
+  return invoke<void>("sync_set_playlist_description", { localId, description });
 }
 
 /** Moves a track within a playlist that is not on the server so it ends at index `to`. */

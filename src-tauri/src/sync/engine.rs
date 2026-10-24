@@ -312,17 +312,6 @@ impl SyncEngine {
         self.commit()
     }
 
-    pub fn set_description(
-        &mut self,
-        local_id: &str,
-        description: Option<&str>,
-    ) -> Result<(), ErrorCategory> {
-        self.store
-            .set_description(local_id, description)
-            .map_err(|e| category(&e))?;
-        self.commit()
-    }
-
     pub fn move_entry(
         &mut self,
         local_id: &str,
@@ -674,6 +663,66 @@ pub(crate) async fn stats_sync(
 pub(crate) async fn stats_clear_remote(h: &mut Host<'_>) -> Result<(), ErrorCategory> {
     let (api, token) = h.step(|e| Ok((e.api.clone(), e.token()?))).await?;
     api.delete_stats(&token).await.map_err(|e| category(&e))
+}
+
+/// Sets or clears a playlist's description text (an import marker is kept). A playlist that is only on this device changes
+/// at once. An uploaded one changes on the server first, with its version, and only then here, so the two cannot drift.
+/// It is refused while writes are waiting: they would move the version under this request.
+pub(crate) async fn set_description(
+    h: &mut Host<'_>,
+    local_id: &str,
+    text: Option<&str>,
+) -> Result<(), ErrorCategory> {
+    let text = text.map(str::trim).filter(|d| !d.is_empty());
+    let target = h
+        .step(|e| {
+            let pl = e
+                .store
+                .playlists()
+                .iter()
+                .find(|p| p.id == local_id)
+                .ok_or(ErrorCategory::Validation)?;
+            let Some(remote) = pl.remote_id.clone() else {
+                e.store
+                    .set_description(local_id, text, false)
+                    .map_err(|err| category(&err))?;
+                e.commit()?;
+                return Ok(None);
+            };
+            if e.queued_writes(&remote) > 0 || pl.queued > 0 {
+                return Err(ErrorCategory::Validation);
+            }
+            Ok(Some((e.api.clone(), e.token()?, remote, pl.version)))
+        })
+        .await?;
+    let Some((api, token, remote, version)) = target else {
+        return Ok(());
+    };
+    // Checked here too, so a bad text never reaches the server.
+    if text.is_some_and(|t| t.chars().count() > 2000 || super::local_store::marker_id(t).is_some())
+    {
+        return Err(ErrorCategory::Validation);
+    }
+    let updated = api
+        .update_playlist(
+            &token,
+            &remote,
+            &super::api::PlaylistUpdateRequest {
+                expected_version: version,
+                name: None,
+                description: Some(text.map(str::to_string)),
+            },
+        )
+        .await
+        .map_err(|e| category(&e))?;
+    h.step(|e| {
+        e.store.adopt_server(&remote, updated.version, None);
+        e.store
+            .set_description(local_id, text, true)
+            .map_err(|err| category(&err))?;
+        e.commit()
+    })
+    .await
 }
 
 /// Where a local playlist stands against the server. Read-only: nothing is uploaded or changed.
