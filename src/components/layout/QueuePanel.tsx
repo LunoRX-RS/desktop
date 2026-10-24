@@ -4,7 +4,7 @@ import { motion, useReducedMotion } from "motion/react";
 import NativeQueue from "../../features/queue/NativeQueue";
 import QueueScreen from "../../features/queue/QueueScreen";
 import { usePlayback } from "../../lib/playback";
-import { DUR, tween } from "../../lib/motion";
+import { DUR, SPRING, tween } from "../../lib/motion";
 import { cx } from "../ui";
 
 /**
@@ -19,12 +19,13 @@ export function QueuePanel({ inDialog = false }: { inDialog?: boolean }) {
 		<motion.aside
 			key="queue"
 			aria-label={native ? "Queue" : "Queue (demo)"}
-			initial={{ opacity: 0, scale: reduce ? 1 : 0.97 }}
-			animate={{ opacity: 1, scale: 1, transition: tween(0.18) }}
-			exit={{ opacity: 0, scale: reduce ? 1 : 0.97, transition: tween(DUR.exit) }}
-			style={{ transformOrigin: "100% 100%" }}
+			// Slides in from the right edge on a spring and settles; only transform and opacity change, so it stays on the GPU.
+			initial={{ opacity: 0, x: reduce ? 0 : 40, scale: reduce ? 1 : 0.98 }}
+			animate={{ opacity: 1, x: 0, scale: 1, transition: { ...SPRING, opacity: tween(DUR.base) } }}
+			exit={{ opacity: 0, x: reduce ? 0 : 32, transition: tween(DUR.base) }}
+			style={{ transformOrigin: "100% 50%" }}
 			className={cx(
-				"glass-solid w-[min(440px,calc(100vw-48px))] overflow-y-auto rounded-[12px] p-4 shadow-[0_16px_48px_rgba(0,0,0,0.5)]",
+				"glass-solid will-change-transform w-[min(440px,calc(100vw-48px))] overflow-y-auto overscroll-contain rounded-[12px] p-4 shadow-[0_16px_48px_rgba(0,0,0,0.5)]",
 				inDialog
 					? "absolute top-6 right-6 bottom-[148px] z-20"
 					: "fixed top-[calc(var(--height-topbar)+12px)] right-6 bottom-[calc(var(--height-player)+24px)] z-[45]",
