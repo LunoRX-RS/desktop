@@ -854,6 +854,10 @@ pub(crate) async fn share(h: &mut Host<'_>, local_id: &str) -> Result<ShareLink,
         .map_err(|e| category(&e))?;
     // The link is the website's page, not the API. A bad configured base is an internal error, not a wrong link.
     let url = share_link(&share_base(), &created.token).ok_or(ErrorCategory::Internal)?;
+    // Both the token and the URL containing it are capabilities; whichever surfaces in free text must mask.
+    let registry = crate::core::secrets::registry();
+    registry.register(&created.token);
+    registry.register(&url);
     Ok(ShareLink {
         id: created.id,
         url,

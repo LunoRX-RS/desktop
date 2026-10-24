@@ -56,13 +56,19 @@ fn map_backend_error(err: keyring::Error) -> TokenStoreError {
 impl TokenStore for KeyringTokenStore {
     fn get(&self) -> Result<Option<String>, TokenStoreError> {
         match self.entry()?.get_password() {
-            Ok(token) => Ok(Some(token)),
+            Ok(token) => {
+                // A token restored from a previous launch was never written in this session; both paths feed the
+                // masker so a credential loaded at startup is masked wherever it surfaces.
+                crate::core::secrets::registry().register(&token);
+                Ok(Some(token))
+            }
             Err(keyring::Error::NoEntry) => Ok(None),
             Err(e) => Err(map_backend_error(e)),
         }
     }
 
     fn set(&self, token: &str) -> Result<(), TokenStoreError> {
+        crate::core::secrets::registry().register(token);
         self.entry()?.set_password(token).map_err(map_backend_error)
     }
 

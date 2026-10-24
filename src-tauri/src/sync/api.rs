@@ -379,6 +379,10 @@ impl ApiClient {
 
     /// Hands the next register/login calls their antibot tokens, replacing any left over.
     pub fn set_antibot(&self, tokens: Vec<String>) {
+        let registry = crate::core::secrets::registry();
+        for t in &tokens {
+            registry.register(t);
+        }
         *self.antibot.lock().unwrap_or_else(|e| e.into_inner()) = tokens.into();
     }
 

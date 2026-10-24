@@ -24,6 +24,8 @@ pub fn accept_urls(app: &AppHandle, urls: &[url::Url]) {
     let Some(token) = urls.iter().find_map(|url| token_from_url(url.as_str())) else {
         return;
     };
+    // The token is a capability; whichever way it surfaces in free text it must mask.
+    crate::core::secrets::registry().register(&token);
     if let Ok(mut slot) = app.state::<PendingShare>().0.lock() {
         *slot = Some(token.clone());
     }

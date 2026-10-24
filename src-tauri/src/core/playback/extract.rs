@@ -65,8 +65,11 @@ pub async fn resolve_with_quality(
         .await
         .map_err(|_| PlaybackErrorKind::HostRejected(HostRejectKind::Timeout))?
         .map_err(rejection)?;
+    let url = checked_url(&stream.url)?;
+    // A signed googlevideo URL is a capability; whichever way it surfaces in free text it must mask.
+    crate::core::secrets::registry().register(&url);
     Ok(ResolvedAudio {
-        url: checked_url(&stream.url)?,
+        url,
         size: stream.size,
     })
 }
