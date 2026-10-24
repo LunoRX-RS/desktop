@@ -3,13 +3,13 @@ import { ArtistLinks, LikeButton } from "../LibraryActions";
 
 import { useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { ListMusic, Pause, Play, Square, SkipBack, SkipForward, Volume2, MicVocal, Maximize2 } from "lucide-react";
+import { ListMusic, Pause, Play, Square, SkipBack, SkipForward, Volume1, Volume2, VolumeX, MicVocal, Maximize2 } from "lucide-react";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { RepeatButton, AutoplayButton } from "../PlayModeButtons";
 import { playerProgress, playerSkip, playerTrackInfo, subscribePlayerProgress, subscribePlayerState } from "../../services/tauri/player";
 import { TrackCover } from "../TrackCover";
 import { useUi } from "../../lib/store";
-import { usePlayback, togglePlayback, stopPlayback, seekPlayback, setPlaybackVolume, initLastPlayed, resumeLast, clearResume } from "../../lib/playback";
+import { usePlayback, togglePlayback, stopPlayback, seekPlayback, setPlaybackVolume, togglePlaybackMute, initLastPlayed, resumeLast, clearResume } from "../../lib/playback";
 import { formatDuration } from "../../lib/media";
 import { IconButton, Scrubber } from "../ui";
 import { DevicesButton } from "./Devices";
@@ -101,14 +101,20 @@ export function NativePlayerBar() {
         </div>
         <Progress restoring={restoring} resumeMs={s.resume?.positionMs ?? 0} durationMs={shownDurationMs} controllable={controllable} />
       </div>
-      <div className="flex w-[20%] items-center justify-end gap-2 text-secondary-text">
+      <div className="flex shrink-0 items-center justify-end gap-2 text-secondary-text">
         <IconButton label="Show lyrics" onClick={() => { useUi.getState().setLyrics(true); useUi.getState().setNowPlaying(true); }}><MicVocal size={17} /></IconButton>
         <DevicesButton />
         <IconButton label="Queue" active={queueOpen} aria-pressed={queueOpen} onClick={() => useUi.getState().toggleQueue()}><ListMusic size={17} /></IconButton>
         <IconButton label="Open Now Playing" onClick={() => useUi.getState().setNowPlaying(true)}><Maximize2 size={17} /></IconButton>
-        <Volume2 size={16} aria-hidden="true" />
+        <IconButton
+          label={s.volume === 0 ? "Unmute YouTube" : "Mute YouTube"}
+          active={s.volume === 0}
+          onClick={() => void togglePlaybackMute()}
+        >
+          {s.volume === 0 ? <VolumeX size={17} /> : s.volume < 50 ? <Volume1 size={17} /> : <Volume2 size={17} />}
+        </IconButton>
         <Scrubber label="YouTube volume" max={100} value={s.volume} disabled={!controllable}
-          onChange={(value) => void setPlaybackVolume(value)} className="w-24" />
+          onChange={(value) => void setPlaybackVolume(value)} className="w-36" />
       </div>
     </footer>
   );

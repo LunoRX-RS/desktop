@@ -216,6 +216,8 @@ pub fn run() {
             commands::offline::offline_cancel,
             commands::offline::offline_remove,
             commands::offline::offline_set_limit,
+            commands::offline::offline_usage,
+            commands::offline::offline_clear_transient,
             commands::lrc::lrc_load,
             commands::lrc::lrc_save,
             commands::lrc::lrc_delete,

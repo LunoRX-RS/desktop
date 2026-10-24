@@ -206,6 +206,19 @@ export function setPlaybackVolume(volume: number) {
   })();
 }
 
+// Mute does what the Playback menu's Mute does: remember the level, go to zero, restore it on the
+// next press. Nothing is sent to Core beyond the same volume setter the slider already uses.
+let volumeBeforeMute = 0;
+
+export function togglePlaybackMute() {
+  const current = usePlayback.getState().volume;
+  if (current > 0) {
+    volumeBeforeMute = current;
+    return setPlaybackVolume(0);
+  }
+  return setPlaybackVolume(volumeBeforeMute > 0 ? volumeBeforeMute : 100);
+}
+
 
 // ---- Last played: remember the track and the minute across app restarts. ----
 // localStorage can throw or be absent (blocked site data), so every access is guarded.

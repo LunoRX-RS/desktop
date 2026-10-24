@@ -134,6 +134,23 @@ fn file_size(path: &Path) -> Option<u64> {
         .filter(|m| m.file_type().is_file())
         .map(|m| m.len())
 }
+/// Bytes taken by regular files with this extension directly inside `dir`. A symlink is not a regular
+/// file, so `file_size` skips it and nothing here follows a link out of the cache.
+fn dir_bytes(dir: &Path, extension: &str) -> u64 {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return 0;
+    };
+    let mut total = 0;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().is_some_and(|e| e == extension)
+            && let Some(size) = file_size(&path)
+        {
+            total += size;
+        }
+    }
+    total
+}
 fn pinned(c: &Catalog, id: &str) -> bool {
     c.playlists.values().any(|p| {
         p.tracks
@@ -610,6 +627,133 @@ impl DiskCache {
         }
         self.save(&inner.catalog)
     }
+    /// Frees every cached song that no playlist keeps and nothing is playing, and returns the bytes
+    /// released. Kept and in-play files are untouched, exactly as LRU pruning leaves them.
+    pub fn clear_transient(&self) -> Result<u64> {
+        let mut inner = self.inner.lock().map_err(storage)?;
+        let protected: HashSet<&str> = inner
+            .catalog
+            .playlists
+            .values()
+            .flat_map(|p| p.tracks.iter())
+            .filter(|t| t.provider == "YouTube")
+            .map(|t| t.id.as_str())
+            .collect();
+        let victims: Vec<_> = inner
+            .catalog
+            .records
+            .iter()
+            .filter(|(k, r)| {
+                !protected.contains(r.track.id.as_str())
+                    && inner.leases.get(*k).and_then(Weak::upgrade).is_none()
+            })
+            .map(|(k, r)| (k.clone(), r.size))
+            .collect();
+        let mut freed = 0;
+        for (k, size) in victims {
+            fs::remove_file(self.root.join(format!("{k}.audio"))).map_err(storage)?;
+            if let Some(record) = inner.catalog.records.remove(&k)
+                && !inner
+                    .catalog
+                    .records
+                    .values()
+                    .any(|r| r.track.id == record.track.id)
+            {
+                let _ =
+                    fs::remove_file(self.root.join(format!("{}.jpg", disk_id(&record.track.id))));
+            }
+            inner.leases.remove(&k);
+            freed += size;
+        }
+        self.save(&inner.catalog)?;
+        Ok(freed)
+    }
+    /// What the cache occupies: audio from the catalog, artwork and lyrics from the two directories
+    /// they live in. A song kept by two playlists is one file, so its bytes appear in both rows and
+    /// `shared_bytes` names the overlap; the playlist list is never a partition of `audio_bytes`.
+    /// The scans are bounded by the invariants of `open` (orphans are deleted) and `ensure` (at most
+    /// 10 000 records, and the lyric cache holds at most 256 files).
+    pub fn usage(&self, lyric_dir: Option<&Path>) -> Result<CacheUsage> {
+        let (audio_bytes, limit_bytes, clearable_bytes, shared_bytes, playlists) = {
+            let inner = self.inner.lock().map_err(storage)?;
+            let protected: HashSet<&str> = inner
+                .catalog
+                .playlists
+                .values()
+                .flat_map(|p| p.tracks.iter())
+                .filter(|t| t.provider == "YouTube")
+                .map(|t| t.id.as_str())
+                .collect();
+            let audio_bytes: u64 = inner.catalog.records.values().map(|r| r.size).sum();
+            let clearable_bytes: u64 = inner
+                .catalog
+                .records
+                .iter()
+                .filter(|(k, r)| {
+                    !protected.contains(r.track.id.as_str())
+                        && inner.leases.get(*k).and_then(Weak::upgrade).is_none()
+                })
+                .map(|(_, r)| r.size)
+                .sum();
+            // Distinct playlists naming each track, so a duplicate inside one playlist is not "shared".
+            let mut keepers: HashMap<&str, usize> = HashMap::new();
+            for pinned in inner.catalog.playlists.values() {
+                let mut seen: HashSet<&str> = HashSet::new();
+                for t in &pinned.tracks {
+                    if t.provider == "YouTube" && seen.insert(t.id.as_str()) {
+                        *keepers.entry(t.id.as_str()).or_default() += 1;
+                    }
+                }
+            }
+            let shared_bytes: u64 = inner
+                .catalog
+                .records
+                .values()
+                .filter(|r| keepers.get(r.track.id.as_str()).copied().unwrap_or(0) > 1)
+                .map(|r| r.size)
+                .sum();
+            let mut playlists: Vec<PlaylistUsage> = inner
+                .catalog
+                .playlists
+                .iter()
+                .map(|(id, p)| {
+                    let names: HashSet<&str> = p.tracks.iter().map(|t| t.id.as_str()).collect();
+                    PlaylistUsage {
+                        id: id.clone(),
+                        name: p.name.clone(),
+                        tracks: p.tracks.len(),
+                        bytes: inner
+                            .catalog
+                            .records
+                            .values()
+                            .filter(|r| names.contains(r.track.id.as_str()))
+                            .map(|r| r.size)
+                            .sum(),
+                    }
+                })
+                .collect();
+            playlists.sort_by(|a, b| b.bytes.cmp(&a.bytes).then_with(|| a.name.cmp(&b.name)));
+            (
+                audio_bytes,
+                inner.catalog.limit,
+                clearable_bytes,
+                shared_bytes,
+                playlists,
+            )
+        };
+        let artwork_bytes = dir_bytes(&self.root, "jpg");
+        let lyric_bytes = lyric_dir.map(|dir| dir_bytes(dir, "json")).unwrap_or(0);
+        Ok(CacheUsage {
+            audio_bytes,
+            artwork_bytes,
+            lyric_bytes,
+            total_bytes: audio_bytes + artwork_bytes + lyric_bytes,
+            limit_bytes,
+            clearable_bytes,
+            shared_bytes,
+            playlists,
+        })
+    }
     pub fn status(&self, id: &str) -> Result<OfflineStatus> {
         let inner = self.inner.lock().map_err(storage)?;
         let playlist = inner.catalog.playlists.get(id);
@@ -779,6 +923,29 @@ pub struct OfflineStatus {
     pub used_bytes: u64,
     pub pinned_bytes: u64,
     pub limit_bytes: u64,
+}
+/// One playlist kept offline, and the bytes its songs occupy. Songs shared with another playlist are
+/// counted here too, so these rows overlap rather than add up to `CacheUsage::audio_bytes`.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaylistUsage {
+    pub id: String,
+    pub name: String,
+    pub tracks: usize,
+    pub bytes: u64,
+}
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CacheUsage {
+    pub audio_bytes: u64,
+    pub artwork_bytes: u64,
+    pub lyric_bytes: u64,
+    pub total_bytes: u64,
+    pub limit_bytes: u64,
+    /// Audio no playlist keeps and no player holds a lease on: what clearing the cache would free now.
+    pub clearable_bytes: u64,
+    pub shared_bytes: u64,
+    pub playlists: Vec<PlaylistUsage>,
 }
 struct Job {
     id: String,
@@ -978,6 +1145,132 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+    #[test]
+    fn usage_attributes_shared_track_bytes_to_each_pinned_playlist() {
+        let dir = Fixture::new();
+        let cache = dir.open();
+        seed(&cache, "aaaaaaaaaaa", 300, 1);
+        seed(&cache, "bbbbbbbbbbb", 200, 2);
+        cache
+            .pin(
+                "one",
+                "First".into(),
+                vec![track("aaaaaaaaaaa"), track("bbbbbbbbbbb")],
+            )
+            .unwrap();
+        cache
+            .pin("two", "Second".into(), vec![track("aaaaaaaaaaa")])
+            .unwrap();
+        let usage = cache.usage(None).unwrap();
+        assert_eq!(usage.audio_bytes, 500);
+        assert_eq!(usage.shared_bytes, 300, "one file kept by two playlists");
+        let rows: Vec<_> = usage
+            .playlists
+            .iter()
+            .map(|p| (p.name.as_str(), p.tracks as u64, p.bytes))
+            .collect();
+        assert_eq!(rows, vec![("First", 2, 500), ("Second", 1, 300)]);
+        assert_eq!(usage.clearable_bytes, 0, "every song is kept");
+        assert_eq!(usage.limit_bytes, DEFAULT_LIMIT);
+    }
+    #[test]
+    fn usage_counts_artwork_and_lyric_files_and_ignores_symlinks() {
+        let dir = Fixture::new();
+        let cache = dir.open();
+        seed(&cache, "aaaaaaaaaaa", 400, 1);
+        fs::write(
+            dir.0.join(format!("{}.jpg", disk_id("aaaaaaaaaaa"))),
+            b"cover",
+        )
+        .unwrap();
+        let lyrics = dir.0.join("lyrics");
+        fs::create_dir(&lyrics).unwrap();
+        fs::write(lyrics.join("one.json"), b"1234").unwrap();
+        fs::write(lyrics.join("not-json.txt"), b"ignored").unwrap();
+        #[cfg(unix)]
+        {
+            let outside = dir.0.join("outside.bin");
+            fs::write(&outside, vec![7; 4096]).unwrap();
+            std::os::unix::fs::symlink(&outside, lyrics.join("link.json")).unwrap();
+        }
+        let usage = cache.usage(Some(&lyrics)).unwrap();
+        assert_eq!(
+            (
+                usage.audio_bytes,
+                usage.artwork_bytes,
+                usage.lyric_bytes,
+                usage.total_bytes
+            ),
+            (400, 5, 4, 409),
+            "only real files in each directory are counted"
+        );
+    }
+    #[test]
+    fn clear_transient_removes_unpinned_and_keeps_pinned_and_leased() {
+        let dir = Fixture::new();
+        let cache = dir.open();
+        seed(&cache, "aaaaaaaaaaa", 300, 1);
+        seed(&cache, "bbbbbbbbbbb", 300, 2);
+        seed(&cache, "ccccccccccc", 300, 3);
+        cache
+            .pin("p", "Pinned".into(), vec![track("aaaaaaaaaaa")])
+            .unwrap();
+        for id in ["aaaaaaaaaaa", "ccccccccccc"] {
+            fs::write(dir.0.join(format!("{}.jpg", disk_id(id))), b"cover").unwrap();
+        }
+        let playing = cache
+            .get("bbbbbbbbbbb", AudioQuality::High)
+            .unwrap()
+            .unwrap();
+        assert_eq!(cache.usage(None).unwrap().clearable_bytes, 300);
+        assert_eq!(cache.clear_transient().unwrap(), 300);
+        assert!(
+            cache
+                .get("aaaaaaaaaaa", AudioQuality::High)
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            cache
+                .get("bbbbbbbbbbb", AudioQuality::High)
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            cache
+                .get("ccccccccccc", AudioQuality::High)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            dir.0
+                .join(format!("{}.jpg", disk_id("aaaaaaaaaaa")))
+                .exists(),
+            "a kept song keeps its artwork"
+        );
+        assert!(
+            !dir.0
+                .join(format!("{}.jpg", disk_id("ccccccccccc")))
+                .exists(),
+            "the last copy of a song takes its artwork with it"
+        );
+        drop(playing);
+    }
+    #[test]
+    fn clear_transient_reports_freed_bytes_and_saves_catalog() {
+        let dir = Fixture::new();
+        let cache = dir.open();
+        seed(&cache, "aaaaaaaaaaa", 120, 1);
+        seed(&cache, "bbbbbbbbbbb", 240, 2);
+        assert_eq!(cache.clear_transient().unwrap(), 360);
+        drop(cache);
+        let usage = dir.open().usage(None).unwrap();
+        assert_eq!(
+            usage.audio_bytes, 0,
+            "the emptied catalog survives a restart"
+        );
+        assert_eq!(usage.clearable_bytes, 0);
     }
     #[test]
     fn lru_preserves_pinned_and_playing_files_and_refuses_impossible_limit() {

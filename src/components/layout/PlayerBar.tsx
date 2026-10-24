@@ -27,6 +27,17 @@ import { DevicesButton, RemotePlayerBar } from "./Devices";
 import { useRemote } from "../../lib/remote";
 
 // Thin translucent bar. Everything here is a demo control: no audio is produced.
+let demoVolumeBeforeMute = 0;
+
+const toggleDemoMute = (volume: number, setVolume: (v: number) => void) => {
+  if (volume > 0) {
+    demoVolumeBeforeMute = volume;
+    setVolume(0);
+  } else {
+    setVolume(demoVolumeBeforeMute > 0 ? demoVolumeBeforeMute : 100);
+  }
+};
+
 export default function PlayerBar() {
   const s = useUi();
   const native = usePlayback((p) => p.requested !== null || p.track !== null || p.resume !== null || p.busy || p.error !== null);
@@ -111,7 +122,7 @@ export default function PlayerBar() {
       </div>
 
       {/* Right cluster */}
-      <div className="flex w-[30%] items-center justify-end gap-0.5">
+      <div className="flex shrink-0 items-center justify-end gap-0.5">
         <IconButton label="Lyrics (demo sample)" active={s.lyricsOpen} aria-pressed={s.lyricsOpen} onClick={() => { s.setNowPlaying(true); s.setLyrics(true); }}>
           <MicVocal size={16} />
         </IconButton>
@@ -120,8 +131,14 @@ export default function PlayerBar() {
         </IconButton>
         <DevicesButton />
         <div className="ml-2 flex items-center gap-1.5 text-secondary-text">
-          <VolumeIcon size={16} aria-hidden="true" />
-          <Scrubber label="Volume (demo, no audio)" max={100} value={s.volume} onChange={s.setVolume} className="w-24" />
+          <IconButton
+            label={s.volume === 0 ? "Unmute demo (no audio)" : "Mute demo (no audio)"}
+            active={s.volume === 0}
+            onClick={() => toggleDemoMute(s.volume, s.setVolume)}
+          >
+            <VolumeIcon size={17} />
+          </IconButton>
+          <Scrubber label="Volume (demo, no audio)" max={100} value={s.volume} onChange={s.setVolume} className="w-36" />
         </div>
         <IconButton label="Now Playing (demo)" onClick={() => s.setNowPlaying(true)} className="ml-1">
           <Maximize2 size={15} />

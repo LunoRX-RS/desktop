@@ -96,6 +96,8 @@
     "allow-offline-cancel",
     "allow-offline-remove",
     "allow-offline-set-limit",
+    "allow-offline-usage",
+    "allow-offline-clear-transient",
     {
       "identifier": "opener:allow-open-url",
       "allow": [

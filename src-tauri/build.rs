@@ -139,6 +139,8 @@ fn main() {
             "offline_cancel",
             "offline_remove",
             "offline_set_limit",
+            "offline_usage",
+            "offline_clear_transient",
             "lrc_load",
             "lrc_save",
             "lrc_delete",
