@@ -16,6 +16,8 @@ Rules for any coding agent working in this repository. Self-contained: no other 
 
 **2026-10-21 user-approved YouTube exception:** the user explicitly requested native extraction/libmpv playback and Google-session-cookie sign-in instead of OAuth2. The no-extraction/no-cookie restriction in rule 2 is superseded for YouTube only. Desktop credential isolation, validation, truthful capability reporting and all other security rules still apply. This is not provider approval.
 
+**2026-10-25 user-approved diagnostics:** the user explicitly requested consent-gated error reports and a full action/event activity log that upload to the backend, with real messages, stacks, titles and search terms (not slug-only). Rule 4's "never logged" is scoped by `core/secrets.rs`: credential material — passwords, provider tokens, the Google session cookie, antibot tokens, share tokens, signed stream URLs — is masked before anything reaches disk, pinned by sentinel tests. Both uploads default off, are asked once, and are governed by Settings.
+
 ## What this is
 
 Tauri 2 desktop app for LUNOR-X, a unified music player for Spotify and YouTube Music, with an embedded Rust core. It talks to an independent backend (separate repo) for app accounts and playlist persistence. Pre-release: no provider can play audio in the shipped app.
