@@ -49,6 +49,7 @@ export default function CommandPalette() {
 	const [active, setActive] = useState(0);
 	const [terms, setTerms] = useState<string[]>([]);
 	const [songs, setSongs] = useState<SearchHitDto[]>([]);
+	const [failed, setFailed] = useState(false);
 	const listRef = useRef<HTMLUListElement>(null);
 	const inputRef = useRef<HTMLInputElement>(null);
 
@@ -60,6 +61,8 @@ export default function CommandPalette() {
 	// it is answered from the core's memory.
 	useEffect(() => {
 		// The answer for the previous letters stays on screen until the next one arrives; emptying the list on every key made it flash.
+		// If the next one fails, the old answer no longer matches what is typed, so it is dropped and a failed note is shown.
+		setFailed(false);
 		if (!s.paletteOpen || typed.length < 2 || typed.length > 200) {
 			setTerms([]);
 			setSongs([]);
@@ -72,10 +75,14 @@ export default function CommandPalette() {
 			started = true;
 			searchSuggestions(typed)
 				.then((values) => live && setTerms(personalizeTerms(values, artists.map((a) => a.name)).slice(0, 5)))
-				.catch(() => {});
+				.catch(() => live && setTerms([]));
 			searchQuery({ query: typed, providers: [], limit: 10, cancellationId: id })
 				.then((result) => live && setSongs(result.hits.slice(0, SONGS_SHOWN)))
-				.catch(() => {});
+				.catch(() => {
+					if (!live) return;
+					setSongs([]);
+					setFailed(true);
+				});
 		}, TYPING_PAUSE_MS);
 		return () => {
 			live = false;
@@ -284,6 +291,7 @@ export default function CommandPalette() {
 									</li>
 								);
 							})}
+							{failed && <li role="status" className="px-3 py-3 text-center text-[12px] text-tertiary-text">Could not load songs for “{typed}”. Keep typing to try again.</li>}
 						</ul>
 					</motion.div>
 				</motion.div>

@@ -9,7 +9,7 @@ import { LikeButton } from "../../components/LibraryActions";
 import { formatDuration } from "../../lib/media";
 import { Button, EmptyState, IconButton, cx } from "../../components/ui";
 import { VibePicker } from "../../components/PlayModeButtons";
-import { memo, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { OfflineTrack } from "../../services/tauri/offline";
 import { addToPlaylist } from "../../lib/playlistActions";
 import { syncCreateLocalPlaylist } from "../../services/tauri/sync";
@@ -96,8 +96,9 @@ export default function NativeQueue() {
   const playerState = usePlayback((p) => p.player.state);
   const busy = usePlayback((p) => p.busy);
   const autoplayState = usePlayback((p) => p.autoplay.state);
-  const queueKey = usePlayback((p) => (p.autoplay.queue ?? []).map((q) => q.id).join(","));
-  // The list itself is read when its order changes, not each time the player reports.
+  // Keyed on what a row shows (id, title, artists, cover, length), so an edit to a queued track refreshes the list too.
+  const queueKey = usePlayback((p) => (p.autoplay.queue ?? []).map((q) => JSON.stringify([q.id, q.title, q.artists, q.artworkUrl, q.durationMs])).join("\n"));
+  // The list itself is read when the queue changes, not each time the player reports.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const upcoming = useMemo<OfflineTrack[]>(() => usePlayback.getState().autoplay.queue ?? [], [queueKey]);
   const track = requested ?? current;
@@ -134,11 +135,14 @@ export default function NativeQueue() {
     return Math.min(over, upcoming.length - 1);
   };
   const dragRef = useRef(drag);
-  dragRef.current = drag;
   const moveRef = useRef(move);
-  moveRef.current = move;
   const rowUnderRef = useRef(rowUnder);
-  rowUnderRef.current = rowUnder;
+  // Written after the commit, not during render, so a render that is thrown away never leaves its handlers in the refs.
+  useLayoutEffect(() => {
+    dragRef.current = drag;
+    moveRef.current = move;
+    rowUnderRef.current = rowUnder;
+  });
   const onHandleDown = useRef((e: ReactPointerEvent<HTMLButtonElement>, from: number) => {
     if (e.button !== 0) return;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -185,10 +189,12 @@ export default function NativeQueue() {
   }, [shown, total, lookahead]);
   async function saveQueue() {
     if (!track) return;
+    // Read before the first await: the song can change while the playlist is being created.
+    const hits = [{ ...track, source: "YouTube Music" as const, artists: track.artists ?? [], artworkUrl: track.artworkUrl ?? null, durationMs: usePlayback.getState().durationMs || null }, ...upcoming.map(toHit)];
     setSaved("saving");
     try {
       const id = await syncCreateLocalPlaylist(`Queue · ${new Date().toLocaleDateString()}`, null);
-      for (const hit of [{ ...track, source: "YouTube Music" as const, artists: track.artists ?? [], artworkUrl: track.artworkUrl ?? null, durationMs: usePlayback.getState().durationMs || null }, ...upcoming.map(toHit)]) await addToPlaylist(id, hit);
+      for (const hit of hits) await addToPlaylist(id, hit);
       setSaved("done");
     } catch { setSaved("failed"); }
   }
