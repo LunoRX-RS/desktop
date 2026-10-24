@@ -4,6 +4,7 @@ import { Check, Copy, Plus, Trash2 } from "lucide-react";
 import { Button } from "../../components/ui";
 import { Tip } from "../../components/Tip";
 import { discordPreview, PRESETS, type CardDesign, type CardPreview } from "../../services/tauri/discord";
+import { copyText } from "../../lib/clipboard";
 import { FIELD, Inset, NoteRow, SettingRow } from "./rows";
 
 // The fill-ins a text line can use. `sample` is what they would show for a song playing right now.
@@ -15,25 +16,6 @@ const FILLINS: { token: string; name: string; what: string; sample: string; wher
 	{ token: "{app}", name: "App name", what: "The name of this app.", sample: "LunoRX" },
 	{ token: "{track_url}", name: "Song link", what: "The YouTube link of the playing video. Only works as a button link, not in text lines.", sample: "https://www.youtube.com/watch?v=…", where: "Button links only" },
 ];
-
-async function copyText(text: string): Promise<boolean> {
-	try {
-		await navigator.clipboard.writeText(text);
-		return true;
-	} catch {
-		// Some webviews block the async clipboard; a hidden field and the old command still work from a click.
-		const box = document.createElement("textarea");
-		box.value = text;
-		box.setAttribute("readonly", "");
-		box.style.position = "fixed";
-		box.style.opacity = "0";
-		document.body.appendChild(box);
-		box.select();
-		const ok = document.execCommand("copy");
-		box.remove();
-		return ok;
-	}
-}
 
 /** One fill-in as a chip. Hover or focus explains it; a click copies it so it can be pasted into any field. */
 function FillIn({ token, name, what, sample, where }: (typeof FILLINS)[number]) {

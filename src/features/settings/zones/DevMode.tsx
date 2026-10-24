@@ -7,6 +7,7 @@ import { useDevLog } from "../../../lib/devLog";
 import { useSettingsStore } from "../../../lib/settingsStore";
 import { youtubeConnectionStatus, subscribeYouTubeConnection, type YouTubeConnectionStatus } from "../../../services/tauri/youtube";
 import { activityView, type ActivityRecordDto } from "../../../services/tauri/reports";
+import { copyText } from "../../../lib/clipboard";
 import { Button } from "../../../components/ui";
 import { Switch } from "../../../components/Lyrics";
 import { Inset, NoteRow, SettingRow, StatusRow } from "../rows";
@@ -29,6 +30,12 @@ export function DevMode() {
   const clear = useDevLog((s) => s.clear);
   const [session, setSession] = useState<YouTubeConnectionStatus | null>(null);
   const [activity, setActivity] = useState<ActivityRecordDto[] | null>(null);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = window.setTimeout(() => setCopied(false), 1600);
+    return () => window.clearTimeout(t);
+  }, [copied]);
   useEffect(() => {
     let active = true;
     let stop: UnlistenFn | undefined;
@@ -103,11 +110,11 @@ export function DevMode() {
                 <div className="flex justify-end px-4 py-3">
                   <Button
                     variant="ghost"
-                    onClick={() => void navigator.clipboard.writeText(
+                    onClick={() => void copyText(
                       activity.map((a) => `${new Date(a.atMs).toISOString()} ${a.name}${a.count > 1 ? ` x${a.count}` : ""}${a.detail ? ` — ${a.detail}` : ""}`).join("\n"),
-                    )}
+                    ).then(setCopied)}
                   >
-                    Copy
+                    {copied ? "Copied" : "Copy"}
                   </Button>
                 </div>
               </>
