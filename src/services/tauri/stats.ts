@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 // Mirrors commands/stats.rs. Counts stay on this device; the cloud calls send play counts only, and only after the user turns them on.
 

@@ -9,6 +9,8 @@ import { initHistory } from "../../lib/history";
 import { detectPlatform } from "../../lib/platform";
 import { actionFor, comboFromEvent, currentBindings, hasCommandModifier } from "../../lib/shortcuts";
 import { initTelemetry, track } from "../../lib/telemetry";
+import { action as noteAction, initActivity } from "../../lib/activity";
+import { initErrorReport } from "../../lib/errorReport";
 import { initRemote } from "../../lib/remote";
 import { initUpdater } from "../../lib/updater";
 import { UpdateBanner } from "./UpdateBanner";
@@ -58,6 +60,8 @@ function useGlobalKeys() {
 			const s = useUi.getState();
 			if (action === "playPause" && s.paletteOpen) return;
 			e.preventDefault();
+			// Shortcuts are actions too; the name is lowercased to the slug shape the log validates.
+			noteAction(`shortcut.${action.toLowerCase()}`);
 			switch (action) {
 				case "palette": s.setPalette(!s.paletteOpen); break;
 				case "back": s.goBack(); break;
@@ -141,6 +145,8 @@ export default function AppShell() {
   useGlobalKeys();
   useEffect(() => initHistory(), []);
   useEffect(() => initTelemetry(), []);
+  useEffect(() => initErrorReport(), []);
+  useEffect(() => initActivity(), []);
   useEffect(() => initRemote(), []);
   useEffect(() => initUpdater(), []);
   useEffect(() => { track(`feature.view.${view}`); }, [view]);

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 export interface OfflineTrack { provider: string; id: string; title: string; artists: string[]; artworkUrl: string | null; durationMs: number | null }
 export interface OfflineStatus { keeping: boolean; running: boolean; changed: boolean; tracks: { track: OfflineTrack; error: string | null; state: "ready" | "pending" | "failed" | "unsupported" }[]; usedBytes: number; pinnedBytes: number; limitBytes: number }
 export const offlineStatus = (playlistId = "", artworkStart = 0) => invoke<OfflineStatus>("offline_status", { playlistId, artworkStart });

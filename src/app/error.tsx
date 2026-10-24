@@ -3,10 +3,21 @@
 // Last resort for a screen that fails while drawing: say so, keep the user's data safe, offer a way back. Without it
 // a render error leaves the window blank. No error text is shown (it can carry paths or ids); it goes to the console.
 import { useEffect } from "react";
+import { reportFailure } from "../lib/errorReport";
 
 export default function AppError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     console.error("render failed:", error.name);
+    // Note: this boundary does not catch throws from event handlers or rejected promises; the global listeners in
+    // lib/errorReport cover those.
+    reportFailure({
+      source: "frontend",
+      area: "frontend",
+      name: "render",
+      site: "app.error-boundary",
+      message: error.message,
+      stack: error.stack ?? "",
+    });
   }, [error]);
   return (
     <main role="alert" className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-night-canvas p-8 text-center text-primary-text">

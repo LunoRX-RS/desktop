@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 // Mirrors commands/providers.rs. The key is write-only: it goes in once and only `present` comes back.
 

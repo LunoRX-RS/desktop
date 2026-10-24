@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 import { syncAddLocalEntry, syncCreateLocalPlaylist, syncUploadPlaylist, type LocalEntryDto } from "./sync";
 
 /** Emitted by the Rust side with the share token when a `lunorx://share/{token}` link opens the app. */

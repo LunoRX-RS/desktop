@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { action } from "./activity";
 import type { QueueTrack } from "./media";
 
 // UI state only. Real playback lives in lib/playback; the queue below is empty until something is loaded into it.
@@ -136,6 +137,7 @@ export const useUi = create<UiState>()((set, get) => ({
     const { view: current, back } = get();
     if (view === current) return;
     set({ view, back: [...back, current], forward: [] });
+    action(`navigate.${view}`);
   },
   goBack: () => {
     const { back, view, forward } = get();
@@ -180,8 +182,9 @@ export const useUi = create<UiState>()((set, get) => ({
     if (i < 0 || i >= queue.length) return;
     set({ index: i, playing: true, positionSec: 0 });
   },
-  togglePlay: () => set((s) => ({ playing: !s.playing })),
+  togglePlay: () => { action("play-toggle"); set((s) => ({ playing: !s.playing })); },
   next: () => {
+    action("next");
     const { queue, index, shuffle, repeat } = get();
     if (queue.length === 0) return;
     if (shuffle && queue.length > 1) {
@@ -199,6 +202,7 @@ export const useUi = create<UiState>()((set, get) => ({
     }
   },
   prev: () => {
+    action("prev");
     const { index, positionSec, queue } = get();
     if (positionSec > 3) {
       set({ positionSec: 0 });
@@ -207,6 +211,7 @@ export const useUi = create<UiState>()((set, get) => ({
     set({ index: index > 0 ? index - 1 : queue.length - 1, positionSec: 0 });
   },
   seek: (sec) => {
+    action("seek");
     const dur = get().queue[get().index]?.durationSec ?? 0;
     set({ positionSec: Math.min(Math.max(0, sec), dur) });
   },
@@ -221,15 +226,19 @@ export const useUi = create<UiState>()((set, get) => ({
     }
     set({ positionSec: positionSec + 1 });
   },
-  setVolume: (v) => set({ volume: Math.min(100, Math.max(0, Math.round(v))) }),
-  toggleShuffle: () => set((s) => ({ shuffle: !s.shuffle })),
-  cycleRepeat: () =>
-    set((s) => ({ repeat: s.repeat === "off" ? "all" : s.repeat === "all" ? "one" : "off" })),
-  toggleLike: (id) =>
+  setVolume: (v) => { action("volume"); set({ volume: Math.min(100, Math.max(0, Math.round(v))) }); },
+  toggleShuffle: () => { action("shuffle"); set((s) => ({ shuffle: !s.shuffle })); },
+  cycleRepeat: () => {
+    action("repeat");
+    set((s) => ({ repeat: s.repeat === "off" ? "all" : s.repeat === "all" ? "one" : "off" }));
+  },
+  toggleLike: (id) => {
+    action("like");
     set((s) => {
       const liked = { ...s.liked };
       if (liked[id]) delete liked[id];
       else liked[id] = true;
       return { liked };
-    }),
+    });
+  },
 }));

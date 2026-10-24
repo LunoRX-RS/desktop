@@ -2,9 +2,10 @@
 // checks the signature before installing. Nothing installs without the user pressing Install.
 import { create } from "zustand";
 import { APP_VERSION } from "./version";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/tauri/invoke";
 import { listen } from "@tauri-apps/api/event";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { appEvent } from "./activity";
 
 export type UpdateState =
   | { kind: "idle" }
@@ -74,7 +75,8 @@ export async function installUpdate() {
   if (cur.kind !== "available") return;
   const version = cur.version;
   set({ kind: "downloading", version, percent: null });
-  const off = await listen<number | null>("update-progress", (e) => set({ kind: "downloading", version, percent: e.payload }));
+  // The updater plugin broadcasts its own progress event; it never passes Core's logged emit, so it is noted here.
+  const off = await listen<number | null>("update-progress", (e) => { appEvent("update-progress"); set({ kind: "downloading", version, percent: e.payload }); });
   try {
     await invoke("update_install");
     set({ kind: "installed", version });

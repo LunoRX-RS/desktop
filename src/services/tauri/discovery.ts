@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 import type { SearchHitDto } from "./search";
 import { prefetchCovers, prefetchImages } from "../../lib/prefetch";
 export interface FeedAlbum { id: string; name: string; year: number | null; artists: string[]; artworkUrl: string | null }

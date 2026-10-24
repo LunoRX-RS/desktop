@@ -1,7 +1,7 @@
 "use client";
 import { invalidateHomeFeed } from "./discovery";
 import { create } from "zustand";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "../services/tauri/invoke";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { SearchHitDto } from "../services/tauri/search";
 export const useHistory = create<{ tracks: SearchHitDto[]; error: string }>(() => ({ tracks: [], error: "" }));

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 import { prefetchCovers } from "../../lib/prefetch";
 
 // Mirrors commands/dto.rs. Tauri maps snake_case Rust argument names to camelCase JS keys.

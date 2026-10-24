@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 // Mirrors commands/lrc.rs. Tauri maps the Rust `args` struct fields to these camelCase keys.
 // The files are plain .lrc text written by the app on this computer. Nothing here talks to a provider or the backend.

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 import type { LyricsSourceDto } from "./player";
 
 // Mirrors commands/lyrics_sources.rs. Tauri maps the Rust `args` struct fields to these camelCase keys.

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "./invoke";
 
 // Mirrors commands/sync.rs and sync/engine.rs. Tauri maps snake_case Rust argument names to camelCase JS keys.
 // Errors cross IPC as the bare category string; no message, token or password ever reaches the frontend.

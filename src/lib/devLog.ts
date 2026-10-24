@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { reportIpcFailure } from "./errorReport";
 
 /** One failure exactly as Core reported it, kept in memory for the Dev Mode screen. */
 export interface DevError {
@@ -20,8 +21,12 @@ interface DevLog {
 
 export const useDevLog = create<DevLog>((set) => ({
   entries: [],
-  record: (where, error) =>
-    set((s) => ({ entries: [describeFailure(where, error), ...s.entries].slice(0, KEEP) })),
+  record: (where, error) => {
+    set((s) => ({ entries: [describeFailure(where, error), ...s.entries].slice(0, KEEP) }));
+    // The same failure joins the error log, where Core masks it before it reaches disk.
+    const described = describeFailure(where, error);
+    reportIpcFailure(where, described.category, described.message);
+  },
   clear: () => set({ entries: [] }),
 }));
 
