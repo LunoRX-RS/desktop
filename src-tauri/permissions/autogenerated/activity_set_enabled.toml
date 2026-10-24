@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-activity-set-enabled"
+description = "Enables the activity_set_enabled command without any pre-configured scope."
+commands.allow = ["activity_set_enabled"]
+
+[[permission]]
+identifier = "deny-activity-set-enabled"
+description = "Denies the activity_set_enabled command without any pre-configured scope."
+commands.deny = ["activity_set_enabled"]

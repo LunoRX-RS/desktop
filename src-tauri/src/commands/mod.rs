@@ -19,6 +19,8 @@ pub mod stats;
 
 pub mod telemetry;
 
+pub mod reports;
+
 pub mod discovery;
 
 pub mod lrc;

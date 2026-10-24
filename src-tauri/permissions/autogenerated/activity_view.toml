@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-activity-view"
+description = "Enables the activity_view command without any pre-configured scope."
+commands.allow = ["activity_view"]
+
+[[permission]]
+identifier = "deny-activity-view"
+description = "Denies the activity_view command without any pre-configured scope."
+commands.deny = ["activity_view"]

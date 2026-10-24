@@ -11,6 +11,23 @@ use sync::settings::default_base_url;
 use tauri::{Emitter, Manager};
 use tauri_plugin_deep_link::DeepLinkExt;
 
+/// A subsystem that failed at start-up is a report like any other: the switch the user set still decides whether it is
+/// ever uploaded. The message is the `Debug` of an error category, which holds no user text and no credential.
+fn note_startup_failure(app: &tauri::App, source: &str, kind: &str, message: &str) {
+    let Some(state) = app.try_state::<commands::reports::ReportsState>() else {
+        return;
+    };
+    state.record(&core::errorlog::NewError {
+        source: source.into(),
+        kind: kind.into(),
+        site: "lib.setup".into(),
+        view: "none".into(),
+        message: message.into(),
+        stack: String::new(),
+        detail: String::new(),
+    });
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let _ = rustls::crypto::ring::default_provider().install_default();
@@ -64,6 +81,27 @@ pub fn run() {
                     .map(|dir| dir.join("listening-stats.json"))
                     .map_err(|_| core::library::LibraryError::Storage),
             ));
+            // Managed before anything can emit: an event emitted first would find no log to note itself in.
+            let reports = commands::reports::ReportsState::open(
+                app.path()
+                    .app_data_dir()
+                    .map(|dir| dir.join("error-log.json"))
+                    .map_err(|_| core::library::LibraryError::Storage),
+            );
+            app.manage(reports);
+            let activity = commands::reports::ActivityState::open(
+                app.path()
+                    .app_data_dir()
+                    .map(|dir| dir.join("activity-log.json"))
+                    .map_err(|_| core::library::LibraryError::Storage),
+            );
+            activity.record(&core::activity::NewActivity {
+                kind: "event".into(),
+                name: "event.app-start".into(),
+                detail: String::new(),
+                ok: true,
+            });
+            app.manage(activity);
             let yt = core::playback::extract::resolver().ok();
             app.manage(commands::state::SearchState::production(yt.clone()));
             app.manage(commands::youtube::YouTubeState::new(yt));
@@ -83,6 +121,12 @@ pub fn run() {
                 });
             if let Err(kind) = &offline {
                 eprintln!("media cache unavailable: {kind:?}");
+                note_startup_failure(
+                    app,
+                    "player",
+                    "error.player.media-cache-unavailable",
+                    &format!("{kind:?}"),
+                );
             }
             app.manage(commands::offline::OfflineState { manager: offline });
             platform::discord::start(app.path().app_data_dir().ok());
@@ -108,6 +152,12 @@ pub fn run() {
             // Only the category is logged; the app still starts and the sync commands fail with it.
             if let Err(kind) = &engine {
                 eprintln!("sync engine unavailable: {kind:?}");
+                note_startup_failure(
+                    app,
+                    "sync",
+                    "error.sync.engine-unavailable",
+                    &format!("{kind:?}"),
+                );
             }
             app.manage(commands::sync::SyncEngineState::new(engine));
             commands::sync::start_auto_sync(app.handle().clone());
@@ -175,6 +225,17 @@ pub fn run() {
             commands::telemetry::telemetry_record,
             commands::telemetry::telemetry_flush,
             commands::telemetry::telemetry_delete,
+            commands::reports::reports_get,
+            commands::reports::reports_set_enabled,
+            commands::reports::reports_record,
+            commands::reports::reports_asked,
+            commands::reports::reports_flush,
+            commands::reports::reports_delete,
+            commands::reports::activity_view,
+            commands::reports::activity_set_enabled,
+            commands::reports::activity_record,
+            commands::reports::activity_flush,
+            commands::reports::activity_delete,
             commands::remote::remote_start,
             commands::remote::remote_stop,
             commands::remote::remote_send,

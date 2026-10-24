@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reports-flush"
+description = "Enables the reports_flush command without any pre-configured scope."
+commands.allow = ["reports_flush"]
+
+[[permission]]
+identifier = "deny-reports-flush"
+description = "Denies the reports_flush command without any pre-configured scope."
+commands.deny = ["reports_flush"]

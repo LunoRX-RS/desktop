@@ -63,6 +63,58 @@ pub struct TelemetryCounter<'a> {
     pub count: u32,
 }
 
+/// One upload of consent-gated error reports: `POST /api/v1/reports`. The text fields are what `core::errorlog` holds,
+/// already masked and length-bounded; `reportId` is a random id that is not the telemetry install id or the stats
+/// device id, so the three datasets cannot be joined by anyone holding one of them.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReportBatch<'a> {
+    pub report_id: &'a str,
+    pub app_version: &'a str,
+    pub os: &'a str,
+    pub arch: &'a str,
+    pub reports: Vec<ReportItem<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReportItem<'a> {
+    pub uid: &'a str,
+    pub at_ms: u64,
+    pub source: &'a str,
+    pub kind: &'a str,
+    pub site: &'a str,
+    pub view: &'a str,
+    pub message: &'a str,
+    pub stack: &'a str,
+    pub detail: &'a str,
+    /// How many credential-shaped values this record withholds.
+    pub masked: usize,
+}
+
+/// One upload of the action and event log: `POST /api/v1/activity`. `logId` is this log's own random id.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityBatch<'a> {
+    pub log_id: &'a str,
+    pub app_version: &'a str,
+    pub os: &'a str,
+    pub arch: &'a str,
+    pub entries: Vec<ActivityItem<'a>>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityItem<'a> {
+    pub uid: &'a str,
+    pub at_ms: u64,
+    pub kind: &'a str,
+    pub name: &'a str,
+    pub detail: &'a str,
+    pub ok: bool,
+    pub count: u32,
+}
+
 /// One track's play count, the shape of `PUT /api/v1/stats/{deviceId}` and `GET /api/v1/stats`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -427,6 +479,32 @@ impl ApiClient {
         let req = self
             .http
             .delete(self.url(&format!("/api/v1/telemetry/{}", path_id(install_id)?)));
+        self.send(req).await.map(|_| ())
+    }
+
+    /// No session token: what makes a report deletable is the random `reportId` itself, so a failure during sign-in is
+    /// still reportable.
+    pub async fn post_reports(&self, batch: &ReportBatch<'_>) -> Result<(), SyncError> {
+        let req = self.http.post(self.url("/api/v1/reports")).json(batch);
+        self.send(req).await.map(|_| ())
+    }
+
+    pub async fn delete_reports(&self, report_id: &str) -> Result<(), SyncError> {
+        let req = self
+            .http
+            .delete(self.url(&format!("/api/v1/reports/{}", path_id(report_id)?)));
+        self.send(req).await.map(|_| ())
+    }
+
+    pub async fn post_activity(&self, batch: &ActivityBatch<'_>) -> Result<(), SyncError> {
+        let req = self.http.post(self.url("/api/v1/activity")).json(batch);
+        self.send(req).await.map(|_| ())
+    }
+
+    pub async fn delete_activity(&self, log_id: &str) -> Result<(), SyncError> {
+        let req = self
+            .http
+            .delete(self.url(&format!("/api/v1/activity/{}", path_id(log_id)?)));
         self.send(req).await.map(|_| ())
     }
 

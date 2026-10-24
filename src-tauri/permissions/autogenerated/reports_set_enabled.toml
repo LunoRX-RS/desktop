@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reports-set-enabled"
+description = "Enables the reports_set_enabled command without any pre-configured scope."
+commands.allow = ["reports_set_enabled"]
+
+[[permission]]
+identifier = "deny-reports-set-enabled"
+description = "Denies the reports_set_enabled command without any pre-configured scope."
+commands.deny = ["reports_set_enabled"]
