@@ -324,13 +324,6 @@ impl SyncEngine {
         self.commit()
     }
 
-    pub fn delete_local(&mut self, local_id: &str) -> Result<(), ErrorCategory> {
-        self.store
-            .delete_local(local_id)
-            .map_err(|e| category(&e))?;
-        self.commit()
-    }
-
     pub fn local_playlists(&self) -> &[LocalPlaylist] {
         self.store.playlists()
     }
@@ -719,6 +712,47 @@ pub(crate) async fn set_description(
         e.store.adopt_server(&remote, updated.version, None);
         e.store
             .set_description(local_id, text, true)
+            .map_err(|err| category(&err))?;
+        e.commit()
+    })
+    .await
+}
+
+/// Deletes a playlist. A playlist that is only on this device goes at once. An uploaded one is deleted on the server
+/// first, with its version, and only then here, so a failed request leaves both copies. A playlist the server no
+/// longer has counts as deleted. Refused while writes are waiting: they would move the version under this request.
+pub(crate) async fn delete_playlist(h: &mut Host<'_>, local_id: &str) -> Result<(), ErrorCategory> {
+    let target = h
+        .step(|e| {
+            let pl = e
+                .store
+                .playlists()
+                .iter()
+                .find(|p| p.id == local_id)
+                .ok_or(ErrorCategory::Validation)?;
+            let Some(remote) = pl.remote_id.clone() else {
+                e.store
+                    .delete_local(local_id)
+                    .map_err(|err| category(&err))?;
+                e.commit()?;
+                return Ok(None);
+            };
+            if e.queued_writes(&remote) > 0 || pl.queued > 0 {
+                return Err(ErrorCategory::Validation);
+            }
+            Ok(Some((e.api.clone(), e.token()?, remote, pl.version)))
+        })
+        .await?;
+    let Some((api, token, remote, version)) = target else {
+        return Ok(());
+    };
+    match api.delete_playlist(&token, &remote, version).await {
+        Ok(()) | Err(SyncError::NotFound(_)) => {}
+        Err(e) => return Err(category(&e)),
+    }
+    h.step(|e| {
+        e.store
+            .delete_local(local_id)
             .map_err(|err| category(&err))?;
         e.commit()
     })
