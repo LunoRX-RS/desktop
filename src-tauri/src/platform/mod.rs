@@ -1,10 +1,9 @@
 //! OS integration. macOS: system Now Playing, hardware media keys and the Playback menu. Linux: MPRIS (media widgets,
-//! `playerctl`, media keys). Every other platform gets two empty functions, so callers need no cfg and behave as before.
+//! `playerctl`, media keys). Every desktop OS also gets a tray icon with playback controls (`tray`).
 
 pub mod discord;
 pub mod fonts;
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod control;
 #[cfg(target_os = "macos")]
 mod macos_media;
@@ -12,6 +11,7 @@ mod macos_media;
 mod menu;
 #[cfg(target_os = "linux")]
 mod mpris;
+mod tray;
 
 /// Wires media keys, Now Playing and the Playback menu. Call from `setup`, on the main thread, after
 /// `PlayerState` is managed. A failure is logged once and never retried.
@@ -20,6 +20,7 @@ pub fn install(app: &tauri::AppHandle) {
     macos_media::set_app_icon();
     let menu = menu::install(app);
     macos_media::install(app, menu);
+    tray::install(app);
 }
 
 /// Tells the OS integration that player state, position or volume may have changed. Cheap and
@@ -27,23 +28,30 @@ pub fn install(app: &tauri::AppHandle) {
 #[cfg(target_os = "macos")]
 pub fn poke() {
     macos_media::poke();
+    tray::poke();
 }
 
 #[cfg(target_os = "linux")]
 pub fn install(app: &tauri::AppHandle) {
     mpris::install(app);
+    tray::install(app);
 }
 
 #[cfg(target_os = "linux")]
 pub fn poke() {
     mpris::poke();
+    tray::poke();
 }
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-pub fn install(_app: &tauri::AppHandle) {}
+pub fn install(app: &tauri::AppHandle) {
+    tray::install(app);
+}
 
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-pub fn poke() {}
+pub fn poke() {
+    tray::poke();
+}
 
 /// WebKitGTK on a Wayland compositor schedules frames from the compositor's frame callbacks. On hybrid-GPU laptops
 /// (Intel plus NVIDIA, outputs split across the two cards) those callbacks stop arriving for the app window, so the page

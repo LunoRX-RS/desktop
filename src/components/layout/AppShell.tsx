@@ -180,7 +180,7 @@ export default function AppShell() {
           <div className="mr-3 mb-3 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] bg-night-canvas">
             {libraryError && <div role="alert" className="mx-8 mt-2 mb-3 flex shrink-0 items-center justify-between gap-4 rounded-lg bg-frost-200 px-4 py-2 text-[13px] text-secondary-text"><p>{libraryError}</p><Button className="shrink-0" onClick={() => void refreshLikes()}>Retry likes</Button></div>}
             <main ref={mainRef} id="main-content" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto outline-none">
-              <div className="mx-auto w-full max-w-content px-8 pt-4 pb-16">
+              <div className={view === "artist" ? "w-full pb-16" : "mx-auto w-full max-w-content px-8 pt-4 pb-16"}>
                 <AnimatePresence mode="wait" initial={false} onExitComplete={() => mainRef.current?.scrollTo({ top: 0 })}>
                   <ViewFrame key={view} mounted={mounted}>
                     {view === "home" && <HomeScreen onNavigate={navigate} onOpenPlaylist={(id) => { setSelectedPlaylist(id); navigate("playlists"); }} />}
