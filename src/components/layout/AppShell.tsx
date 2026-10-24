@@ -4,7 +4,7 @@ import { loadCustomFonts } from "../../lib/textStyle";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/react";
-import { applySavedAudio } from "../../lib/audioSettings";
+import { applySavedAudio, watchAudioSettings } from "../../lib/audioSettings";
 import { initHistory } from "../../lib/history";
 import { detectPlatform } from "../../lib/platform";
 import { actionFor, comboFromEvent, currentBindings, hasCommandModifier } from "../../lib/shortcuts";
@@ -117,12 +117,13 @@ export default function AppShell() {
     const stopImport = initYouTubeImport();
     applySavedMode();
     void applySavedAudio();
+    const stopAudio = watchAudioSettings();
     initAppStyle();
     // Warm the first screens while the window is still settling: both feeds, and Explore's first topic.
     const warm = () => { void loadFeed("home"); void loadFeed("explore", "charts"); };
     const idle = (window as { requestIdleCallback?: (f: () => void) => number }).requestIdleCallback;
     if (idle) idle(warm); else window.setTimeout(warm, 300);
-    return stopImport;
+    return () => { stopImport(); stopAudio(); };
   }, []);
   const mainRef = useRef<HTMLElement>(null);
   const libraryError = useLibrary(s => s.error);

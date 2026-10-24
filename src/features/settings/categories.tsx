@@ -78,6 +78,7 @@ export const SEARCH_INDEX: { cat: CategoryKey; group: string; label: string }[] 
   { cat: "discord", group: "settings-discord-card", label: "Discord card design" },
   { cat: "playback", group: "settings-startup", label: "Restore last track" },
   { cat: "audio", group: "settings-effects", label: "Sound shaping equalizer bass treble speed" },
+  { cat: "audio", group: "settings-effects", label: "Nightcore slowed reverb 8D 4D moving sound keep pitch" },
   { cat: "audio", group: "settings-audio", label: "Stream quality" },
   { cat: "storage", group: "settings-cache", label: "Disk cache & offline storage" },
   { cat: "audio", group: "settings-audio", label: "PCM output" },

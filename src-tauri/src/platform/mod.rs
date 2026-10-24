@@ -12,6 +12,8 @@ mod macos_media;
 mod menu;
 #[cfg(target_os = "linux")]
 mod mpris;
+#[cfg(target_os = "macos")]
+mod sound_menu;
 
 /// Wires media keys, Now Playing and the Playback menu. Call from `setup`, on the main thread, after
 /// `PlayerState` is managed. A failure is logged once and never retried.
@@ -19,8 +21,18 @@ mod mpris;
 pub fn install(app: &tauri::AppHandle) {
     macos_media::set_app_icon();
     let menu = menu::install(app);
+    sound_menu::install(app);
     macos_media::install(app, menu);
 }
+
+/// The sound settings changed (from the settings panel): refresh the Sound menu's checks.
+#[cfg(target_os = "macos")]
+pub fn sound_changed(app: &tauri::AppHandle) {
+    sound_menu::refresh(app);
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn sound_changed(_app: &tauri::AppHandle) {}
 
 /// Tells the OS integration that player state, position or volume may have changed. Cheap and
 /// non-blocking; safe to call from any thread.

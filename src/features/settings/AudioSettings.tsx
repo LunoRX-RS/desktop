@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "../../components/ui";
 import { playerAudioSettings, playerSetAudioSettings, type AudioSettings, type AudioSettingsDto } from "../../services/tauri/player";
-import { saveAudioSettings } from "../../lib/audioSettings";
+import { AUDIO_CHANGED, saveAudioSettings } from "../../lib/audioSettings";
 import { AudioEffectsPanel } from "./AudioEffects";
 import { setSleepTimer, useSleepTimer } from "../../lib/sleepTimer";
 import { usePlatform } from "../../lib/platform";
@@ -28,7 +28,10 @@ export function AudioSettingsPanel() {
   useEffect(() => {
     let active = true;
     playerAudioSettings().then(v => { if (active) setValue(v); }).catch(() => { if (active) setError(true); });
-    return () => { active = false; };
+    // The macOS Sound menu changes the same settings.
+    const changed = (e: Event) => { if (active) setValue((e as CustomEvent<AudioSettingsDto>).detail); };
+    window.addEventListener(AUDIO_CHANGED, changed);
+    return () => { active = false; window.removeEventListener(AUDIO_CHANGED, changed); };
   }, []);
   async function update(settings: AudioSettings) {
     setBusy(true); setError(false);
