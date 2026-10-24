@@ -27,19 +27,21 @@ export function useAntibot(): { frame: ReactNode; getTokens: (n: number) => Prom
   const readyRef = useRef<{ promise: Promise<void>; resolve: () => void; reject: (e: AntibotError) => void } | null>(null);
   const pendingRef = useRef<Pending | null>(null);
   const [interactive, setInteractive] = useState(false);
+  // Bumped to build a new frame when the current one never became ready.
+  const [generation, setGeneration] = useState(0);
 
-  if (readyRef.current === null) {
+  const freshReady = () => {
     let resolve!: () => void;
     let reject!: (e: AntibotError) => void;
     const promise = new Promise<void>((res, rej) => { resolve = res; reject = rej; });
     promise.catch(() => undefined); // surfaced through getTokens; never an unhandled rejection
-    readyRef.current = { promise, resolve, reject };
-  }
+    return { promise, resolve, reject };
+  };
+  if (readyRef.current === null) readyRef.current = freshReady();
 
   useEffect(() => {
     if (!antibotEnabled) return;
     const origin = new URL(FRAME_URL).origin;
-    const ready = readyRef.current;
     const failPending = (e: AntibotError) => {
       const p = pendingRef.current;
       if (!p) return;
@@ -53,6 +55,7 @@ export function useAntibot(): { frame: ReactNode; getTokens: (n: number) => Prom
       const d: unknown = event.data;
       if (typeof d !== "object" || d === null || (d as { source?: unknown }).source !== SOURCE) return;
       const m = d as { type?: unknown; token?: unknown; id?: unknown };
+      const ready = readyRef.current;
       if (m.type === "ready") ready?.resolve();
       else if (m.type === "interactive") setInteractive(true);
       else if (m.type === "settled") setInteractive(false);
@@ -105,7 +108,17 @@ export function useAntibot(): { frame: ReactNode; getTokens: (n: number) => Prom
   const getTokens = useCallback(
     async (n: number) => {
       const out: string[] = [];
-      for (let i = 0; i < n; i += 1) out.push(await solveOne());
+      for (let i = 0; i < n; i += 1) {
+        try {
+          out.push(await solveOne());
+        } catch (e) {
+          // A frame that never became ready (its "ready" message can be missed) gets one new frame, then one more try.
+          if (!(e instanceof AntibotError && e.message === "unavailable") || i > 0) throw e;
+          readyRef.current = freshReady();
+          setGeneration((g) => g + 1);
+          out.push(await solveOne());
+        }
+      }
       return out;
     },
     [solveOne],
@@ -113,6 +126,7 @@ export function useAntibot(): { frame: ReactNode; getTokens: (n: number) => Prom
 
   const frame = antibotEnabled ? (
     <iframe
+      key={generation}
       ref={frameRef}
       src={FRAME_URL}
       title="Security check"
