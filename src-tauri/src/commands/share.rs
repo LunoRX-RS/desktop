@@ -7,7 +7,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::core::share_link::token_from_url;
-use crate::sync::api::ApiClient;
+use crate::sync::api::{ApiClient, Provider};
 use crate::sync::engine::{self, ErrorCategory};
 use crate::sync::settings::default_base_url;
 
@@ -37,6 +37,9 @@ pub fn shared_link_take(pending: State<'_, PendingShare>) -> Option<String> {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SharedEntryDto {
+    pub provider: Provider,
+    pub provider_track_id: String,
+    pub provider_url: String,
     pub title: String,
     pub artists: Vec<String>,
     pub artwork_url: Option<String>,
@@ -66,6 +69,9 @@ pub async fn shared_playlist_get(token: String) -> Result<SharedPlaylistDto, Err
             .entries
             .into_iter()
             .map(|e| SharedEntryDto {
+                provider: e.provider,
+                provider_track_id: e.provider_track_id,
+                provider_url: e.provider_url,
                 title: e.title,
                 artists: e.artists,
                 artwork_url: e.artwork_url,
