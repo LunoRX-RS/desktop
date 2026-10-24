@@ -34,6 +34,13 @@ pub fn shared_link_take(pending: State<'_, PendingShare>) -> Option<String> {
     pending.0.lock().ok()?.take()
 }
 
+/// Extracts a share token from any LunoRX link (deep link or web URL) or a bare token.
+/// Returns `None` for anything that is not a valid share link, so the UI can show one error.
+#[tauri::command]
+pub fn shared_token_from_url(raw: String) -> Option<String> {
+    crate::core::share_link::token_from_url(&raw)
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SharedEntryDto {
