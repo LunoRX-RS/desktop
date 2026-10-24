@@ -130,11 +130,15 @@ fn youtube_origin(url: &tauri::Url) -> bool {
         && url.password().is_none()
         && url.port().is_none()
 }
-/// After sign-in Google moves the flow to the account's country domain, for example `accounts.google.co.th`.
-/// Only `accounts.google.<cc>`, `accounts.google.co.<cc>` and `accounts.google.com.<cc>` with two-letter country codes
-/// pass, so a lookalike such as `accounts.google.evil.test` or `accounts.google.com.evil.test` does not.
-fn google_country_accounts(host: &str) -> bool {
-    let Some(rest) = host.strip_prefix("accounts.google.") else {
+/// Google moves the flow to the account's country domain after sign-in, for example `accounts.google.co.th` for
+/// accounts and `consent.google.co.th` for the "Before you continue" page. Only `google.<cc>`, `google.co.<cc>` and
+/// `google.com.<cc>` with two-letter country codes pass, so a lookalike such as `accounts.google.evil.test` or
+/// `consent.google.com.evil.test` does not.
+fn google_country_host(host: &str, service: &str) -> bool {
+    let Some(rest) = host
+        .strip_prefix(service)
+        .and_then(|rest| rest.strip_prefix('.'))
+    else {
         return false;
     };
     let code = |s: &str| s.len() == 2 && s.bytes().all(|b| b.is_ascii_lowercase());
@@ -143,6 +147,14 @@ fn google_country_accounts(host: &str) -> bool {
         ["co" | "com", cc] => code(cc),
         _ => false,
     }
+}
+
+fn google_country_accounts(host: &str) -> bool {
+    google_country_host(host, "accounts.google")
+}
+
+fn google_country_consent(host: &str) -> bool {
+    google_country_host(host, "consent.google")
 }
 fn login_navigation(url: &tauri::Url) -> bool {
     // The sign-in page opens blank frames while it loads; they carry no remote content.
@@ -155,6 +167,11 @@ fn login_navigation(url: &tauri::Url) -> bool {
             && url.username().is_empty()
             && url.password().is_none()
             && url.host_str().is_some_and(google_country_accounts))
+        || (url.scheme() == "https"
+            && url.port().is_none()
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.host_str().is_some_and(google_country_consent))
         || (url.scheme() == "https"
             && url.port().is_none()
             && url.username().is_empty()
@@ -520,6 +537,10 @@ mod tests {
             "https://accounts.google.co.th/signin",
             "https://accounts.google.com.au/",
             "https://accounts.google.de/",
+            "https://consent.google.com/",
+            "https://consent.google.co.th/m?continue=https%3A%2F%2Fmusic.youtube.com%2F",
+            "https://consent.google.com.au/",
+            "https://consent.google.de/",
             "about:blank",
             "https://music.youtube.com/",
         ] {
@@ -531,6 +552,9 @@ mod tests {
             "https://accounts.google.evil/",
             "https://accounts.google.co.evil/",
             "https://accounts.google.th.evil.test/",
+            "https://consent.google.evil/",
+            "https://consent.google.co.evil/",
+            "https://consent.google.com.evil.test/",
             "https://google.co.th/",
             "about:srcdoc",
             "https://evil.test/",
