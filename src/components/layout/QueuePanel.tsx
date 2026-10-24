@@ -22,7 +22,7 @@ export function QueuePanel({ inDialog = false }: { inDialog?: boolean }) {
 			// Slides in from the right edge on a spring and settles; only transform and opacity change, so it stays on the GPU.
 			initial={{ opacity: 0, x: reduce ? 0 : 40, scale: reduce ? 1 : 0.98 }}
 			animate={{ opacity: 1, x: 0, scale: 1, transition: { ...SPRING, opacity: tween(DUR.base) } }}
-			exit={{ opacity: 0, x: reduce ? 0 : 32, transition: tween(DUR.base) }}
+			exit={{ opacity: 0, x: reduce ? 0 : 32, transition: tween(DUR.exit) }}
 			style={{ transformOrigin: "100% 50%" }}
 			className={cx(
 				"glass-solid will-change-transform w-[min(440px,calc(100vw-48px))] overflow-y-auto overscroll-contain rounded-[12px] p-4 shadow-[0_16px_48px_rgba(0,0,0,0.5)]",
