@@ -140,6 +140,32 @@ impl Compressor {
     }
 }
 
+/// Moving-sound effects. The sound travels around the head by swinging between the left and right ears, with a little
+/// room echo so it feels like a space. They need headphones. `Eight` is a slow circle; `Four` is faster, wider and deeper.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+pub enum Spatial {
+    #[default]
+    #[serde(rename = "off")]
+    Off,
+    #[serde(rename = "8d")]
+    Eight,
+    #[serde(rename = "4d")]
+    Four,
+}
+impl Spatial {
+    fn filter(self) -> Option<&'static str> {
+        match self {
+            Self::Off => None,
+            Self::Eight => Some(
+                "apulsator=mode=sine:hz=0.125:amount=1:offset_l=0:offset_r=0.5,aecho=0.8:0.7:60:0.2",
+            ),
+            Self::Four => Some(
+                "extrastereo=m=1.6,apulsator=mode=sine:hz=0.3:amount=0.85:offset_l=0:offset_r=0.5,aecho=0.8:0.85:50|90:0.25|0.15",
+            ),
+        }
+    }
+}
+
 /// The user's sound shaping, all done by mpv's own filters. Whole numbers only, so a setting can never put text into a
 /// filter string. `valid` is the range check the command runs before anything is stored.
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -159,8 +185,12 @@ pub struct Effects {
     pub crossfeed: u8,
     pub reverb: Reverb,
     pub compressor: Compressor,
-    /// Playback speed in percent, 50 to 200. Pitch is kept.
+    /// Playback speed in percent, 50 to 200.
     pub speed: u8,
+    /// True keeps the pitch when the speed changes. False lets pitch follow speed, as in nightcore (faster and
+    /// higher) and slowed (slower and lower).
+    pub keep_pitch: bool,
+    pub spatial: Spatial,
 }
 impl Default for Effects {
     fn default() -> Self {
@@ -175,6 +205,8 @@ impl Default for Effects {
             reverb: Reverb::Off,
             compressor: Compressor::Off,
             speed: 100,
+            keep_pitch: true,
+            spatial: Spatial::Off,
         }
     }
 }
@@ -190,6 +222,10 @@ impl Effects {
     }
     fn preamp_ok(&self) -> bool {
         GAIN_DB.contains(&self.preamp)
+    }
+    /// With the switch off, or when asked to keep the pitch, mpv corrects the pitch as the speed changes.
+    pub fn pitch_correction(&self) -> bool {
+        !self.enabled || self.keep_pitch
     }
     /// The `speed` mpv should play at.
     pub fn speed_factor(&self) -> f64 {
@@ -231,6 +267,7 @@ impl Effects {
                 f64::from(self.crossfeed) / 100.0
             ));
         }
+        p.extend(self.spatial.filter().map(str::to_owned));
         p.extend(self.reverb.filter().map(str::to_owned));
         p.extend(self.compressor.filter().map(str::to_owned));
         p
@@ -243,7 +280,8 @@ impl Effects {
                 || self.treble > 0
                 || self.bands.iter().any(|g| *g > 0)
                 || self.compressor != Compressor::Off
-                || self.stereo_width > 100)
+                || self.stereo_width > 100
+                || self.spatial == Spatial::Four)
     }
 }
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -273,9 +311,10 @@ impl AudioSettings {
             format!("lavfi=[{}]", parts.join(","))
         }
     }
-    /// Filters and speed, applied to the running player. Speed keeps pitch (mpv's scaletempo).
+    /// Filters, speed and whether speed keeps the pitch, applied to the running player.
     pub fn apply_effects(&self, mpv: &Mpv) -> libmpv2::Result<()> {
         mpv.set_property("af", self.filter_chain())?;
+        mpv.set_property("audio-pitch-correction", self.effects.pitch_correction())?;
         mpv.set_property("speed", self.effects.speed_factor())
     }
     pub fn apply(self, mpv: &Mpv) -> libmpv2::Result<()> {
@@ -292,16 +331,110 @@ pub struct AudioOutput {
     pub source_format: Option<String>,
     pub source_sample_rate: Option<i64>,
 }
+/// One place sound can come out: an output device the system offers.
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioDevice {
+    /// mpv's name for it (for example `coreaudio/BuiltInSpeakerDevice`), or `auto`.
+    pub id: String,
+    pub label: String,
+}
+
+/// The device list from mpv's `audio-device-list` (a JSON array of `{name, description}`). Anything unreadable gives an
+/// empty list; the first entry mpv itself reports is `auto`.
+fn parse_devices(json: &str) -> Vec<AudioDevice> {
+    #[derive(serde::Deserialize)]
+    struct Raw {
+        name: String,
+        #[serde(default)]
+        description: String,
+    }
+    serde_json::from_str::<Vec<Raw>>(json)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|d| !d.name.is_empty() && d.name.len() <= 256)
+        .map(|d| AudioDevice {
+            label: if d.name == "auto" {
+                "Automatic (system default)".to_owned()
+            } else if d.description.is_empty() {
+                d.name.clone()
+            } else {
+                d.description
+            },
+            id: d.name,
+        })
+        .collect()
+}
+
 #[derive(Clone, Default)]
 pub struct AudioControl {
     pub settings: Arc<Mutex<AudioSettings>>,
     pub output: Arc<Mutex<AudioOutput>>,
+    /// The output device the user chose; empty means automatic.
+    device: Arc<Mutex<String>>,
+    /// Devices mpv last reported, refreshed every few seconds so a plugged-in headset shows up.
+    devices: Arc<Mutex<Vec<AudioDevice>>>,
+    listed: Arc<Mutex<Option<std::time::Instant>>>,
 }
 impl AudioControl {
     pub fn settings(&self) -> AudioSettings {
         *self.settings.lock().unwrap_or_else(|e| e.into_inner())
     }
+    /// The devices sound can go to, `auto` first.
+    pub fn devices(&self) -> Vec<AudioDevice> {
+        self.devices
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+    /// The chosen device id, `auto` when none was chosen.
+    pub fn device(&self) -> String {
+        let d = self
+            .device
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if d.is_empty() { "auto".into() } else { d }
+    }
+    /// Chooses where sound goes. Only `auto` or a device mpv listed is accepted, so nothing else reaches mpv.
+    pub fn set_device(&self, id: &str) -> bool {
+        if id != "auto" && !self.devices().iter().any(|d| d.id == id) {
+            return false;
+        }
+        *self.device.lock().unwrap_or_else(|e| e.into_inner()) = if id == "auto" {
+            String::new()
+        } else {
+            id.to_owned()
+        };
+        true
+    }
+    /// Moves mpv's output to the chosen device when it differs from the one in use. Returns the id now in force.
+    pub fn apply_device(&self, mpv: &Mpv, applied: &mut String) {
+        let want = self.device();
+        if *applied != want && mpv.set_property("audio-device", want.as_str()).is_ok() {
+            *applied = want;
+        }
+    }
+    fn refresh_devices(&self, mpv: &Mpv) {
+        let mut listed = self.listed.lock().unwrap_or_else(|e| e.into_inner());
+        if listed.is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(3)) {
+            return;
+        }
+        *listed = Some(std::time::Instant::now());
+        if let Ok(json) = mpv.get_property::<String>("audio-device-list") {
+            let found = parse_devices(&json);
+            if !found.is_empty() {
+                // A chosen device that was unplugged goes back to automatic, so sound never stays on a device that is gone.
+                let mut chosen = self.device.lock().unwrap_or_else(|e| e.into_inner());
+                if !chosen.is_empty() && !found.iter().any(|d| d.id == *chosen) {
+                    chosen.clear();
+                }
+                *self.devices.lock().unwrap_or_else(|e| e.into_inner()) = found;
+            }
+        }
+    }
     pub fn observe(&self, mpv: &Mpv) {
+        self.refresh_devices(mpv);
         *self.output.lock().unwrap_or_else(|e| e.into_inner()) = AudioOutput {
             driver: mpv.get_property("current-ao").ok(),
             format: mpv.get_property("audio-out-params/format").ok(),
@@ -314,6 +447,62 @@ impl AudioControl {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn device_lists_parse_and_only_listed_devices_can_be_chosen() {
+        let json = r#"[{"name":"auto","description":"Autoselect device"},{"name":"coreaudio/Speakers","description":"MacBook Speakers"},{"name":"","description":"x"},{"name":"coreaudio/NoText","description":""}]"#;
+        let list = parse_devices(json);
+        assert_eq!(list.len(), 3, "an empty name is dropped");
+        assert_eq!(list[0].label, "Automatic (system default)");
+        assert_eq!(
+            list[1],
+            AudioDevice {
+                id: "coreaudio/Speakers".into(),
+                label: "MacBook Speakers".into()
+            }
+        );
+        assert_eq!(list[2].label, "coreaudio/NoText");
+        assert!(parse_devices("not json").is_empty());
+        let control = AudioControl::default();
+        assert_eq!(control.device(), "auto");
+        assert!(
+            !control.set_device("coreaudio/Speakers"),
+            "unknown until mpv lists it"
+        );
+        *control.devices.lock().unwrap() = list;
+        assert!(control.set_device("coreaudio/Speakers"));
+        assert_eq!(control.device(), "coreaudio/Speakers");
+        assert!(!control.set_device("$(rm -rf /)"));
+        assert!(!control.set_device(""));
+        assert!(control.set_device("auto"));
+        assert_eq!(control.device(), "auto");
+    }
+    #[test]
+    fn a_device_that_disappears_returns_to_automatic() {
+        let mpv = Mpv::with_initializer(|init| {
+            init.set_option("config", "no")?;
+            init.set_option("ao", "null")
+        })
+        .unwrap();
+        let control = AudioControl::default();
+        *control.device.lock().unwrap() = "usb/Unplugged".into();
+        control.observe(&mpv);
+        assert_eq!(control.device(), "auto");
+    }
+    #[test]
+    fn mpv_lists_devices_and_accepts_auto() {
+        let mpv = Mpv::with_initializer(|init| {
+            init.set_option("config", "no")?;
+            init.set_option("ao", "null")
+        })
+        .unwrap();
+        let control = AudioControl::default();
+        control.observe(&mpv);
+        let list = control.devices();
+        assert!(list.iter().any(|d| d.id == "auto"), "{list:?}");
+        let mut applied = String::from("other");
+        control.apply_device(&mpv, &mut applied);
+        assert_eq!(applied, "auto");
+    }
     #[test]
     fn mpv_accepts_all_requested_pcm_formats_and_rates() {
         let mpv = Mpv::with_initializer(|init| {
@@ -442,6 +631,59 @@ mod tests {
         assert_eq!(loud.matches("alimiter").count(), 1, "{loud}");
     }
     #[test]
+    fn spatial_pitch_and_old_settings_files_behave() {
+        let eight = settings(|s| {
+            s.loudness = Loudness::Off;
+            s.effects.spatial = Spatial::Eight;
+        });
+        let chain = eight.filter_chain();
+        assert!(
+            chain.contains("apulsator=mode=sine:hz=0.125") && chain.contains("aecho"),
+            "{chain}"
+        );
+        assert!(
+            !chain.contains("alimiter"),
+            "8D only moves the sound between ears: {chain}"
+        );
+        let four = settings(|s| {
+            s.loudness = Loudness::Off;
+            s.effects.spatial = Spatial::Four;
+        })
+        .filter_chain();
+        assert!(
+            four.contains("extrastereo=m=1.6") && four.ends_with("alimiter=limit=0.95:level=0]"),
+            "{four}"
+        );
+        // Moving-sound effects come before the room echo and the compressor.
+        let both = settings(|s| {
+            s.loudness = Loudness::Off;
+            s.effects.spatial = Spatial::Eight;
+            s.effects.compressor = Compressor::Light;
+        })
+        .filter_chain();
+        assert!(both.find("apulsator").unwrap() < both.find("acompressor").unwrap());
+        // Nightcore: faster and higher. The master switch always restores normal pitch handling.
+        let night = settings(|s| {
+            s.effects.speed = 125;
+            s.effects.keep_pitch = false;
+        });
+        assert!(!night.effects.pitch_correction());
+        assert_eq!(night.effects.speed_factor(), 1.25);
+        let off = settings(|s| {
+            s.effects.enabled = false;
+            s.effects.keep_pitch = false;
+        });
+        assert!(off.effects.pitch_correction());
+        // A settings file saved before these fields existed still loads, with them off.
+        let old: Effects = serde_json::from_str(r#"{"enabled":true,"speed":110}"#).unwrap();
+        assert_eq!(
+            (old.spatial, old.keep_pitch, old.speed),
+            (Spatial::Off, true, 110)
+        );
+        assert_eq!(serde_json::to_string(&Spatial::Eight).unwrap(), "\"8d\"");
+        assert!(serde_json::from_str::<Spatial>("\"9d\"").is_err());
+    }
+    #[test]
     fn the_master_switch_and_cuts_only_need_no_limiter() {
         let off = settings(|s| {
             s.loudness = Loudness::Off;
@@ -518,10 +760,13 @@ mod tests {
                 reverb: Reverb::Hall,
                 compressor: Compressor::Heavy,
                 speed: 125,
+                keep_pitch: false,
+                spatial: Spatial::Four,
                 ..Effects::default()
             };
         });
         s.apply_effects(&mpv).unwrap();
+        assert!(!mpv.get_property::<bool>("audio-pitch-correction").unwrap());
         let af: String = mpv.get_property("af").unwrap();
         for f in [
             "equalizer",
@@ -529,6 +774,7 @@ mod tests {
             "treble",
             "extrastereo",
             "crossfeed",
+            "apulsator",
             "aecho",
             "acompressor",
             "alimiter",
@@ -536,7 +782,15 @@ mod tests {
             assert!(af.contains(f), "{f} missing from {af}");
         }
         assert!((mpv.get_property::<f64>("speed").unwrap() - 1.25).abs() < 1e-9);
+        let eight = settings(|s| s.effects.spatial = Spatial::Eight);
+        eight.apply_effects(&mpv).unwrap();
+        assert!(
+            mpv.get_property::<String>("af")
+                .unwrap()
+                .contains("apulsator")
+        );
         AudioSettings::default().apply_effects(&mpv).unwrap();
         assert_eq!(mpv.get_property::<f64>("speed").unwrap(), 1.0);
+        assert!(mpv.get_property::<bool>("audio-pitch-correction").unwrap());
     }
 }

@@ -200,14 +200,37 @@ export interface AudioEffects {
   crossfeed: number;
   reverb: "off" | "room" | "hall";
   compressor: "off" | "light" | "medium" | "heavy";
-  /** Percent, 50 to 200; pitch is kept. */
+  /** Percent, 50 to 200. */
   speed: number;
+  /** True keeps the pitch when the speed changes. False lets pitch follow speed (nightcore: faster and higher). */
+  keepPitch: boolean;
+  /** Moving-sound effects for headphones: off, "8d" (slow circle) or "4d" (faster, wider). */
+  spatial: "off" | "8d" | "4d";
 }
-export const FLAT_EFFECTS: AudioEffects = { enabled: true, preamp: 0, bands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], bass: 0, treble: 0, stereoWidth: 100, crossfeed: 0, reverb: "off", compressor: "off", speed: 100 };
+export const FLAT_EFFECTS: AudioEffects = { enabled: true, preamp: 0, bands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], bass: 0, treble: 0, stereoWidth: 100, crossfeed: 0, reverb: "off", compressor: "off", speed: 100, keepPitch: true, spatial: "off" };
 export interface AudioSettingsDto {
   settings: AudioSettings;
   available: boolean;
   output: { driver: string | null; format: string | null; sampleRate: number | null; sourceFormat: string | null; sourceSampleRate: number | null };
+}
+/** Where sound can come out. `id` is `auto` or the system's name for the device. */
+export interface AudioDeviceDto { id: string; label: string }
+export interface AudioDevicesDto { devices: AudioDeviceDto[]; selected: string }
+export function playerAudioDevices(): Promise<AudioDevicesDto> {
+  return invoke("player_audio_devices");
+}
+/** Sends sound to a device from the list, or back to "auto". Rejects with "invalid" for anything not listed. */
+export function playerSetAudioDevice(id: string): Promise<AudioDevicesDto> {
+  return invoke("player_set_audio_device", { id });
+}
+/** A sound preset: a full set of effects. Choosing one replaces what was set before. */
+export interface EffectPreset { id: string; label: string; group: string; effects: AudioEffects }
+export function playerEffectPresets(): Promise<EffectPreset[]> {
+  return invoke("player_effect_presets");
+}
+/** Fired when the sound settings change outside the settings panel (the macOS Sound menu). */
+export function subscribeAudioSettings(on: (dto: AudioSettingsDto) => void): Promise<UnlistenFn> {
+  return listen<AudioSettingsDto>("core://audio/settings", (event) => on(event.payload));
 }
 export function playerAudioSettings(): Promise<AudioSettingsDto> {
   return invoke("player_audio_settings");

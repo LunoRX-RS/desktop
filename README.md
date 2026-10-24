@@ -12,7 +12,7 @@ A desktop music player for YouTube Music. A Rust core handles search, playback, 
 
 ---
 
-> **Pre-release (`1.0.0-rc.0`).** It plays real YouTube audio on a developer machine. Spotify search and playback are not supported, and no installer has been tested on a clean machine yet. The [Status](#status) table lists what works and what does not.
+> **Version 1.0.0.** It plays real YouTube audio and keeps your playlists on your own machine, with optional sync. Spotify search and playback are not supported. The Windows and Linux installers have not been run on a clean machine, and the macOS app is ad-hoc signed, so macOS asks you to approve it once. The [Status](#status) table lists what works and what does not.
 
 > [!IMPORTANT]
 > ### Disclaimer
@@ -75,13 +75,15 @@ Three rules shape the code:
 
 **Listening**
 - Native audio through libmpv: seek, volume, resume where you left off, stream quality, loudness, PCM format and sample rate.
+- **Sound shaping:** a ten-band equaliser, bass, treble, stereo width, headphone crossfeed, room reverb, a compressor and speed with or without pitch. 51 presets in five groups (everyday, genres, fun such as Nightcore, Slowed + reverb and Vaporwave, 8D and 4D moving sound for headphones, and rooms or devices). Settings > Audio.
 - Autoplay radio. When a track ends, the core has already prepared the next related track and starts it. The up-next list is real, you can pick from it, and Previous uses it.
 - Play, Shuffle and Save to playlist on every album and artist page. The core queues the remaining tracks as Up next.
-- On macOS: the Now Playing widget, media keys and a Playback menu in the menu bar.
+- On macOS: the Now Playing widget, media keys, a Playback menu and a **Sound** menu in the menu bar (presets, moving sound, speed, keep pitch), which stays in step with Settings.
 - Offline: keep a playlist on the device. A disk cache with a size limit handles everything else.
 
 **Finding music**
-- Home (history and recommendations), Explore (Discover, Thai music, Pop, Hip-hop, Focus, Chill, Acoustic), and Search with live suggestions. A newer search cancels the one before it.
+- Listen Now (history and recommendations) and Explore (mood and genre tiles, then a featured song and rows, the same layout as Listen Now). Search lists YouTube Music songs and YouTube videos together, with live suggestions, and a newer search cancels the one before it.
+- **Play from a link:** paste a `youtube.com`, `music.youtube.com` or `youtu.be` link into Search and it plays at once.
 - Library with liked songs, artists (with profile photos), albums and local playlists.
 - Artist and album pages with real profiles, discographies and track lists.
 - A command palette on `⌘K` / `Ctrl+K`.
@@ -90,11 +92,13 @@ Three rules shape the code:
 - Time-synced lyrics in a full-window layout, with an active line, gaps for intros and instrumentals, and click to seek.
 - Eight sources in an order you set: LyricsPlus, LRCLIB, YouTube Music, Netease, QQ Music, Kugou, Boidu and your own files. Word-by-word timing appears where a source provides it. Where it does not, a labelled "guessed" mode is available.
 - A source picker, a timing offset per source, and "Wrong song? Search by title" with a manual bind.
-- Lyric Maker: play a song and type or tap along to write a `.lrc` file. A calibration pass measures your input delay. Files are plain text in `~/Documents/LUNOR-X Lyrics/`.
+- Lyric Maker: play a song and type or tap along to write a `.lrc` file. A calibration pass measures your input delay. Files are plain text in `~/Documents/LunoRX Lyrics/`.
 
 **Your data**
 - Local-first playlists with an offline queue and version numbers for optimistic concurrency. When a conflict comes up, you choose to keep yours or the server's, and nothing is overwritten silently.
-- Optional sync with a LUNOR-X backend.
+- Optional LunoRX account and sync: sign in or create an account at launch (or skip it), with a Cloudflare Turnstile check. Background sync, a read-only check of where each playlist stands on the server, and editing a playlist's description.
+- **Share a playlist:** one link per playlist (`https://play.lunorx.xyz/s/<token>`), read only, shown on every device. Recreate it to replace the old one, or stop sharing. A shared page has an "Open in LunoRX" button and an embed.
+- **Self-update:** the app checks once at launch for a newer release signed with the project's key, and installs it only when you press Install. Settings > About has a Stable (full releases) or Dev (pre-releases too) channel.
 
 **Interface**
 - A dark glass-and-blur theme with one accent colour, which means "live". Motion follows `prefers-reduced-motion`, and transparency follows `prefers-reduced-transparency`. The target is WCAG 2.2 AA.
@@ -109,12 +113,12 @@ Three rules shape the code:
 | YouTube sign-in | Google session cookies in the OS key store. This is a project-owner exception, described under [Security model](#security-model). It is not approval from the provider. |
 | Spotify | Not supported. No search and no playback. The app reports it as unsupported. |
 | Lyrics | Five unofficial endpoints, used with the owner's acceptance. Each one can be turned off. See [Lyrics](#lyrics). |
-| Sync with the backend | Works against a running backend (sign in, create, add, upload). Not production-hardened. |
+| Sync with the backend | Works against a running backend: sign in or create an account, upload, background sync, share links, descriptions. Not production-hardened. Needs `LUNORX_BACKEND_URL` (default `https://api.lunorx.xyz`) to answer. |
 | Library: albums and songs tabs | Partly sample data, labelled as a demo in the UI. Playlists and likes are real. |
-| macOS bundle | Bundling has been run locally, on a debug build only. |
+| macOS bundle | Built by the release workflow with libmpv inside. Ad-hoc signed, not notarized. |
 | Linux | Runs from source on Arch Linux under Hyprland (Wayland), with playback and MPRIS media controls. Other distributions, X11 and other window managers are targets that have not been run. Installers are not verified. Sign-in needs a Secret Service (GNOME Keyring or KWallet). See [Linux notes](#linux-notes). |
-| Windows | Target. Not verified on a real machine. |
-| Release signing | macOS apps are ad-hoc signed unless signing secrets are set. Windows installers are unsigned. |
+| Windows | NSIS installer built by the release workflow. Not verified on a real machine. |
+| Release signing | macOS apps are ad-hoc signed (no Apple Developer account). Windows installers are unsigned. Update files are signed with the project's minisign key, and the app installs only updates that match it. |
 | Licences | This repository is MIT. YouTube access comes from `innerlight` (MIT, in the sibling `innerlight` repository). `libmpv` is LGPL. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists every component and licence. |
 
 ## Install on Linux
@@ -131,7 +135,7 @@ Start it from the menu, or run `lunorx`. The script finds the newest release, ch
 |---|---|
 | Any distribution, no root (default) | `curl -fsSL <url> \| sh` |
 | A system package on Debian, Ubuntu and relatives | `curl -fsSL <url> \| sh -s -- --deb` |
-| A specific release | `curl -fsSL <url> \| sh -s -- --version v1.0.0-rc.4` |
+| A specific release | `curl -fsSL <url> \| sh -s -- --version v1.0.0` |
 | See what it would do, download nothing | `curl -fsSL <url> \| sh -s -- --dry-run` |
 | Remove it again | `curl -fsSL <url> \| sh -s -- --uninstall` |
 
@@ -279,6 +283,7 @@ The `tests/acl_*.rs` files read those files and check that every handler in a gr
 | Lyrics | `lyrics_source_fetch` `lyrics_source_search` `lyrics_source_bind` `lyrics_source_unbind` `lyrics_settings_get` `lyrics_settings_set` · `lrc_load` `lrc_save` `lrc_delete` `lrc_reveal` `lrc_list` |
 | Sync | `sync_sign_in` `sync_sign_out` `sync_status` `sync_create_local_playlist` `sync_add_local_entry` `sync_remove_local_entry` `sync_upload_playlist` `sync_flush_pending` `sync_discard_pending` `sync_resolve_conflict` `sync_list_local_playlists` |
 | Providers | `youtube_connect` `youtube_connect_finish` `youtube_disconnect` `youtube_connection_status` `provider_credential_set` `provider_credential_status` `provider_credential_clear` |
+| Updates | `update_check` `update_install` |
 | Offline | `offline_status` `offline_keep` `offline_cancel` `offline_remove` `offline_set_limit` |
 
 Events come back through the same typed channel: `core://player/state`, `core://player/progress`, `core://library/changed`, `core://history/changed`, `core://history/error`, `core://offline/changed` and `core://youtube/connection`. Each subscription is removed when its component unmounts.
@@ -313,7 +318,7 @@ Sources are tried in the order you set. The default order is your own file, then
 | YouTube Music | Plain text | No timestamps |
 
 - Only public track metadata (title, artists, length) goes to these services. No cookie, token or account data does.
-- Most of these endpoints are unofficial and could change or disappear. You can turn each source off under Settings > Playback & audio. Results are cached, and misses are remembered for 24 hours, so the app does not keep asking for lyrics a service does not have.
+- Most of these endpoints are unofficial and could change or disappear. You can turn each source off under Settings > Lyrics. Results are cached, and misses are remembered for 24 hours, so the app does not keep asking for lyrics a service does not have.
 - A line without a real timestamp is never shown as timed. Estimated and guessed timing carries a label ("estimated timing", "words guessed"), and word highlighting is real only when the source supplies word times.
 - The lyric-source code lives in `src-tauri/src/core/playback/lyric_sources/`.
 
@@ -376,13 +381,13 @@ bun test tests/        # frontend tests (bun:test)
 | `tests/youtube_live.rs` | Live YouTube Data API search. Runs only when `LUNORX_LIVE_YOUTUBE_KEY` is set, and otherwise skips |
 | `tests/*.test.mjs` | Frontend store logic |
 
-The last full Rust run, on 2026-10-22, passed 555 tests with no failures. Run it yourself for a current number.
+The last full Rust run passed 648 tests with no failures, and `bun test` passed 23. Run them yourself for a current number. On hosted Windows CI the one test that opens a real audio device is skipped.
 
 Not covered: end-to-end UI tests, a release bundle run on Windows or Linux, load tests, and playback against a real player in CI.
 
 ## Releasing
 
-A release is a version tag. Pushing the tag builds the installers and publishes them with `SHA256SUMS.txt`. The version lives in `package.json` and `src-tauri/Cargo.toml`, and the workflow rejects a tag that does not match both. [RELEASING.md](RELEASING.md) has the full steps, the platform table and the signing secrets.
+A release is a version tag (for example `v1.0.0`). A tag without `-rc` is a full release and feeds the Stable update channel; every tag feeds Dev. Pushing the tag builds the installers and publishes them with `SHA256SUMS.txt`. The version lives in `package.json` and `src-tauri/Cargo.toml`, and the workflow rejects a tag that does not match both. [RELEASING.md](RELEASING.md) has the full steps, the platform table and the signing secrets.
 
 ## Known limits
 
@@ -391,7 +396,8 @@ A release is a version tag. Pushing the tag builds the installers and publishes 
 - The unofficial lyric endpoints may change or disappear at any time.
 - The first request to LyricsPlus can be slow and may need one retry.
 - SimpMusic is not supported, because its server answers only its own client.
-- Playlist track lists cannot be read back from the local store yet. The editor shows counts and status.
+- A playlist that is on the server cannot be renamed or reordered yet. Its description can be changed, online.
+- The Windows and Linux installers, and installing a self-update, have not been run on a real machine yet.
 
 ## Project documents
 
@@ -408,6 +414,7 @@ A release is a version tag. Pushing the tag builds the installers and publishes 
 | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) | Components, licences and what needs attention |
 | [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Community rules |
 | [LICENSE](LICENSE) | MIT, covering this repository |
+| [Terms](https://www.lunorx.xyz/legal/terms/) and [Privacy](https://www.lunorx.xyz/legal/privacy/) | What using the app and a LunoRX account means, and what is stored and sent |
 
 ## Star History
 

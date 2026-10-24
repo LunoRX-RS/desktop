@@ -160,19 +160,15 @@ jobs:
           $env:MPV_DEV_DIR | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
 
       # libmpv-2.dll imports vulkan-1.dll (the Vulkan loader). The runner has no GPU driver and so no loader, and the test
-      # binary then stops with STATUS_DLL_NOT_FOUND although libmpv-2.dll itself is found. Chocolatey has no Vulkan
-      # runtime package, so the loader comes from LunarG's runtime components (pinned) and goes into MPV_DEV_DIR, which
-      # is already on PATH, and next to the test binaries. No GPU is needed for the tests.
-      - name: Get the Vulkan loader (Windows)
+      # binary then stops with STATUS_DLL_NOT_FOUND although libmpv-2.dll itself is found. The runtime only supplies
+      # the loader; no GPU is needed for the tests.
+      - name: Install the Vulkan loader (Windows)
         shell: pwsh
         run: |
-          Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/1.4.363.0/windows/vulkan-runtime-components.zip" -OutFile vulkan-rt.zip
-          Expand-Archive vulkan-rt.zip -DestinationPath vulkan-rt
-          $dll = Get-ChildItem vulkan-rt -Recurse -Filter vulkan-1.dll | Where-Object { $_.Directory.Name -eq 'x64' } | Select-Object -First 1
-          if (-not $dll) { throw "x64 vulkan-1.dll missing from the LunarG runtime components" }
-          Copy-Item $dll.FullName "$env:MPV_DEV_DIR\"
-          Copy-Item $dll.FullName src-tauri/target/debug/deps/
-          Copy-Item $dll.FullName src-tauri/target/debug/
+          # LunarG's runtime installer is the source (the Chocolatey package was not always found). /S is a silent install.
+          Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-runtime.exe" -OutFile "$env:RUNNER_TEMP\vulkan-runtime.exe"
+          Start-Process "$env:RUNNER_TEMP\vulkan-runtime.exe" -ArgumentList "/S" -Wait
+          if (-not (Test-Path "$env:SystemRoot\System32\vulkan-1.dll")) { throw "vulkan-1.dll still missing" }
 
       - uses: Swatinem/rust-cache@v2
         with:
