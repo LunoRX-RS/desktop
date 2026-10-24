@@ -24,6 +24,8 @@ const NEXT_STATUS: Record<string, string> = {
 
 // Rows are drawn a screenful at a time. The next batch is added when a row a little before the end of what is drawn comes
 // into view, so a normal scroll never reaches the edge; only a very fast one shows the placeholder rows for a moment.
+/** The most songs core keeps up next (QUEUE_MAX in autoplay.rs); at this size there is nothing more to load. */
+const QUEUE_CAP = 500;
 const FIRST_ROWS = 12;
 const MORE_ROWS = 16;
 const LOOKAHEAD_ROWS = 6;
@@ -89,7 +91,7 @@ function PlaceholderRows({ liRef }: { liRef: Ref<HTMLLIElement> }) {
 
 /** Loads more related songs when the end of the list scrolls into view, one request at a time. It never gives up:
  * after an empty answer it waits a little longer each time and asks again while the end is still on screen. */
-function useLoadMore(enabled: boolean, resetKey: string | undefined, remaining: number) {
+function useLoadMore(enabled: boolean, resetKey: string | undefined, remaining: number, sentinelShown: boolean) {
   const sentinel = useRef<HTMLLIElement | null>(null);
   const [loading, setLoading] = useState(false);
   const [retry, setRetry] = useState(0);
@@ -109,11 +111,11 @@ function useLoadMore(enabled: boolean, resetKey: string | undefined, remaining: 
   }, []);
   useEffect(() => {
     const node = sentinel.current;
-    if (!enabled || !node) return;
+    if (!enabled || !sentinelShown || !node) return;
     const observer = new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) void load(); }, { rootMargin: "900px" });
     observer.observe(node);
     return () => observer.disconnect();
-  }, [enabled, load, retry, loading]);
+  }, [enabled, sentinelShown, load, retry]); // not `loading`: the observer stays put while a load runs; `retry` re-arms it after an empty answer
   // Keep a good stretch of songs ready ahead of the scroll, so the end of the list is rarely reached.
   useEffect(() => { if (enabled && remaining < 30) void load(); }, [enabled, remaining, load, retry]);
   return { sentinel, loading };
@@ -223,7 +225,7 @@ export default function NativeQueue() {
     els.forEach((el) => observer.observe(el));
     return () => observer.disconnect();
   }, [shown, total, lookahead, upcoming]); // upcoming: a reorder puts another row at the lookahead index
-  const more = useLoadMore(shown >= total && total > 0 && next.state !== "finding", track?.providerTrackId, total);
+  const more = useLoadMore(total > 0 && total < QUEUE_CAP && next.state !== "finding", track?.providerTrackId, total, shown >= total);
   async function saveQueue() {
     if (!track) return;
     // Read before the first await: the song can change while the playlist is being created.
@@ -288,7 +290,7 @@ export default function NativeQueue() {
               onDown={onHandleDown} onMove={onHandleMove} onUp={onHandleUp} onCancel={onHandleCancel} onKey={onHandleKey} />;
           })}
           {shown < total && <PlaceholderRows liRef={placeholder} />}
-          {shown >= total && <li ref={more.sentinel} className="flex h-12 items-center justify-center text-[12px] text-secondary-text"><span role="status" className="flex items-center gap-2"><Loader2 size={14} className="lx-spin" aria-hidden="true" />Loading more…</span></li>}
+          {shown >= total && total < QUEUE_CAP && <li ref={more.sentinel} className="flex h-12 items-center justify-center text-[12px] text-secondary-text"><span role="status" className="flex items-center gap-2"><Loader2 size={14} className="lx-spin" aria-hidden="true" />Loading more…</span></li>}
         </ol> : next.state !== "finding" && <p role="status" className="px-2 py-2 text-[13px] text-secondary-text">{NEXT_STATUS[next.state] ?? "Nothing after this song yet."}</p>}
 
       </section>

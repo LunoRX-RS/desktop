@@ -68,16 +68,17 @@ export function SavedLibraryScreen({ artists = false }: { artists?: boolean }) {
 function ArtistHero({ id, name, art, meta, actions }: { id: string; name: string; art: string | null | undefined; meta: string; actions: ReactNode }) {
   const fade = "linear-gradient(to bottom, #000 0%, #000 45%, transparent 100%)";
   return (
-    <header className="relative isolate w-full overflow-hidden">
-      <div className="relative h-[440px] w-full">
+    <header className="relative isolate flex min-h-[440px] w-full items-end overflow-hidden">
+      <div aria-hidden="true" className="absolute inset-0">
         {art ? (
           <img src={art} alt="" referrerPolicy="no-referrer" className="absolute inset-0 size-full object-cover object-top"
             style={{ maskImage: fade, WebkitMaskImage: fade }} />
         ) : (
-          <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-b from-frost-300 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-b from-frost-300 to-transparent" />
         )}
       </div>
-      <div className="absolute inset-x-0 bottom-0 mx-auto flex w-full max-w-content flex-col gap-3 px-8 pb-3">
+      {/* In the flow, not absolute: a long name or extra lines make the header taller instead of being cut off. */}
+      <div className="relative mx-auto flex w-full max-w-content flex-col gap-3 px-8 pt-24 pb-3">
         <h1 id={id} className="font-display text-[56px] leading-[60px] font-bold tracking-[-0.025em] drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">{name}</h1>
         {meta && <p className="text-[13px] leading-[18px] text-secondary-text">{meta}</p>}
         {actions}

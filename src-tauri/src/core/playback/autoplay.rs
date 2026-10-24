@@ -38,6 +38,9 @@ pub struct AutoplayStatus {
     /// True when that list came from a playlist or album, so related tracks wait until it is used up.
     #[serde(skip)]
     list: bool,
+    /// Bumped on every manual load, which replaces the queue; a slow `load_more` that started before it is dropped.
+    #[serde(skip)]
+    generation: u64,
 }
 impl Default for AutoplayStatus {
     fn default() -> Self {
@@ -52,6 +55,7 @@ impl Default for AutoplayStatus {
             back: Vec::new(),
             context: Vec::new(),
             list: false,
+            generation: 0,
         }
     }
 }
@@ -63,6 +67,7 @@ impl AutoplayStatus {
             repeat: self.repeat,
             radio: self.radio,
             vibe: self.vibe,
+            generation: self.generation.wrapping_add(1),
             ..Default::default()
         };
     }
@@ -526,7 +531,7 @@ pub async fn related(
 /// The newest songs are asked together and the first answer with something new wins; uploads and lyric videos are
 /// left out. Returns how many songs were added: 0 when the list is empty or full, or the service gave nothing new.
 pub async fn load_more(state: &Status, yt: &Yt) -> usize {
-    let (seeds, history, known) = {
+    let (seeds, history, known, generation) = {
         let Ok(s) = state.lock() else {
             return 0;
         };
@@ -542,6 +547,7 @@ pub async fn load_more(state: &Status, yt: &Yt) -> usize {
                 .collect::<Vec<_>>(),
             s.history.clone(),
             s.queue.iter().map(|t| t.id.clone()).collect::<Vec<_>>(),
+            s.generation,
         )
     };
     let mut asking = tokio::task::JoinSet::new();
@@ -569,6 +575,10 @@ pub async fn load_more(state: &Status, yt: &Yt) -> usize {
     let Ok(mut s) = state.lock() else {
         return 0;
     };
+    // A manual load replaced the queue while the radios were being asked: these songs belong to the old one.
+    if s.generation != generation {
+        return 0;
+    }
     let before = s.queue.len();
     for track in fresh {
         if s.queue.len() >= QUEUE_MAX {
@@ -712,6 +722,13 @@ mod tests {
         let queue = state.lock().unwrap().queue.clone();
         assert_eq!(queue.len(), 1);
         assert_eq!(queue[0].id, "r-G2pKr2_n8");
+    }
+    #[test]
+    fn a_manual_load_starts_a_new_queue_generation() {
+        let state: Status = Default::default();
+        let before = state.lock().unwrap().generation;
+        state.lock().unwrap().reset();
+        assert_ne!(state.lock().unwrap().generation, before);
     }
     #[test]
     fn the_up_next_list_can_be_edited_by_hand() {

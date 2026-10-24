@@ -45,6 +45,11 @@ pub fn view(state: PlaybackStateDto, track: Option<(&str, &[String])>) -> View {
     View { label, playing }
 }
 
+/// Menu text: Windows and Linux read `&` as the mark of a keyboard shortcut, so a literal one is written twice.
+fn menu_text(label: &str) -> String {
+    label.replace('&', "&&")
+}
+
 fn show_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
@@ -123,7 +128,7 @@ fn build(app: &AppHandle) -> tauri::Result<()> {
             if shown.as_ref() == Some(&next_view) {
                 continue;
             }
-            let _ = now.set_text(&next_view.label);
+            let _ = now.set_text(menu_text(&next_view.label));
             let _ = toggle.set_text(if next_view.playing { "Pause" } else { "Play" });
             let tooltip = if next_view.label == "Nothing playing" {
                 "LUNOR-X".to_owned()
@@ -150,6 +155,12 @@ mod tests {
         assert!(v.playing);
         assert!(view(S::Buffering, Some(("Song", &artists))).playing);
         assert!(!view(S::Paused, Some(("Song", &artists))).playing);
+    }
+
+    #[test]
+    fn an_ampersand_in_a_title_is_shown_literally_in_the_menu() {
+        assert_eq!(menu_text("Rock & Roll · AC&DC"), "Rock && Roll · AC&&DC");
+        assert_eq!(menu_text("Plain"), "Plain");
     }
 
     #[test]
