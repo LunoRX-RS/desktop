@@ -6,7 +6,7 @@ import { BadgeCheck, Clock, Flame, Search, TrendingUp, User, X } from "lucide-re
 import { useUi, type View } from "../../lib/store";
 import { useLocalPlaylists } from "../../features/playlists/usePlaylists";
 import { cx } from "../ui";
-import { DUR, tween } from "../../lib/motion";
+import { DUR, SPRING, tween } from "../../lib/motion";
 import { TrackCover } from "../TrackCover";
 import { useHistory } from "../../lib/history";
 import { useFeed } from "../../lib/discovery";
@@ -59,9 +59,12 @@ export default function CommandPalette() {
 	// Suggested words and songs for what is typed. The song request is the one the Search page sends, so choosing "Search" after
 	// it is answered from the core's memory.
 	useEffect(() => {
-		setTerms([]);
-		setSongs([]);
-		if (!s.paletteOpen || typed.length < 2 || typed.length > 200) return;
+		// The answer for the previous letters stays on screen until the next one arrives; emptying the list on every key made it flash.
+		if (!s.paletteOpen || typed.length < 2 || typed.length > 200) {
+			setTerms([]);
+			setSongs([]);
+			return;
+		}
 		let live = true;
 		const id = crypto.randomUUID();
 		let started = false;
@@ -188,7 +191,7 @@ export default function CommandPalette() {
 					initial={reduce ? false : { opacity: 0 }}
 					animate={{ opacity: 1 }}
 					exit={{ opacity: 0, transition: tween(DUR.exit) }}
-					transition={tween(0.16)}
+					transition={tween(DUR.base)}
 					onMouseDown={(e) => {
 						if (e.target === e.currentTarget) close();
 					}}
@@ -197,11 +200,12 @@ export default function CommandPalette() {
 						role="dialog"
 						aria-modal="true"
 						aria-label="Quick search"
-						initial={reduce ? false : { opacity: 0, scale: 0.98 }}
-						animate={{ opacity: 1, scale: 1 }}
-						exit={{ opacity: 0, scale: 0.98, transition: tween(DUR.exit) }}
-						transition={tween(0.16)}
-						className="glass-solid w-[min(680px,calc(100vw-32px))] overflow-hidden rounded-[12px] shadow-[0_24px_64px_rgba(0,0,0,0.55)]"
+						// Drops in from a little above on a spring.
+						initial={reduce ? false : { opacity: 0, y: -16, scale: 0.97 }}
+						animate={{ opacity: 1, y: 0, scale: 1, transition: { ...SPRING, opacity: tween(DUR.base) } }}
+						exit={{ opacity: 0, y: -8, scale: 0.98, transition: tween(DUR.exit) }}
+						style={{ transformOrigin: "50% 0%" }}
+						className="glass-solid will-change-transform w-[min(680px,calc(100vw-32px))] overflow-hidden rounded-[12px] shadow-[0_24px_64px_rgba(0,0,0,0.55)]"
 					>
 						<div className="flex items-center gap-3 px-4 py-3">
 							<Search size={18} aria-hidden="true" className="text-secondary-text" />
@@ -220,7 +224,7 @@ export default function CommandPalette() {
 							/>
 							<kbd className="rounded-[6px] bg-frost-200 px-1.5 py-0.5 text-[11px] text-secondary-text">Esc</kbd>
 						</div>
-						<ul id="palette-list" role="listbox" aria-label="Results" ref={listRef} className="max-h-[460px] overflow-y-auto border-t border-hairline p-2">
+						<ul id="palette-list" role="listbox" aria-label="Results" ref={listRef} className="max-h-[460px] min-h-[140px] overflow-y-auto overscroll-contain border-t border-hairline p-2">
 							{entries.length === 0 && <li className="px-3 py-6 text-center text-sm text-tertiary-text">No matches.</li>}
 							{entries.map((c, i) => {
 								const Icon = c.icon ? ICONS[c.icon] : null;
@@ -240,7 +244,7 @@ export default function CommandPalette() {
 											onMouseEnter={() => setActive(i)}
 											onClick={c.run}
 											className={cx(
-												"flex cursor-pointer items-center gap-3 rounded-[8px] px-3 text-[13px] text-primary-text",
+												"lx-fade-in flex cursor-pointer items-center gap-3 rounded-[8px] px-3 text-[13px] text-primary-text",
 												c.cover ? "h-[52px]" : "h-10",
 												i === active && "bg-lumen-wash",
 											)}
