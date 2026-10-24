@@ -229,7 +229,11 @@ impl LocalStore {
             .iter()
             .position(|p| p.id == local_id)
             .ok_or(SyncError::Local("playlist not found"))?;
-        self.playlists.remove(index);
+        let removed = self.playlists.remove(index);
+        // A mark for the deleted remote playlist would make every later refresh ask the server for it again.
+        if let Some(remote) = removed.remote_id {
+            self.refresh.remove(&remote);
+        }
         Ok(())
     }
 
@@ -782,8 +786,10 @@ mod tests {
         let mut store = LocalStore::default();
         let id = store.create_local("P", None).unwrap();
         store.find_mut(&id).unwrap().remote_id = Some("r".into());
+        store.mark_refresh("r");
         store.delete_local(&id).unwrap();
         assert!(store.playlists().is_empty());
+        assert!(store.refresh_marks().is_empty());
         assert!(store.delete_local(&id).is_err());
     }
 

@@ -252,6 +252,7 @@ pub async fn run_add_local_entry(
         duration_ms: entry.duration_ms,
         remote_entry_id: None,
     };
+    let _net = state.net.lock().await;
     let mut co = state.checkout().await?;
     co.engine().add_local_entry(local_id, entry)
 }
@@ -339,6 +340,8 @@ pub async fn run_remove_local_entry(
     local_id: &str,
     index: usize,
 ) -> Result<(), ErrorCategory> {
+    // Same gate as delete: a write queued during a delete would outlive its playlist.
+    let _net = state.net.lock().await;
     let mut co = state.checkout().await?;
     co.engine().remove_local_entry(local_id, index)
 }
