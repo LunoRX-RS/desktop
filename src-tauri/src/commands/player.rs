@@ -1527,6 +1527,38 @@ pub fn player_audio_settings(state: State<'_, PlayerState>) -> AudioSettingsDto 
         available: state.available,
     }
 }
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioDevicesDto {
+    pub devices: Vec<crate::core::playback::audio::AudioDevice>,
+    /// The device in force: an id from `devices`, or `auto`.
+    pub selected: String,
+}
+
+/// Where sound can come out, and where it goes now. The list refreshes every few seconds while the player runs.
+#[tauri::command]
+pub fn player_audio_devices(state: State<'_, PlayerState>) -> AudioDevicesDto {
+    AudioDevicesDto {
+        devices: state.audio.devices(),
+        selected: state.audio.device(),
+    }
+}
+
+/// Sends sound to a device from the list (or back to automatic). Anything else is refused. Takes effect at once.
+#[tauri::command]
+pub fn player_set_audio_device(
+    state: State<'_, PlayerState>,
+    id: String,
+) -> Result<AudioDevicesDto, PlayerError> {
+    if !state.available {
+        return Err(PlayerError::new(PlayerErrorCategory::UnsupportedCapability));
+    }
+    if id.len() > 256 || !state.audio.set_device(&id) {
+        return Err(invalid());
+    }
+    Ok(player_audio_devices(state))
+}
+
 /// The sound presets, in display order. One list for the settings panel and the macOS Sound menu.
 #[tauri::command]
 pub fn player_effect_presets() -> Vec<crate::core::playback::presets::Preset> {

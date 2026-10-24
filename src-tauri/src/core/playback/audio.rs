@@ -331,16 +331,110 @@ pub struct AudioOutput {
     pub source_format: Option<String>,
     pub source_sample_rate: Option<i64>,
 }
+/// One place sound can come out: an output device the system offers.
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioDevice {
+    /// mpv's name for it (for example `coreaudio/BuiltInSpeakerDevice`), or `auto`.
+    pub id: String,
+    pub label: String,
+}
+
+/// The device list from mpv's `audio-device-list` (a JSON array of `{name, description}`). Anything unreadable gives an
+/// empty list; the first entry mpv itself reports is `auto`.
+fn parse_devices(json: &str) -> Vec<AudioDevice> {
+    #[derive(serde::Deserialize)]
+    struct Raw {
+        name: String,
+        #[serde(default)]
+        description: String,
+    }
+    serde_json::from_str::<Vec<Raw>>(json)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|d| !d.name.is_empty() && d.name.len() <= 256)
+        .map(|d| AudioDevice {
+            label: if d.name == "auto" {
+                "Automatic (system default)".to_owned()
+            } else if d.description.is_empty() {
+                d.name.clone()
+            } else {
+                d.description
+            },
+            id: d.name,
+        })
+        .collect()
+}
+
 #[derive(Clone, Default)]
 pub struct AudioControl {
     pub settings: Arc<Mutex<AudioSettings>>,
     pub output: Arc<Mutex<AudioOutput>>,
+    /// The output device the user chose; empty means automatic.
+    device: Arc<Mutex<String>>,
+    /// Devices mpv last reported, refreshed every few seconds so a plugged-in headset shows up.
+    devices: Arc<Mutex<Vec<AudioDevice>>>,
+    listed: Arc<Mutex<Option<std::time::Instant>>>,
 }
 impl AudioControl {
     pub fn settings(&self) -> AudioSettings {
         *self.settings.lock().unwrap_or_else(|e| e.into_inner())
     }
+    /// The devices sound can go to, `auto` first.
+    pub fn devices(&self) -> Vec<AudioDevice> {
+        self.devices
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+    /// The chosen device id, `auto` when none was chosen.
+    pub fn device(&self) -> String {
+        let d = self
+            .device
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if d.is_empty() { "auto".into() } else { d }
+    }
+    /// Chooses where sound goes. Only `auto` or a device mpv listed is accepted, so nothing else reaches mpv.
+    pub fn set_device(&self, id: &str) -> bool {
+        if id != "auto" && !self.devices().iter().any(|d| d.id == id) {
+            return false;
+        }
+        *self.device.lock().unwrap_or_else(|e| e.into_inner()) = if id == "auto" {
+            String::new()
+        } else {
+            id.to_owned()
+        };
+        true
+    }
+    /// Moves mpv's output to the chosen device when it differs from the one in use. Returns the id now in force.
+    pub fn apply_device(&self, mpv: &Mpv, applied: &mut String) {
+        let want = self.device();
+        if *applied != want && mpv.set_property("audio-device", want.as_str()).is_ok() {
+            *applied = want;
+        }
+    }
+    fn refresh_devices(&self, mpv: &Mpv) {
+        let mut listed = self.listed.lock().unwrap_or_else(|e| e.into_inner());
+        if listed.is_some_and(|t| t.elapsed() < std::time::Duration::from_secs(3)) {
+            return;
+        }
+        *listed = Some(std::time::Instant::now());
+        if let Ok(json) = mpv.get_property::<String>("audio-device-list") {
+            let found = parse_devices(&json);
+            if !found.is_empty() {
+                // A chosen device that was unplugged goes back to automatic, so sound never stays on a device that is gone.
+                let mut chosen = self.device.lock().unwrap_or_else(|e| e.into_inner());
+                if !chosen.is_empty() && !found.iter().any(|d| d.id == *chosen) {
+                    chosen.clear();
+                }
+                *self.devices.lock().unwrap_or_else(|e| e.into_inner()) = found;
+            }
+        }
+    }
     pub fn observe(&self, mpv: &Mpv) {
+        self.refresh_devices(mpv);
         *self.output.lock().unwrap_or_else(|e| e.into_inner()) = AudioOutput {
             driver: mpv.get_property("current-ao").ok(),
             format: mpv.get_property("audio-out-params/format").ok(),
@@ -353,6 +447,62 @@ impl AudioControl {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn device_lists_parse_and_only_listed_devices_can_be_chosen() {
+        let json = r#"[{"name":"auto","description":"Autoselect device"},{"name":"coreaudio/Speakers","description":"MacBook Speakers"},{"name":"","description":"x"},{"name":"coreaudio/NoText","description":""}]"#;
+        let list = parse_devices(json);
+        assert_eq!(list.len(), 3, "an empty name is dropped");
+        assert_eq!(list[0].label, "Automatic (system default)");
+        assert_eq!(
+            list[1],
+            AudioDevice {
+                id: "coreaudio/Speakers".into(),
+                label: "MacBook Speakers".into()
+            }
+        );
+        assert_eq!(list[2].label, "coreaudio/NoText");
+        assert!(parse_devices("not json").is_empty());
+        let control = AudioControl::default();
+        assert_eq!(control.device(), "auto");
+        assert!(
+            !control.set_device("coreaudio/Speakers"),
+            "unknown until mpv lists it"
+        );
+        *control.devices.lock().unwrap() = list;
+        assert!(control.set_device("coreaudio/Speakers"));
+        assert_eq!(control.device(), "coreaudio/Speakers");
+        assert!(!control.set_device("$(rm -rf /)"));
+        assert!(!control.set_device(""));
+        assert!(control.set_device("auto"));
+        assert_eq!(control.device(), "auto");
+    }
+    #[test]
+    fn a_device_that_disappears_returns_to_automatic() {
+        let mpv = Mpv::with_initializer(|init| {
+            init.set_option("config", "no")?;
+            init.set_option("ao", "null")
+        })
+        .unwrap();
+        let control = AudioControl::default();
+        *control.device.lock().unwrap() = "usb/Unplugged".into();
+        control.observe(&mpv);
+        assert_eq!(control.device(), "auto");
+    }
+    #[test]
+    fn mpv_lists_devices_and_accepts_auto() {
+        let mpv = Mpv::with_initializer(|init| {
+            init.set_option("config", "no")?;
+            init.set_option("ao", "null")
+        })
+        .unwrap();
+        let control = AudioControl::default();
+        control.observe(&mpv);
+        let list = control.devices();
+        assert!(list.iter().any(|d| d.id == "auto"), "{list:?}");
+        let mut applied = String::from("other");
+        control.apply_device(&mpv, &mut applied);
+        assert_eq!(applied, "auto");
+    }
     #[test]
     fn mpv_accepts_all_requested_pcm_formats_and_rates() {
         let mpv = Mpv::with_initializer(|init| {

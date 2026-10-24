@@ -117,6 +117,8 @@ fn main() {
             "player_audio_settings",
             "player_set_audio_settings",
             "player_effect_presets",
+            "player_audio_devices",
+            "player_set_audio_device",
             "player_state",
             "player_progress",
             "player_track_info",

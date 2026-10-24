@@ -80,6 +80,7 @@ export const SEARCH_INDEX: { cat: CategoryKey; group: string; label: string }[] 
   { cat: "audio", group: "settings-effects", label: "Sound shaping equalizer bass treble speed" },
   { cat: "audio", group: "settings-effects", label: "Nightcore slowed reverb 8D 4D moving sound keep pitch" },
   { cat: "audio", group: "settings-audio", label: "Stream quality" },
+  { cat: "audio", group: "settings-audio", label: "Output device speakers headphones bluetooth" },
   { cat: "storage", group: "settings-cache", label: "Disk cache & offline storage" },
   { cat: "audio", group: "settings-audio", label: "PCM output" },
   { cat: "audio", group: "settings-audio", label: "Sample rate" },

@@ -191,6 +191,8 @@ pub fn run() {
             commands::player::player_audio_settings,
             commands::player::player_set_audio_settings,
             commands::player::player_effect_presets,
+            commands::player::player_audio_devices,
+            commands::player::player_set_audio_device,
             commands::player::player_state,
             commands::player::player_progress,
             commands::player::player_track_info,

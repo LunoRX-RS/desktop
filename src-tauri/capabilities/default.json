@@ -71,6 +71,8 @@
     "allow-player-audio-settings",
     "allow-player-set-audio-settings",
     "allow-player-effect-presets",
+    "allow-player-audio-devices",
+    "allow-player-set-audio-device",
     "allow-player-state",
     "allow-player-progress",
     "allow-player-track-info",

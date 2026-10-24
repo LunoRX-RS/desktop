@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Button } from "../../components/ui";
-import { playerAudioSettings, playerSetAudioSettings, type AudioSettings, type AudioSettingsDto } from "../../services/tauri/player";
-import { AUDIO_CHANGED, saveAudioSettings } from "../../lib/audioSettings";
+import { playerAudioDevices, playerAudioSettings, playerSetAudioDevice, playerSetAudioSettings, type AudioDevicesDto, type AudioSettings, type AudioSettingsDto } from "../../services/tauri/player";
+import { AUDIO_CHANGED, saveAudioDevice, saveAudioSettings } from "../../lib/audioSettings";
 import { AudioEffectsPanel } from "./AudioEffects";
 import { setSleepTimer, useSleepTimer } from "../../lib/sleepTimer";
 import { usePlatform } from "../../lib/platform";
@@ -25,6 +25,20 @@ export function AudioSettingsPanel() {
   const [value, setValue] = useState<AudioSettingsDto | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const [devices, setDevices] = useState<AudioDevicesDto | null>(null);
+  const [deviceError, setDeviceError] = useState(false);
+  // The list is read when the panel opens and again every few seconds, so a headset plugged in later appears.
+  useEffect(() => {
+    let active = true;
+    const read = () => playerAudioDevices().then((d) => { if (active) { setDevices(d); setDeviceError(false); } }, () => { if (active) setDeviceError(true); });
+    void read();
+    const timer = window.setInterval(read, 4000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
+  async function chooseDevice(id: string) {
+    setDeviceError(false);
+    try { const next = await playerSetAudioDevice(id); setDevices(next); saveAudioDevice(next.selected); } catch { setDeviceError(true); }
+  }
   useEffect(() => {
     let active = true;
     playerAudioSettings().then(v => { if (active) setValue(v); }).catch(() => { if (active) setError(true); });
@@ -68,6 +82,12 @@ export function AudioSettingsPanel() {
         <option value="off">Off</option><option value="balanced">Balanced</option><option value="loud">Loud</option>
       </select>
     </SettingRow>
+    <SettingRow label="Output device" htmlFor="audio-device" hint="Where sound comes out: speakers, headphones, a Bluetooth or USB device. Applies at once and is remembered. A device that is not connected falls back to Automatic.">
+      <select id="audio-device" className={FIELD} disabled={disabled || !devices} value={devices?.selected ?? "auto"} onChange={e => void chooseDevice(e.target.value)}>
+        {(devices?.devices.length ? devices.devices : [{ id: "auto", label: "Automatic (system default)" }]).map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
+      </select>
+    </SettingRow>
+    {deviceError && <NoteRow tone="bad" role="alert">Could not change the output device. Try again, or pick Automatic.</NoteRow>}
     <SettingRow label="Sleep timer" htmlFor="sleep-timer" hint={endsAt ? `Pauses at ${new Date(endsAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. Closing the app cancels it.` : "Pauses playback once after the chosen time."}>
       <select id="sleep-timer" className={FIELD} value="" onChange={e => setSleepTimer(Number(e.target.value) || null)}>
         <option value="">{endsAt ? "Running…" : "Off"}</option>{[15, 30, 45, 60, 90].map(m => <option key={m} value={m}>{m} minutes</option>)}
