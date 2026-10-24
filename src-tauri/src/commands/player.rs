@@ -1016,7 +1016,7 @@ pub async fn player_queue_more(
     let added = crate::core::playback::autoplay::load_more(&state.autoplay_status, &yt).await;
     if added > 0 {
         let dto = progress(&state).await;
-        let _ = app.emit_to("main", "core://player/progress", dto);
+        let _ = emit_main(&app, "core://player/progress", &dto);
     }
     Ok(added)
 }
