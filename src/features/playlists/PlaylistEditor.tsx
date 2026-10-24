@@ -441,12 +441,12 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
             <Button variant="ghost" disabled={busy} onClick={() => setConfirmDelete(false)}>Cancel</Button>
           </>
         ) : (
-          <Button variant="ghost" disabled={busy || !!selected.remoteId} title={selected.remoteId ? "An uploaded playlist cannot be deleted yet" : undefined} onClick={() => setConfirmDelete(true)}>
+          <Button variant="ghost" disabled={busy} onClick={() => setConfirmDelete(true)}>
             <Trash2 size={14} aria-hidden="true" />Delete playlist
           </Button>
         )}
         <p className="text-[13px] leading-[18px] text-secondary-text">
-          {selected.remoteId ? "Uploaded playlists cannot be deleted, renamed or reordered yet." : "Deleting removes this device's copy."}
+          {selected.remoteId ? "Uploaded playlists cannot be renamed or reordered yet. Deleting removes it here and from your account." : "Deleting removes this device's copy."}
         </p>
       </div>
     </div>

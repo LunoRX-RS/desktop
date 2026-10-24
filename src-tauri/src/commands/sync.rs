@@ -283,21 +283,23 @@ pub async fn run_playlist_entries(
         .collect())
 }
 
-/// Deletes a local playlist that is not on the server. A playlist imported from YouTube Music is remembered as
-/// deleted so the next import does not bring it back.
+/// Deletes a playlist (on the server first when it is uploaded). A playlist imported from YouTube Music is remembered
+/// as deleted so the next import does not bring it back.
 pub async fn run_delete_local_playlist(
     app: &tauri::AppHandle,
     state: &SyncEngineState,
     local_id: &str,
 ) -> Result<(), ErrorCategory> {
-    let mut co = state.checkout().await?;
-    let engine = co.engine();
-    let description = engine
-        .local_playlists()
-        .iter()
-        .find(|p| p.id == local_id)
-        .and_then(|p| p.description.clone());
-    engine.delete_local(local_id)?;
+    let _net = state.net.lock().await;
+    let description = {
+        let mut co = state.checkout().await?;
+        co.engine()
+            .local_playlists()
+            .iter()
+            .find(|p| p.id == local_id)
+            .and_then(|p| p.description.clone())
+    };
+    engine::delete_playlist(&mut Host::Shared(state), local_id).await?;
     crate::commands::youtube_import::forget_playlist(app, description.as_deref());
     Ok(())
 }

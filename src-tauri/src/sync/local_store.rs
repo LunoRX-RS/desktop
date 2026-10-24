@@ -221,20 +221,19 @@ impl LocalStore {
         Ok(id)
     }
 
-    /// Deletes a playlist that is not on the server. An uploaded one is refused: removing it from the server
-    /// is not supported yet, and forgetting only the local copy would leave a playlist this device can no longer see.
+    /// Forgets a playlist on this device. For an uploaded one the caller deletes it on the server first
+    /// (`engine::delete_playlist`), so the two cannot drift.
     pub fn delete_local(&mut self, local_id: &str) -> Result<(), SyncError> {
         let index = self
             .playlists
             .iter()
             .position(|p| p.id == local_id)
             .ok_or(SyncError::Local("playlist not found"))?;
-        if self.playlists[index].remote_id.is_some() {
-            return Err(SyncError::Local(
-                "an uploaded playlist cannot be deleted yet",
-            ));
+        let removed = self.playlists.remove(index);
+        // A mark for the deleted remote playlist would make every later refresh ask the server for it again.
+        if let Some(remote) = removed.remote_id {
+            self.refresh.remove(&remote);
         }
-        self.playlists.remove(index);
         Ok(())
     }
 
@@ -780,6 +779,18 @@ mod tests {
         store.find_mut(&id).unwrap().remote_id = Some("r".into());
         assert!(store.set_description(&id, Some("y"), false).is_err());
         assert!(store.set_description(&id, Some("y"), true).is_ok());
+    }
+
+    #[test]
+    fn delete_local_forgets_an_uploaded_playlist_once_the_server_copy_is_gone() {
+        let mut store = LocalStore::default();
+        let id = store.create_local("P", None).unwrap();
+        store.find_mut(&id).unwrap().remote_id = Some("r".into());
+        store.mark_refresh("r");
+        store.delete_local(&id).unwrap();
+        assert!(store.playlists().is_empty());
+        assert!(store.refresh_marks().is_empty());
+        assert!(store.delete_local(&id).is_err());
     }
 
     /// Spotify entry carrying ids only (the only shape the backend accepts for Spotify).
