@@ -33,7 +33,7 @@ export function TelemetrySettings() {
   const pending = Object.entries(view.pending);
   return (
     <Inset id="settings-usage" title="Usage data">
-      <SettingRow label="Share anonymous usage counts" hint="Helps decide what to improve. Sends how often features are used and which error types happen, with the app version and your OS. Never song titles, artists, searches, accounts or sign-ins.">
+      <SettingRow label="Share anonymous usage counts" hint="Helps decide what to improve. Sends how often features are used and which error types happen, with the app version and your OS. Usage counts only — never song titles, artists, searches, accounts or sign-ins. Error reports and the activity log are separate switches below, each with its own consent.">
         <Switch on={view.enabled} onChange={(on) => void toggle(on)} name="Share anonymous usage counts">{view.enabled ? "On" : "Off"}</Switch>
       </SettingRow>
       {view.enabled && (

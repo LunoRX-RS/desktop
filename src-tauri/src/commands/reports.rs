@@ -176,16 +176,19 @@ pub fn activity_record(
     state.with(|log| log.record(&entry)).map(|_| ())
 }
 
-/// Uploads the records error reports hold. Nothing is sent while consent is off or nothing is unsent.
+/// Uploads the records error reports hold. Nothing is sent while consent is off or nothing is unsent. `once` is the
+/// first-run prompt's "send these once": the click itself is the consent, the switch stays off afterwards.
 #[tauri::command]
 pub async fn reports_flush(
     window: WebviewWindow,
     state: State<'_, ReportsState>,
+    once: Option<bool>,
 ) -> Result<(), ErrorCategory> {
     main(&window).map_err(|_| ErrorCategory::Validation)?;
     if !state
         .with(ErrorLog::enabled)
         .map_err(|_| ErrorCategory::Storage)?
+        && !once.unwrap_or(false)
     {
         return Ok(());
     }

@@ -66,7 +66,8 @@ export const reportsGet = () => invoke<ErrorLogViewDto>("reports_get");
 export const reportsSetEnabled = (enabled: boolean) => invoke<ErrorLogViewDto>("reports_set_enabled", { enabled });
 export const reportsRecord = (error: NewErrorDto) => invoke<void>("reports_record", { error });
 export const reportsAsked = () => invoke<ErrorLogViewDto>("reports_asked");
-export const reportsFlush = () => invoke<void>("reports_flush");
+/** `once` is the first-run prompt's send: the click is the consent, the switch stays off. */
+export const reportsFlush = (once?: boolean) => invoke<void>("reports_flush", { once: once === true });
 /** Deletes this device's reports on the server first, then clears the local log with a new anonymous id. */
 export const reportsDelete = () => invoke<ErrorLogViewDto>("reports_delete");
 export const activityView = () => invoke<ActivityViewDto>("activity_view");

@@ -14,6 +14,7 @@ import { initErrorReport } from "../../lib/errorReport";
 import { initRemote } from "../../lib/remote";
 import { initUpdater } from "../../lib/updater";
 import { UpdateBanner } from "./UpdateBanner";
+import { ErrorReportBanner } from "./ErrorReportBanner";
 import { NoticeBar } from "./NoticeBar";
 import { hydrateRecentSearches } from "../../lib/store";
 import { useUi } from "../../lib/store";
@@ -161,6 +162,7 @@ export default function AppShell() {
     <MotionConfig reducedMotion="user">
       <PlaybackEvents />
       <UpdateBanner />
+      <ErrorReportBanner />
       <NoticeBar />
       <LoginGate />
       <a

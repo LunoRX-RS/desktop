@@ -6,6 +6,7 @@ import { usePlayback } from "../../../lib/playback";
 import { useDevLog } from "../../../lib/devLog";
 import { useSettingsStore } from "../../../lib/settingsStore";
 import { youtubeConnectionStatus, subscribeYouTubeConnection, type YouTubeConnectionStatus } from "../../../services/tauri/youtube";
+import { activityView, type ActivityRecordDto } from "../../../services/tauri/reports";
 import { Button } from "../../../components/ui";
 import { Switch } from "../../../components/Lyrics";
 import { Inset, NoteRow, SettingRow, StatusRow } from "../rows";
@@ -27,6 +28,7 @@ export function DevMode() {
   const entries = useDevLog((s) => s.entries);
   const clear = useDevLog((s) => s.clear);
   const [session, setSession] = useState<YouTubeConnectionStatus | null>(null);
+  const [activity, setActivity] = useState<ActivityRecordDto[] | null>(null);
   useEffect(() => {
     let active = true;
     let stop: UnlistenFn | undefined;
@@ -39,6 +41,11 @@ export function DevMode() {
       .catch(() => { if (active) setSession("unavailable"); });
     return () => { active = false; stop?.(); };
   }, []);
+  // The activity list is read fresh whenever Dev Mode turns on; it is a local log, so this never sends anything.
+  useEffect(() => {
+    if (!devMode) return;
+    activityView().then((v) => setActivity(v.records.slice(0, 40)), () => setActivity([]));
+  }, [devMode]);
 
   return (
     <>
@@ -77,6 +84,31 @@ export function DevMode() {
                 ))}
                 <div className="flex justify-end px-4 py-3">
                   <Button variant="ghost" onClick={clear}>Clear</Button>
+                </div>
+              </>
+            )}
+          </Inset>
+          <Inset id="settings-dev-activity" title="Recent activity">
+            {activity === null || activity.length === 0 ? (
+              <NoteRow tone="off">{activity === null ? "Reading the local log…" : "Nothing has happened yet."}</NoteRow>
+            ) : (
+              <>
+                {activity.map((a) => (
+                  <SettingRow
+                    key={a.uid}
+                    label={`${new Date(a.atMs).toLocaleTimeString()} · ${a.name}${a.count > 1 ? ` ×${a.count}` : ""}`}
+                    hint={a.detail || (a.ok ? "" : "failed")}
+                  />
+                ))}
+                <div className="flex justify-end px-4 py-3">
+                  <Button
+                    variant="ghost"
+                    onClick={() => void navigator.clipboard.writeText(
+                      activity.map((a) => `${new Date(a.atMs).toISOString()} ${a.name}${a.count > 1 ? ` x${a.count}` : ""}${a.detail ? ` — ${a.detail}` : ""}`).join("\n"),
+                    )}
+                  >
+                    Copy
+                  </Button>
                 </div>
               </>
             )}
