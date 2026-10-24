@@ -4,8 +4,9 @@
 
 use std::sync::atomic::{AtomicU8, Ordering};
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 
+use crate::commands::emit::emit_main;
 use crate::commands::player::{
     PlaybackStateDto, PlayerState, dispatch, finish, progress, run_seek, run_set_volume,
 };
@@ -138,7 +139,7 @@ pub async fn run(app: AppHandle, cmd: Remote) {
         Plan::Skip(forward) => {
             crate::commands::player::skip(&app, forward).await;
             let dto = progress(&state).await;
-            let _ = app.emit_to("main", "core://player/progress", dto);
+            let _ = emit_main(&app, "core://player/progress", &dto);
             return;
         }
         Plan::Nothing => return,
@@ -146,7 +147,7 @@ pub async fn run(app: AppHandle, cmd: Remote) {
     let _ = finish(&app, reply);
     // `core://player/state` only fires when the state changes; seek and volume do not, so push progress too.
     let dto = progress(&state).await;
-    let _ = app.emit_to("main", "core://player/progress", dto);
+    let _ = emit_main(&app, "core://player/progress", &dto);
 }
 
 #[cfg(test)]

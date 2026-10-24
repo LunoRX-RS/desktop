@@ -1,5 +1,6 @@
+use crate::commands::emit::emit_main;
 use crate::core::library::{ArtistProfile, LibraryError, SavedLibrary, SavedTrack};
-use tauri::{AppHandle, Emitter, State, WebviewWindow};
+use tauri::{AppHandle, State, WebviewWindow};
 pub struct LibraryState {
     library: std::sync::Mutex<Result<SavedLibrary, LibraryError>>,
     path: Result<std::path::PathBuf, LibraryError>,
@@ -81,7 +82,7 @@ pub fn library_set_like(
     if let Some(id) = youtube_id {
         crate::commands::youtube_import::push_like(&app, &id, liked);
     }
-    let _ = app.emit_to("main", "core://library/changed", ());
+    let _ = emit_main(&app, "core://library/changed", &());
     Ok(result)
 }
 #[tauri::command]

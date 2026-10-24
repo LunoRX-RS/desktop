@@ -6,6 +6,7 @@ use std::sync::{Mutex as StdMutex, PoisonError};
 use tauri::State;
 use tokio::sync::{Mutex as TokioMutex, MutexGuard as TokioMutexGuard};
 
+use crate::commands::emit::emit_main;
 use crate::sync::api::Provider;
 use crate::sync::conflict::Resolution;
 use crate::sync::engine::{self, ErrorCategory, Host, SyncEngine, SyncState};
@@ -431,7 +432,7 @@ const AUTO_SYNC_EVERY: std::time::Duration = std::time::Duration::from_secs(60);
 /// Background cloud sync. While signed in it sends queued playlist writes and pulls the server state every minute.
 /// Signed out it does nothing. Failures stay in the sync status (offline, rate limited, conflict); nothing pops up.
 pub fn start_auto_sync(app: tauri::AppHandle) {
-    use tauri::{Emitter, Manager};
+    use tauri::Manager;
     tauri::async_runtime::spawn(async move {
         let mut tick = tokio::time::interval(AUTO_SYNC_EVERY);
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -444,7 +445,7 @@ pub fn start_auto_sync(app: tauri::AppHandle) {
             }
             let _ = run_flush_pending(&state).await;
             let after = run_status(&state).await;
-            let _ = app.emit_to("main", "core://sync/auto", after);
+            let _ = emit_main(&app, "core://sync/auto", &after);
         }
     });
 }

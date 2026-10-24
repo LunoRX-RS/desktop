@@ -1,10 +1,12 @@
 //! Main-window-only IPC for device-local media. Playlist contents come from the local Core store.
 use crate::{
-    commands::{player::PlayerState, sync::SyncEngineState, youtube::YouTubeState},
+    commands::{
+        emit::emit_main, player::PlayerState, sync::SyncEngineState, youtube::YouTubeState,
+    },
     core::playback::cache::{CacheError, CacheUsage, OfflineManager, OfflineStatus, OfflineTrack},
 };
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
+use tauri::{AppHandle, Manager, State, WebviewWindow};
 pub struct OfflineState {
     pub manager: Result<Arc<OfflineManager>, CacheError>,
 }
@@ -159,6 +161,6 @@ pub fn offline_clear_transient(
 ) -> Result<u64, CacheError> {
     main(&window)?;
     let freed = manager(&state)?.cache.clear_transient()?;
-    let _ = app.emit_to("main", "core://offline/changed", ());
+    let _ = emit_main(&app, "core://offline/changed", &());
     Ok(freed)
 }

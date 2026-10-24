@@ -8,7 +8,7 @@ use sync::api::ApiClient;
 use sync::credentials::KeyringTokenStore;
 use sync::engine::{ErrorCategory, SyncEngine};
 use sync::settings::default_base_url;
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 use tauri_plugin_deep_link::DeepLinkExt;
 
 /// A subsystem that failed at start-up is a report like any other: the switch the user set still decides whether it is
@@ -115,7 +115,11 @@ pub fn run() {
                     core::playback::cache::OfflineManager::new(
                         cache,
                         std::sync::Arc::new(move || {
-                            let _ = handle.emit_to("main", "core://offline/changed", ());
+                            let _ = crate::commands::emit::emit_main(
+                                &handle,
+                                "core://offline/changed",
+                                &(),
+                            );
                         }),
                     )
                 });

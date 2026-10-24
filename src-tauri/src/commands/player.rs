@@ -5,10 +5,11 @@
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::Mutex;
 
+use crate::commands::emit::emit_main;
 use crate::core::capabilities::{CapabilityStatus, ProviderCapabilities};
 use crate::core::domain::{ProviderId, TrackReference};
 use crate::core::errors::{CoreError, HostRejectKind, PlaybackErrorKind};
@@ -209,7 +210,7 @@ impl PlayerState {
                 drop(engine);
                 let dto = progress(&state).await;
                 crate::platform::discord::offer(&dto);
-                let _ = app.emit_to("main", "core://player/progress", dto);
+                let _ = emit_main(&app, "core://player/progress", &dto);
                 if let Some(track) = history_track {
                     let log = app.state::<crate::commands::stats::AnalyticsState>();
                     let now_ms = std::time::SystemTime::now()
@@ -236,11 +237,11 @@ impl PlayerState {
                     let history = app.state::<crate::commands::library::HistoryState>();
                     match history.0.with(|store| store.record_play(track)) {
                         Ok(tracks) => {
-                            let _ = app.emit_to("main", "core://history/changed", tracks);
+                            let _ = emit_main(&app, "core://history/changed", &tracks);
                         }
                         Err(kind) => {
                             eprintln!("play history unavailable: {kind:?}");
-                            let _ = app.emit_to("main", "core://history/error", ());
+                            let _ = emit_main(&app, "core://history/error", &());
                         }
                     }
                 }
@@ -738,9 +739,9 @@ pub(crate) fn finish(app: &AppHandle, reply: Reply) -> Result<PlayerStateDto, Pl
     }
     if let Some(dto) = reply.emit {
         if matches!(dto.state, PlaybackStateDto::Ready | PlaybackStateDto::Idle) {
-            let _ = app.emit_to("main", "core://offline/changed", ());
+            let _ = emit_main(app, "core://offline/changed", &());
         }
-        if app.emit_to("main", STATE_EVENT, dto).is_err() {
+        if emit_main(app, STATE_EVENT, &dto).is_err() {
             eprintln!("player state event not delivered");
         }
     }
@@ -902,9 +903,9 @@ async fn load_track(
                 // A failed preparation may produce no native report; publish its final state too.
                 let state = app.state::<PlayerState>();
                 let dto = progress(&state).await;
-                let _ = app.emit_to("main", STATE_EVENT, &dto.player);
+                let _ = emit_main(&app, STATE_EVENT, &dto.player);
                 crate::platform::discord::offer(&dto);
-                let _ = app.emit_to("main", "core://player/progress", dto);
+                let _ = emit_main(&app, "core://player/progress", &dto);
             });
             *task = Some(job);
         }
@@ -942,7 +943,7 @@ pub async fn player_set_mode(
     state.reports.send_modify(|v| *v = v.wrapping_add(0));
     let dto = progress(&state).await;
     crate::platform::discord::offer(&dto);
-    let _ = app.emit_to("main", "core://player/progress", dto);
+    let _ = emit_main(&app, "core://player/progress", &dto);
     Ok(())
 }
 
@@ -995,7 +996,7 @@ pub async fn player_queue_edit(
     // Wake a running autoplay session so it prepares the new head.
     state.reports.send_modify(|v| *v = v.wrapping_add(0));
     let dto = progress(&state).await;
-    let _ = app.emit_to("main", "core://player/progress", dto);
+    let _ = emit_main(&app, "core://player/progress", &dto);
     Ok(())
 }
 
@@ -1051,7 +1052,7 @@ pub async fn player_skip(
     }
     let dto = progress(&state).await;
     crate::platform::discord::offer(&dto);
-    let _ = app.emit_to("main", "core://player/progress", dto);
+    let _ = emit_main(&app, "core://player/progress", &dto);
     Ok(())
 }
 
@@ -1624,7 +1625,7 @@ pub(crate) fn change_effects(
             .clone(),
         available: state.available,
     };
-    let _ = app.emit_to("main", "core://audio/settings", dto);
+    let _ = emit_main(app, "core://audio/settings", &dto);
 }
 
 #[tauri::command]

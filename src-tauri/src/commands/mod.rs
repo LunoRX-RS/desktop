@@ -21,6 +21,8 @@ pub mod telemetry;
 
 pub mod reports;
 
+pub mod emit;
+
 pub mod discovery;
 
 pub mod lrc;

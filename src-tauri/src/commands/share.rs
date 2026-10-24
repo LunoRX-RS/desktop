@@ -4,8 +4,9 @@
 use std::sync::Mutex as StdMutex;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Manager, State};
 
+use crate::commands::emit::emit_main;
 use crate::core::share_link::token_from_url;
 use crate::sync::api::{ApiClient, Provider};
 use crate::sync::engine::{self, ErrorCategory};
@@ -26,7 +27,7 @@ pub fn accept_urls(app: &AppHandle, urls: &[url::Url]) {
     if let Ok(mut slot) = app.state::<PendingShare>().0.lock() {
         *slot = Some(token.clone());
     }
-    let _ = app.emit_to("main", SHARE_EVENT, token);
+    let _ = emit_main(app, SHARE_EVENT, &token);
 }
 
 #[tauri::command]

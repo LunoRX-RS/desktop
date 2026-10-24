@@ -3,9 +3,10 @@
 use std::sync::{Mutex, PoisonError};
 
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, State, WebviewWindow};
+use tauri::{AppHandle, State, WebviewWindow};
 use tokio::sync::mpsc;
 
+use crate::commands::emit::emit_main;
 use crate::sync::credentials::KeyringTokenStore;
 use crate::sync::remote::{self, LinkStatus, MAX_FRAME_BYTES};
 use crate::sync::settings::default_base_url;
@@ -82,10 +83,10 @@ pub fn remote_start(
             rx,
             move |text| {
                 // Forwarded as a string; the webview parses and validates it.
-                let _ = events.emit_to("main", "remote://message", text);
+                let _ = emit_main(&events, "remote://message", &text);
             },
             move |status: LinkStatus| {
-                let _ = statuses.emit_to("main", "remote://status", status);
+                let _ = emit_main(&statuses, "remote://status", &status);
             },
         )
         .await;
@@ -107,7 +108,7 @@ pub fn remote_stop(
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .take();
-    let _ = app.emit_to("main", "remote://status", LinkStatus::Offline);
+    let _ = emit_main(&app, "remote://status", &LinkStatus::Offline);
     Ok(())
 }
 

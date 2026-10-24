@@ -4,6 +4,7 @@
 //! playlists and playlists whose size changed.
 use crate::{
     commands::{
+        emit::emit_main,
         library::{HistoryState, LibraryState},
         sync::SyncEngineState,
         youtube::YouTubeState,
@@ -25,7 +26,7 @@ use std::{
     },
     time::Duration,
 };
-use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
+use tauri::{AppHandle, Manager, State, WebviewWindow};
 
 const EVENT: &str = "core://youtube/import";
 const AUTO_EVERY_SECS: u64 = 6 * 3600;
@@ -375,7 +376,7 @@ async fn run_mode(app: &AppHandle, mode: Mode) -> Result<ImportReport, LibraryEr
         Err(_) => Some(ImportEvent::Failed),
     };
     if let Some(event) = event {
-        let _ = app.emit_to("main", EVENT, event);
+        let _ = emit_main(app, EVENT, &event);
     }
     result
 }
@@ -387,7 +388,7 @@ async fn run_inner(app: &AppHandle, mode: Mode) -> Result<ImportReport, LibraryE
         .clone()
         .ok_or(LibraryError::Unavailable)?;
     if mode == Mode::Full {
-        let _ = app.emit_to("main", EVENT, ImportEvent::Running);
+        let _ = emit_main(app, EVENT, &ImportEvent::Running);
     }
     let known = if mode == Mode::Quick {
         COUNTS
@@ -449,7 +450,7 @@ async fn run_inner(app: &AppHandle, mode: Mode) -> Result<ImportReport, LibraryE
                     memory.liked_ids.union(&incoming).cloned().collect()
                 };
                 if added + removed_n > 0 {
-                    let _ = app.emit_to("main", "core://library/changed", ());
+                    let _ = emit_main(app, "core://library/changed", &());
                 }
             }
             Err(_) => report.failed.push("likes"),
@@ -464,7 +465,7 @@ async fn run_inner(app: &AppHandle, mode: Mode) -> Result<ImportReport, LibraryE
             Ok((n, tracks)) => {
                 report.history_added = n;
                 if n > 0 {
-                    let _ = app.emit_to("main", "core://history/changed", tracks);
+                    let _ = emit_main(app, "core://history/changed", &tracks);
                 }
             }
             Err(_) => report.failed.push("history"),

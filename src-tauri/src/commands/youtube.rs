@@ -1,10 +1,13 @@
 //! App-owned Google sign-in window. No remote IPC grants, password interception or OAuth flow.
-use crate::{commands::providers::KeyringKeyStore, core::yt::Yt, sync::credentials::TokenStore};
+use crate::{
+    commands::{emit::emit_main, providers::KeyringKeyStore},
+    core::yt::Yt,
+    sync::credentials::TokenStore,
+};
 use serde::Serialize;
 use std::{sync::Mutex, time::Duration};
 use tauri::{
-    AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
-    WindowEvent,
+    AppHandle, Manager, State, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
     webview::{Cookie, NewWindowResponse, PageLoadEvent},
 };
 
@@ -71,7 +74,7 @@ impl YouTubeState {
     }
     fn publish(&self, app: &AppHandle, status: ConnectionStatus) {
         *self.status.lock().unwrap_or_else(|e| e.into_inner()) = status;
-        let _ = app.emit_to("main", EVENT, status);
+        let _ = emit_main(app, EVENT, &status);
     }
     pub async fn restore(app: AppHandle) {
         let state = app.state::<Self>();

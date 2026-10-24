@@ -132,7 +132,8 @@ struct StatsList {
     tracks: Vec<StatsRow>,
 }
 
-#[derive(Debug, Deserialize)]
+/// No `Debug`: this is the session token, and `{:?}` must not be able to print it into a log line.
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginResponse {
     pub token: String,
@@ -328,7 +329,9 @@ fn decode<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, SyncError> {
         .map_err(|_| SyncError::Internal("unexpected response from backend".into()))
 }
 
-#[derive(Debug, Clone)]
+/// No `Debug`: the antibot queue holds single-use Cloudflare tokens, and `{:?}` must not be able to print them into a
+/// log line. Nothing in the app needs to format a client.
+#[derive(Clone)]
 pub struct ApiClient {
     base: String,
     http: reqwest::Client,
