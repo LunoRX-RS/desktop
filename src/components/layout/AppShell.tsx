@@ -15,31 +15,19 @@ import { UpdateBanner } from "./UpdateBanner";
 import { NoticeBar } from "./NoticeBar";
 import { hydrateRecentSearches } from "../../lib/store";
 import { useUi } from "../../lib/store";
-import ArtistScreen, { AlbumScreen, SavedLibraryScreen } from "../../features/artists/ArtistsScreen";
 import { Button } from "../ui";
 import { useLibrary } from "../../lib/library";
 import { refreshLikes } from "../../lib/library";
 import HomeScreen from "../../features/home/HomeScreen";
-import ExploreScreen from "../../features/explore/ExploreScreen";
-import SearchScreen from "../../features/search/SearchScreen";
-import LibraryScreen from "../../features/library/LibraryScreen";
-import PlaylistEditor from "../../features/playlists/PlaylistEditor";
-import PlayerScreen from "../../features/player/PlayerScreen";
-import ConnectionsScreen from "../../features/connections/ConnectionsScreen";
-import AccountsScreen from "../../features/accounts/AccountsScreen";
-import LoginPage from "../../features/accounts/LoginPage";
-import { LoginGate } from "../../features/accounts/LoginGate";
-import SettingsScreen from "../../features/settings/SettingsScreen";
-import StatsScreen from "../../features/stats/StatsScreen";
-import SharedScreen from "../../features/shared/SharedScreen";
+import {
+  AccountsScreen, AlbumScreen, ArtistScreen, CommandPalette, ConnectionsScreen, ExploreScreen, LibraryScreen, LoginGate, LoginPage,
+  NowPlaying, PlayerScreen, PlaylistEditor, QueuePanel, SavedLibraryScreen, SearchScreen, SettingsScreen, SharedScreen, StatsScreen,
+  SyncPanel, preloadScreens,
+} from "./screens";
 import { SHARE_OPEN_EVENT, sharedLinkTake } from "../../services/tauri/share";
-import SyncPanel from "../../features/sync/SyncPanel";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import PlayerBar from "./PlayerBar";
-import NowPlaying from "./NowPlaying";
-import CommandPalette from "./CommandPalette";
-import { QueuePanel } from "./QueuePanel";
 import { PlaybackEvents } from "./NativePlayer";
 import { usePlayback, togglePlayback } from "../../lib/playback";
 import { DUR, tween } from "../../lib/motion";
@@ -118,12 +106,13 @@ export default function AppShell() {
     applySavedMode();
     void applySavedAudio();
     const stopAudio = watchAudioSettings();
+    const stopPreload = preloadScreens();
     initAppStyle();
     // Warm the first screens while the window is still settling: both feeds, and Explore's first topic.
     const warm = () => { void loadFeed("home"); void loadFeed("explore", "charts"); };
     const idle = (window as { requestIdleCallback?: (f: () => void) => number }).requestIdleCallback;
     if (idle) idle(warm); else window.setTimeout(warm, 300);
-    return () => { stopImport(); stopAudio(); };
+    return () => { stopImport(); stopAudio(); stopPreload(); };
   }, []);
   const mainRef = useRef<HTMLElement>(null);
   const libraryError = useLibrary(s => s.error);
