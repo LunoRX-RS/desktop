@@ -52,7 +52,7 @@ const QueueRow = memo(function QueueRow({ item, index, busy, dragging, target, d
     style={dragging ? { transform: `translateY(${dy}px)` } : undefined}
     className={cx("group/row grid min-h-16 grid-cols-[24px_40px_minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 hover:bg-frost-200 focus-within:bg-frost-200",
       dragging && "relative z-10 bg-frost-300 opacity-90 shadow-[0_8px_24px_rgba(0,0,0,0.5)]",
-      target === "top" && "shadow-[inset_0_2px_0_var(--color-lumen-lavender)]", target === "bottom" && "shadow-[inset_0_-2px_0_var(--color-lumen-lavender)]")}>
+      target === "top" && "shadow-[inset_0_2px_0_rgba(255,255,255,0.45)]", target === "bottom" && "shadow-[inset_0_-2px_0_rgba(255,255,255,0.45)]")}>
     <button type="button" aria-label={`Move ${item.title}. Drag it, or press the up and down arrow keys.`}
       onPointerDown={(e) => onDown(e, index)} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onCancel}
       onKeyDown={(e) => onKey(e, index)}
