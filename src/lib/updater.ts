@@ -1,7 +1,7 @@
 // Self-update. Only releases signed with the project's key are accepted (public key in tauri.conf.json); the plugin
 // checks the signature before installing. Nothing installs without the user pressing Install.
 import { create } from "zustand";
-import pkg from "../../package.json";
+import { APP_VERSION } from "./version";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -28,7 +28,7 @@ export function readChannel(): UpdateChannel {
   } catch {
     /* storage blocked: use the default */
   }
-  return pkg.version.includes("-") ? "dev" : "stable";
+  return APP_VERSION.includes("-") ? "dev" : "stable";
 }
 
 export function setChannel(channel: UpdateChannel) {
