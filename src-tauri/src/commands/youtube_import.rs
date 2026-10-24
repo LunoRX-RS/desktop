@@ -223,8 +223,9 @@ async fn flush_likes(app: &AppHandle) {
     .await;
 }
 
-const MUSIC_MARKER: &str = "Imported from YouTube Music [";
-const YOUTUBE_MARKER: &str = "Imported from YouTube [";
+use crate::sync::local_store::{
+    MUSIC_MARKER, YOUTUBE_MARKER, marker_id as marker_line_id, split_note,
+};
 fn marker(origin: Origin, id: &str) -> String {
     let prefix = if origin == Origin::Music {
         MUSIC_MARKER
@@ -233,12 +234,9 @@ fn marker(origin: Origin, id: &str) -> String {
     };
     format!("{prefix}{id}]")
 }
-/// The playlist id inside an import marker, if the description is one.
+/// The playlist id of the import marker a description ends with, if any (the user may have added text above it).
 pub fn marker_id(description: &str) -> Option<&str> {
-    description
-        .strip_prefix(MUSIC_MARKER)
-        .or_else(|| description.strip_prefix(YOUTUBE_MARKER))
-        .and_then(|rest| rest.strip_suffix(']'))
+    split_note(description).1.and_then(marker_line_id)
 }
 /// Called when the user deletes a local playlist: an imported one must not come back on the next pass.
 pub fn forget_playlist(app: &AppHandle, description: Option<&str>) {
@@ -284,7 +282,7 @@ async fn apply_playlists(
         let existing = engine
             .local_playlists()
             .iter()
-            .find(|p| p.description.as_deref() == Some(note.as_str()))
+            .find(|p| p.description.as_deref().and_then(|d| split_note(d).1) == Some(note.as_str()))
             .map(|p| p.id.clone());
         let (local_id, created) = match existing {
             Some(id) => (id, false),
@@ -547,6 +545,10 @@ mod tests {
         assert_eq!(marker_id(&marker(Origin::Music, "PL123")), Some("PL123"));
         assert_eq!(marker_id(&marker(Origin::YouTube, "WL")), Some("WL"));
         assert_eq!(marker_id("My own playlist"), None);
+        assert_eq!(
+            marker_id("my text\nImported from YouTube Music [PL9]"),
+            Some("PL9")
+        );
         assert_eq!(marker_id("Imported from YouTube Music [PL1"), None);
     }
 

@@ -386,6 +386,10 @@ mod tests {
     }
     #[test]
     fn native_confirms_load_play_pause_resume_seek_volume_and_stop() {
+        // Plays through the real audio output. A hosted Windows runner has no sound device, so mpv cannot open one there.
+        if cfg!(windows) && std::env::var_os("CI").is_some() {
+            return;
+        }
         for bits in [16u16, 24, 32] {
             native_controls(bits);
         }

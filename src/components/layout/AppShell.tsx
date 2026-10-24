@@ -12,6 +12,7 @@ import { initTelemetry, track } from "../../lib/telemetry";
 import { initRemote } from "../../lib/remote";
 import { initUpdater } from "../../lib/updater";
 import { UpdateBanner } from "./UpdateBanner";
+import { NoticeBar } from "./NoticeBar";
 import { hydrateRecentSearches } from "../../lib/store";
 import { useUi } from "../../lib/store";
 import ArtistScreen, { AlbumScreen, SavedLibraryScreen } from "../../features/artists/ArtistsScreen";
@@ -164,6 +165,7 @@ export default function AppShell() {
     <MotionConfig reducedMotion="user">
       <PlaybackEvents />
       <UpdateBanner />
+      <NoticeBar />
       <LoginGate />
       <a
         href="#main-content"

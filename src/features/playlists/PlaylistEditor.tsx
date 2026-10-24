@@ -9,7 +9,7 @@ import { useUi } from "../../lib/store";
 import { playTrack, usePlayback } from "../../lib/playback";
 import { useImport } from "../../lib/youtubeImport";
 import { offlineKeep } from "../../services/tauri/offline";
-import { syncDeleteLocalPlaylist, syncPlaylistEntries, syncRenameLocalPlaylist, type LocalEntryDto } from "../../services/tauri/sync";
+import { syncDeleteLocalPlaylist, syncPlaylistEntries, syncRenameLocalPlaylist, syncSetPlaylistDescription, type LocalEntryDto } from "../../services/tauri/sync";
 import type { SearchHitDto } from "../../services/tauri/search";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -138,6 +138,7 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
   const [confirmServer, setConfirmServer] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
+  const [noting, setNoting] = useState<string | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const focusNext = useRef<"heading" | string | null>(null);
@@ -159,7 +160,7 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
     focusNext.current = null;
   });
 
-  useEffect(() => { setConfirmServer(false); setConfirmDelete(false); setRenaming(null); }, [selectedId]);
+  useEffect(() => { setConfirmServer(false); setConfirmDelete(false); setRenaming(null); setNoting(null); }, [selectedId]);
 
   async function saveRename() {
     if (!selected || renaming === null) return;
@@ -167,6 +168,13 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
     if (name === "" || name === selected.name) { setRenaming(null); return; }
     const done = await run("detail", "Renaming…", () => "Renamed.", () => syncRenameLocalPlaylist(selected.id, name));
     if (done !== null) setRenaming(null);
+  }
+  async function saveNote() {
+    if (!selected || noting === null) return;
+    const text = noting.trim();
+    if (text === (selected.description ?? "")) { setNoting(null); return; }
+    const done = await run("detail", "Saving…", () => text === "" ? "Description removed." : "Description saved.", () => syncSetPlaylistDescription(selected.id, text === "" ? null : text));
+    if (done !== null) setNoting(null);
   }
   // "Delete playlist…" from a right-click menu opens the same confirmation as the button.
   const deleteRequest = useUi((s) => s.deleteRequest);
@@ -247,6 +255,8 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
     </form>
   );
 
+  // An uploaded playlist's description changes on the server first, which needs its queue empty.
+  const waiting = !!selected && !!selected.remoteId && selected.queuedWrites > 0;
   const detail = selected && (
     <div className="flex min-w-0 flex-col gap-6">
       <Button variant="ghost" onClick={() => { focusNext.current = selected.id; onSelect(null); }} className="self-start px-2 min-[1100px]:hidden">
@@ -291,6 +301,38 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
           <p className="truncate text-[13px] leading-[18px] text-secondary-text">
             {entriesLabel(selected.entryCount)} · {describeUpload(selected)}
           </p>
+          {noting !== null ? (
+            <form className="flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); void saveNote(); }}>
+              <textarea
+                autoFocus
+                value={noting}
+                rows={3}
+                maxLength={2000}
+                aria-label="Playlist description"
+                placeholder="What is this playlist for?"
+                onChange={(e) => setNoting(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") setNoting(null);
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void saveNote(); }
+                }}
+                className="w-full resize-y rounded-[8px] bg-frost-200 px-3 py-2 text-[13px] leading-[18px] outline-none focus:bg-frost-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-text"
+              />
+              <div className="flex items-center gap-2">
+                <Button variant="primary" type="submit" disabled={busy}>Save</Button>
+                <Button variant="ghost" type="button" onClick={() => setNoting(null)} disabled={busy}>Cancel</Button>
+                <span className="ml-auto text-[12px] text-secondary-text">{noting.length} of 2000</span>
+              </div>
+            </form>
+          ) : selected.description ? (
+            <div className="flex min-w-0 items-start gap-2">
+              <p className="line-clamp-3 text-[13px] leading-[18px] whitespace-pre-line text-primary-text/80 [overflow-wrap:anywhere]" title={selected.description}>{selected.description}</p>
+              <Button variant="ghost" aria-label="Edit description" className="-my-1 shrink-0 px-2" disabled={waiting} title={waiting ? "Send the waiting changes first" : undefined} onClick={() => setNoting(selected.description ?? "")}>
+                <Pencil size={14} aria-hidden="true" />
+              </Button>
+            </div>
+          ) : (
+            <Button variant="ghost" className="-ml-2 self-start" disabled={waiting} title={waiting ? "Send the waiting changes first" : undefined} onClick={() => setNoting("")}>Add a description</Button>
+          )}
         </div>
       </section>
 
