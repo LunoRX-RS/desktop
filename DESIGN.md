@@ -273,7 +273,7 @@ Content has 32px side padding, caps at 1680px and centres. Pages open with a Pag
 
 **The Space-Not-Boxes Rule.** Separate groups with space and section titles. A hairline appears only under the first section title, between table rows and between inset-group rows.
 
-Tokens (Tailwind v4 `@theme` in `desktop/src/app/globals.css`): sidebar 240px, collapsed 72px, toolbar 56px, player 88px, content max 1680px, easing `cubic-bezier(0.16, 1, 0.3, 1)`. Every surface stays inside the CSP: no inline `style` attributes or `<style>` elements in the static HTML. Scrubber fills and knobs use script-set styles after mount.
+Tokens (Tailwind v4 `@theme` in `desktop/src/app/globals.css`): sidebar 240px, collapsed 72px, toolbar 56px, player 88px, content max 1680px, easing `cubic-bezier(0.22, 1, 0.36, 1)`. Every surface stays inside the CSP: no inline `style` attributes or `<style>` elements in the static HTML. Scrubber fills and knobs use script-set styles after mount.
 
 ## Elevation & Depth
 
@@ -289,7 +289,7 @@ Layers are Night Canvas, sidebar glass and player glass. Glass is `backdrop-filt
 
 ## Motion
 
-**The One-Feel Rule.** Motion is quiet, short and from one family: exponential ease-out `cubic-bezier(0.16, 1, 0.3, 1)` (`--ease-lumen`), nothing bounces, nothing loops for decoration. Tokens live in `desktop/src/lib/motion.ts` (Motion components) and under `/* motion */` in `desktop/src/app/globals.css` (CSS); the numbers are the same in both.
+**The One-Feel Rule.** Motion is quiet, short and from one family: exponential ease-out `cubic-bezier(0.22, 1, 0.36, 1)` (`--ease-lumen`), nothing bounces, nothing loops for decoration. Tokens live in `desktop/src/lib/motion.ts` (Motion components) and under `/* motion */` in `desktop/src/app/globals.css` (CSS); the numbers are the same in both.
 
 | Token | Value | Use |
 |---|---|---|

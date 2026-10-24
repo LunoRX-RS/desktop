@@ -2,6 +2,7 @@
 
 import {
   AudioLines,
+  Bug,
   HardDrive,
   Info,
   Keyboard,
@@ -17,6 +18,7 @@ import { About } from "./zones/About";
 import { Accounts } from "./zones/Accounts";
 import { Appearance } from "./zones/Appearance";
 import { Audio } from "./zones/Audio";
+import { DevMode } from "./zones/DevMode";
 import { Discord } from "./zones/Discord";
 import { Lyrics } from "./zones/Lyrics";
 import { Playback } from "./zones/Playback";
@@ -35,6 +37,7 @@ export type CategoryKey =
   | "discord"
   | "privacy"
   | "shortcuts"
+  | "dev"
   | "about";
 
 export interface Category {
@@ -54,6 +57,7 @@ export const CATEGORIES: Category[] = [
   { key: "discord", label: "Discord", description: "Show what you play on your Discord profile.", Icon: MessageCircle },
   { key: "privacy", label: "Privacy & data", description: "What the app may send about how it is used.", Icon: ShieldCheck },
   { key: "shortcuts", label: "Keyboard shortcuts", description: "Keys that work across the app.", Icon: Keyboard },
+  { key: "dev", label: "Dev Mode", description: "Raw failure reasons, recent errors and what the app can reach.", Icon: Bug },
   { key: "about", label: "About", description: "Version, platform and what the app can report about itself.", Icon: Info },
 ];
 
@@ -78,7 +82,9 @@ export const SEARCH_INDEX: { cat: CategoryKey; group: string; label: string }[] 
   { cat: "discord", group: "settings-discord-card", label: "Discord card design" },
   { cat: "playback", group: "settings-startup", label: "Restore last track" },
   { cat: "audio", group: "settings-effects", label: "Sound shaping equalizer bass treble speed" },
+  { cat: "audio", group: "settings-effects", label: "Nightcore slowed reverb 8D 4D moving sound keep pitch" },
   { cat: "audio", group: "settings-audio", label: "Stream quality" },
+  { cat: "audio", group: "settings-audio", label: "Output device speakers headphones bluetooth" },
   { cat: "storage", group: "settings-cache", label: "Disk cache & offline storage" },
   { cat: "audio", group: "settings-audio", label: "PCM output" },
   { cat: "audio", group: "settings-audio", label: "Sample rate" },
@@ -100,6 +106,10 @@ export const SEARCH_INDEX: { cat: CategoryKey; group: string; label: string }[] 
   { cat: "shortcuts", group: "settings-keys-maker", label: "Lyric Maker" },
   { cat: "shortcuts", group: "settings-keys-search", label: "Quick search and commands" },
   { cat: "shortcuts", group: "settings-keys-mac", label: "Playback menu (macOS)" },
+  { cat: "dev", group: "settings-dev-mode", label: "Dev Mode" },
+  { cat: "dev", group: "settings-dev-status", label: "YouTube session" },
+  { cat: "dev", group: "settings-dev-status", label: "Native player (libmpv)" },
+  { cat: "dev", group: "settings-dev-errors", label: "Recent errors" },
   { cat: "about", group: "settings-about", label: "App version" },
   { cat: "about", group: "settings-about", label: "Check for updates" },
   { cat: "about", group: "settings-about", label: "Update channel stable dev pre-release" },
@@ -120,6 +130,7 @@ export function CategoryPane({ cat, mac, platform }: { cat: CategoryKey; mac: bo
     case "discord": return <Discord />;
     case "privacy": return <Privacy />;
     case "shortcuts": return <Shortcuts mac={mac} />;
+    case "dev": return <DevMode />;
     case "about": return <About platform={platform} />;
   }
 }

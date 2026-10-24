@@ -91,12 +91,16 @@ export function syncFlushPending(): Promise<number> {
 /** Fired after sign-in or sign-out so the remote-control link can start or stop. */
 export const ACCOUNT_CHANGED = "lunorx:account-changed";
 const accountChanged = () => window.dispatchEvent(new Event(ACCOUNT_CHANGED));
+// One reload after sign-in or sign-out, so every screen starts from the new account's data. The short delay lets the
+// caller finish its own update first; the reload comes from a user action, so it cannot loop.
+const reloadOnce = () => { window.setTimeout(() => window.location.reload(), 150); };
 
 /** Creates an account and signs in with it. Rejects with "validation" for a bad email or a password outside 12 to 128 bytes. */
 export async function syncRegister(email: string, password: string, antibot: string[] = []): Promise<SignedInDto> {
   // Turnstile tokens are single use: [0] is for creating the account, [1] for the sign-in that follows.
   const done = await invoke<SignedInDto>("sync_register", { email, password, registerToken: antibot[0], loginToken: antibot[1] });
   accountChanged();
+  reloadOnce();
   return done;
 }
 
@@ -130,12 +134,15 @@ export function syncRevokeShare(localId: string, shareId: string): Promise<void>
 export async function syncSignIn(email: string, password: string, antibotToken?: string): Promise<SignedInDto> {
   const done = await invoke<SignedInDto>("sync_sign_in", { email, password, token: antibotToken });
   accountChanged();
+  reloadOnce();
   return done;
 }
 
 export async function syncSignOut(): Promise<SignOutDto> {
   const done = await invoke<SignOutDto>("sync_sign_out");
   accountChanged();
+  // A warning ("the server did not confirm") is shown on screen, so a reload would hide it.
+  if (!done.warning) reloadOnce();
   return done;
 }
 

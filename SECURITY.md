@@ -16,7 +16,7 @@ Do not include real credentials, tokens or user data in the report. Redact them.
 
 ## Supported versions
 
-LUNOR-X Desktop is in pre-release (`1.0.0-rc.x`). Only the latest release candidate and the `main` branch are maintained, and security fixes land there.
+LunoRX Desktop is at 1.0.0. Only the latest release and the `main` branch are maintained, and security fixes land there.
 
 ## Scope notes
 

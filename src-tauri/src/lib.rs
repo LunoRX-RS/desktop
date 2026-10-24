@@ -13,6 +13,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
     platform::prepare_webview_environment();
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
@@ -145,10 +146,12 @@ pub fn run() {
             commands::youtube::youtube_connect_finish,
             commands::youtube::youtube_connection_status,
             commands::youtube::youtube_import,
+            commands::youtube_import::youtube_import_playlist_from_url,
             commands::youtube::youtube_like_push_get,
             commands::youtube::youtube_like_push_set,
             commands::youtube::youtube_disconnect,
             commands::share::shared_link_take,
+            commands::share::shared_token_from_url,
             commands::share::shared_playlist_get,
             commands::sync::sync_sign_in,
             commands::sync::sync_register,
@@ -190,6 +193,9 @@ pub fn run() {
             commands::sync::sync_resolve_conflict,
             commands::player::player_audio_settings,
             commands::player::player_set_audio_settings,
+            commands::player::player_effect_presets,
+            commands::player::player_audio_devices,
+            commands::player::player_set_audio_device,
             commands::player::player_state,
             commands::player::player_progress,
             commands::player::player_track_info,

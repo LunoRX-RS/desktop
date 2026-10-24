@@ -45,7 +45,7 @@
   --height-player: 88px;
   --max-width-content: 1680px;
 
-  --ease-lumen: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-lumen: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 :root {
@@ -550,7 +550,7 @@ svg.lucide {
 }
 
 /* motion */
-/* One authored feel (DESIGN.md, Motion). Durations: fast 150, base 220, slow 320, exit 120 ms. Ease: --ease-lumen.
+/* One authored feel (DESIGN.md, Motion). Durations: fast 180, base 260, slow 360, exit 140 ms. Ease: --ease-lumen.
    The same tokens live in lib/motion.ts for Motion components. Only transform and opacity animate, with three
    exceptions: the progress fill width, skeleton shimmer and the stroke draw. Reduced motion is handled at the end.
    Rules marked "x3" repeat the class three times: pages under .lx-scope [data-pg] use `all: revert-layer`, which
@@ -598,11 +598,11 @@ svg.lucide {
 /* Buttons: colour fades in 150ms, press scales to 0.97 in 100ms. (x3) */
 .lx-press.lx-press.lx-press {
   transition:
-    background-color 150ms var(--ease-lumen),
-    color 150ms var(--ease-lumen),
-    opacity 150ms var(--ease-lumen),
+    background-color 180ms var(--ease-lumen),
+    color 180ms var(--ease-lumen),
+    opacity 180ms var(--ease-lumen),
     transform 100ms var(--ease-lumen),
-    scale 150ms var(--ease-lumen);
+    scale 180ms var(--ease-lumen);
 }
 .lx-press.lx-press.lx-press:active:not(:disabled) {
   transform: scale(0.97);
@@ -610,7 +610,7 @@ svg.lucide {
 
 /* First 12 children rise in, 30ms apart, once when the list mounts. Later children appear at once. */
 .lx-stagger > :nth-child(-n + 12) {
-  animation: lx-rise 220ms var(--ease-lumen) both;
+  animation: lx-rise 260ms var(--ease-lumen) both;
 }
 .lx-stagger > :nth-child(2) { animation-delay: 30ms; }
 .lx-stagger > :nth-child(3) { animation-delay: 60ms; }
@@ -625,11 +625,11 @@ svg.lucide {
 .lx-stagger > :nth-child(12) { animation-delay: 330ms; }
 
 /* Content that replaces a skeleton, new artwork, ambient layers, sidebar labels, collapsed-mode tooltip. */
-.lx-enter { animation: lx-fade 320ms var(--ease-lumen) both; }
-.lx-fade-in { animation: lx-fade 220ms var(--ease-lumen) both; }
+.lx-enter { animation: lx-fade 360ms var(--ease-lumen) both; }
+.lx-fade-in { animation: lx-fade 260ms var(--ease-lumen) both; }
 .lx-ambient-in { animation: lx-fade 400ms var(--ease-lumen) both; }
-.lx-label { animation: lx-fade 140ms var(--ease-lumen) 90ms both; }
-.lx-tip { animation: lx-fade 120ms var(--ease-lumen) 300ms both; }
+.lx-label { animation: lx-fade 180ms var(--ease-lumen) 90ms both; }
+.lx-tip { animation: lx-fade 180ms var(--ease-lumen) 300ms both; }
 
 /* Status messages and alerts: fade and 4px rise in 180ms. (x3) */
 .lx-note.lx-note.lx-note { animation: lx-note 180ms var(--ease-lumen) both; }
@@ -638,8 +638,8 @@ svg.lucide {
 .lx-pop-in { animation: lx-pop-in 180ms var(--ease-lumen) both; transform-origin: 100% 0; }
 
 /* Native Now Playing dialog: rises from the player bar edge; the backdrop fades. */
-dialog.lx-np[open] { animation: lx-np-in 320ms var(--ease-lumen) both; transform-origin: 50% 100%; }
-dialog.lx-np[open]::backdrop { animation: lx-fade 320ms var(--ease-lumen) both; }
+dialog.lx-np[open] { animation: lx-np-in 360ms var(--ease-lumen) both; transform-origin: 50% 100%; }
+dialog.lx-np[open]::backdrop { animation: lx-fade 360ms var(--ease-lumen) both; }
 
 /* Hover play button on tiles: scales in from the cover's lower left corner. */
 .lx-reveal.lx-reveal-pop {
@@ -656,8 +656,8 @@ dialog.lx-np[open]::backdrop { animation: lx-fade 320ms var(--ease-lumen) both; 
 
 /* Scrubber: progress eases linearly between ticks; while the pointer is held there is no transition at all. */
 .lx-fill { transition: width 250ms linear; }
-.lx-knob { transition: opacity 150ms var(--ease-lumen), left 250ms linear; }
-.lx-knob-drag { transition: opacity 150ms var(--ease-lumen); }
+.lx-knob { transition: opacity 180ms var(--ease-lumen), left 250ms linear; }
+.lx-knob-drag { transition: opacity 180ms var(--ease-lumen); }
 
 /* Equaliser: only a real "playing" state animates. data-live="false" (buffering) freezes it. */
 .lx-eq[data-live="false"] i {
@@ -748,7 +748,7 @@ dialog.lx-np[open]::backdrop { animation: lx-fade 320ms var(--ease-lumen) both; 
 .ln-np-stage[data-idle="true"] .ln-lyr-region[data-layout="full"] .ln-lyr-scroll { --lyr-b: 24px; }
 .ln-lyr-scroll::-webkit-scrollbar { display: none; }
 .ln-lyr-region[data-layout="split"] .ln-lyr-scroll { padding-inline: 8px 12px; }
-.ln-lyr-plain { animation: lx-fade 320ms var(--ease-lumen) both; padding-top: 18cqh; }
+.ln-lyr-plain { animation: lx-fade 360ms var(--ease-lumen) both; padding-top: 18cqh; }
 .ln-lyr-text {
   width: min(var(--lyr-measure), 100%);
   margin-inline: auto;
@@ -810,7 +810,7 @@ dialog.lx-np[open]::backdrop { animation: lx-fade 320ms var(--ease-lumen) both; 
 .ln-lyr-gap i:nth-child(3) { --k: 2; }
 @keyframes ln-breathe { 0%, 100% { transform: scale(0.82); } 50% { transform: scale(1.12); } }
 /* First 8 lines rise in, 30ms apart, once on first display. The animation sits on the item so it never fights the button's lift. */
-.ln-lyr-item[data-enter] { animation: lx-rise 220ms var(--ease-lumen) backwards; animation-delay: calc(var(--lyr-i, 0) * 30ms); }
+.ln-lyr-item[data-enter] { animation: lx-rise 260ms var(--ease-lumen) backwards; animation-delay: calc(var(--lyr-i, 0) * 30ms); }
 .ln-lyr-item[data-enter="0"] { --lyr-i: 0; }
 .ln-lyr-item[data-enter="1"] { --lyr-i: 1; }
 .ln-lyr-item[data-enter="2"] { --lyr-i: 2; }
@@ -1111,7 +1111,7 @@ html[data-platform="linux"] .ln-np-stage[data-idle="true"][data-layout="full"] *
 .ln-mk-path { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--color-secondary-text); padding-right: 4px; }
 .ln-mk-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 8px; font-size: 12px; color: var(--color-secondary-text); background: var(--color-frost-100); white-space: nowrap; }
 .ln-mk-chip:hover { background: var(--color-frost-200); color: var(--color-primary-text); }
-.ln-mk-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--color-secondary-text); white-space: nowrap; transition: background-color 150ms var(--ease-lumen), color 150ms var(--ease-lumen); }
+.ln-mk-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 8px; font-size: 13px; font-weight: 500; color: var(--color-secondary-text); white-space: nowrap; transition: background-color 180ms var(--ease-lumen), color 180ms var(--ease-lumen); }
 .ln-mk-btn:hover:not(:disabled) { background: var(--color-frost-200); color: var(--color-primary-text); }
 .ln-mk-btn:disabled { opacity: 0.4; }
 .ln-mk-btn-solid { background: var(--color-frost-300); color: var(--color-primary-text); font-weight: 600; }
@@ -1135,7 +1135,7 @@ html[data-platform="linux"] .ln-np-stage[data-idle="true"][data-layout="full"] *
 .ln-mk-row[data-current] .ln-mk-line, .ln-mk-row[data-cursor] .ln-mk-line { opacity: 1; color: var(--color-ink-bright); }
 .ln-mk-row[data-cursor] .ln-mk-time { color: var(--color-primary-text); }
 .ln-mk-edit { width: 100%; font: inherit; font-family: var(--font-display); font-size: 1em; font-weight: 700; letter-spacing: -0.02em; line-height: 1.22; color: var(--color-ink-bright); background: var(--color-frost-200); border-radius: 10px; padding: 0 8px; margin-left: -8px; }
-.ln-mk-tools { display: inline-flex; align-items: center; gap: 2px; font-size: 14px; opacity: 0; transition: opacity 150ms var(--ease-lumen); }
+.ln-mk-tools { display: inline-flex; align-items: center; gap: 2px; font-size: 14px; opacity: 0; transition: opacity 180ms var(--ease-lumen); }
 .ln-mk-row:hover .ln-mk-tools, .ln-mk-row:focus-within .ln-mk-tools { opacity: 1; }
 .ln-mk-nudge { display: inline-grid; place-items: center; min-width: 32px; height: 32px; padding: 0 6px; border-radius: 8px; color: var(--color-secondary-text); font-size: 12px; }
 .ln-mk-nudge:hover:not(:disabled) { background: var(--color-frost-200); color: var(--color-primary-text); }

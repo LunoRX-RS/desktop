@@ -106,6 +106,9 @@ pub struct SharedPlaylist {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SharedEntry {
+    pub provider: Provider,
+    pub provider_track_id: String,
+    pub provider_url: String,
     pub title: String,
     pub artists: Vec<String>,
     pub artwork_url: Option<String>,

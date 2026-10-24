@@ -50,6 +50,6 @@ export function playlistMenu(p: Pick<LocalPlaylistDto, "id" | "name" | "remoteId
     { label: "Play now", icon: <Play size={ICON} fill="currentColor" />, disabled: p.entryCount === 0, onSelect: () => attempt(playPlaylist(p.id), "Could not play this playlist.") },
     { label: "Download to local", icon: <Download size={ICON} />, disabled: p.entryCount === 0, onSelect: () => attempt(downloadPlaylist(p.id), "Could not start the download.") },
     { kind: "separator" },
-    { label: p.remoteId ? "Delete (uploaded playlists can't be deleted yet)" : "Delete playlist…", icon: <Trash2 size={ICON} />, danger: true, disabled: !!p.remoteId, onSelect: () => useUi.getState().requestDelete(p.id) },
+    { label: "Delete playlist…", icon: <Trash2 size={ICON} />, danger: true, onSelect: () => useUi.getState().requestDelete(p.id) },
   ];
 }

@@ -6,6 +6,7 @@ pub mod host;
 mod locale;
 pub mod lyrics;
 pub mod native;
+pub mod presets;
 mod proxy;
 pub mod state;
 pub mod taste;

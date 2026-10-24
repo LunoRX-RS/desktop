@@ -10,6 +10,7 @@ import { playTrack, usePlayback } from "../../lib/playback";
 import { useImport } from "../../lib/youtubeImport";
 import { offlineKeep } from "../../services/tauri/offline";
 import { syncDeleteLocalPlaylist, syncPlaylistEntries, syncRenameLocalPlaylist, syncSetPlaylistDescription, type LocalEntryDto } from "../../services/tauri/sync";
+import { youtubeImportPlaylistFromUrl } from "../../services/tauri/youtube";
 import type { SearchHitDto } from "../../services/tauri/search";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -25,6 +26,7 @@ import {
   type ResolutionDto,
 } from "../../services/tauri/sync";
 import { ShareSection } from "./ShareSection";
+import { saveSharedPlaylist, sharedPlaylistGet, sharedTokenFromUrl, type SharedPlaylistDto } from "../../services/tauri/share";
 import { describeUpload, entriesLabel, errorText, needsUpload, useLocalPlaylists, useSyncStatus } from "./usePlaylists";
 import { Button, EmptyState, Group, GroupRow, Screen, Skeleton, StatusNote, cx } from "../../components/ui";
 
@@ -133,6 +135,8 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
   const { loading, playlists, error, reload } = useLocalPlaylists();
   const { status, reload: reloadStatus } = useSyncStatus();
   const [newName, setNewName] = useState("");
+  const [importLink, setImportLink] = useState("");
+  const [importing, setImporting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<Feedback>(null);
   const [confirmServer, setConfirmServer] = useState(false);
@@ -223,6 +227,43 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
     } else nameRef.current?.focus();
   }
 
+  async function importFromLink(e: FormEvent) {
+    e.preventDefault();
+    const raw = importLink.trim();
+    if (raw === "") {
+      setFeedback({ scope: "create", kind: "error", text: "Paste a LunoRX or YouTube playlist link." });
+      return;
+    }
+    setImporting(true);
+    setFeedback({ scope: "create", kind: "pending", text: "Importing playlist…" });
+    try {
+      const token = await sharedTokenFromUrl(raw);
+      if (token) {
+        const playlist: SharedPlaylistDto = await sharedPlaylistGet(token);
+        const localId = await saveSharedPlaylist(playlist);
+        setImportLink("");
+        setFeedback({ scope: "create", kind: "ok", text: `Imported "${playlist.name}".` });
+        reload();
+        reloadStatus();
+        focusNext.current = "heading";
+        onSelect(localId);
+        return;
+      }
+      // Not a LunoRX share link: try a YouTube / YouTube Music playlist link.
+      const localId = await youtubeImportPlaylistFromUrl(raw);
+      setImportLink("");
+      setFeedback({ scope: "create", kind: "ok", text: "Imported YouTube playlist." });
+      reload();
+      reloadStatus();
+      focusNext.current = "heading";
+      onSelect(localId);
+    } catch (err) {
+      setFeedback({ scope: "create", kind: "error", text: errorText(err) === "internal" ? "That does not look like a LunoRX or YouTube playlist link." : errorText(err) });
+    } finally {
+      setImporting(false);
+    }
+  }
+
   function resolve(resolution: ResolutionDto) {
     if (!selected) return;
     setConfirmServer(false);
@@ -230,6 +271,28 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
   }
 
   const nameInvalid = feedback?.scope === "create" && feedback.kind === "error";
+
+  const importForm = (
+    <form onSubmit={importFromLink} noValidate className="flex flex-col gap-1.5" aria-label="Import playlist from link">
+      <label htmlFor="editor-import-link" className="text-[13px] leading-[18px] font-semibold text-secondary-text">
+        Import from link
+      </label>
+      <div className="flex items-center gap-2">
+        <input
+          id="editor-import-link"
+          value={importLink}
+          onChange={(e) => setImportLink(e.currentTarget.value)}
+          placeholder="Paste a LunoRX or YouTube playlist link"
+          autoComplete="off"
+          disabled={importing}
+          className="h-8 min-w-0 flex-1 rounded-[8px] bg-frost-200 px-3 text-[13px] text-primary-text outline-none placeholder:text-tertiary-text focus:bg-frost-300"
+        />
+        <Button variant="secondary" type="submit" disabled={importing || busy}>
+          {importing ? "Importing…" : "Import"}
+        </Button>
+      </div>
+    </form>
+  );
 
   const createForm = (
     <form onSubmit={createPlaylist} noValidate className="flex flex-col gap-1.5" aria-label="New playlist">
@@ -441,12 +504,12 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
             <Button variant="ghost" disabled={busy} onClick={() => setConfirmDelete(false)}>Cancel</Button>
           </>
         ) : (
-          <Button variant="ghost" disabled={busy || !!selected.remoteId} title={selected.remoteId ? "An uploaded playlist cannot be deleted yet" : undefined} onClick={() => setConfirmDelete(true)}>
+          <Button variant="ghost" disabled={busy} onClick={() => setConfirmDelete(true)}>
             <Trash2 size={14} aria-hidden="true" />Delete playlist
           </Button>
         )}
         <p className="text-[13px] leading-[18px] text-secondary-text">
-          {selected.remoteId ? "Uploaded playlists cannot be deleted, renamed or reordered yet." : "Deleting removes this device's copy."}
+          {selected.remoteId ? "Uploaded playlists cannot be renamed or reordered yet. Deleting removes it here and from your account." : "Deleting removes this device's copy."}
         </p>
       </div>
     </div>
@@ -503,6 +566,7 @@ export default function PlaylistEditor({ selectedId, onSelect, onNavigate }: Pro
     <Screen id="editor-title" title="Playlist Editor" caption="Playlists are saved on this device first, then uploaded when you choose.">
       <div className="grid grid-cols-1 gap-8 min-[1100px]:grid-cols-[320px_minmax(0,1fr)]">
         <div className={cx("flex min-w-0 flex-col gap-5", !showList && "max-[1099px]:hidden")}>
+          {importForm}
           {createForm}
           {body}
         </div>

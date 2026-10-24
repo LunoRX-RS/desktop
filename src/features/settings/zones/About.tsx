@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import pkg from "../../../../package.json";
+import { APP_VERSION } from "../../../lib/version";
 import { usePlayback } from "../../../lib/playback";
 import { Button, Segmented } from "../../../components/ui";
 import { checkForUpdate, installUpdate, readChannel, restartApp, setChannel, useUpdater, type UpdateChannel } from "../../../lib/updater";
@@ -11,7 +11,7 @@ export function About({ platform }: { platform: string }) {
   const nativeAvailable = usePlayback((s) => s.available);
   return (
     <Inset id="settings-about" title="This app">
-      <SettingRow label="App version">{pkg.version}</SettingRow>
+      <SettingRow label="App version">{APP_VERSION}</SettingRow>
       <UpdateRow />
       <SettingRow label="Platform">{platform || "Reading…"}</SettingRow>
       <StatusRow

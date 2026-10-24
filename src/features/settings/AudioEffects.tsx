@@ -2,19 +2,10 @@
 import { useEffect, useRef, useState } from "react";
 import { Switch } from "../../components/Lyrics";
 import { Button } from "../../components/ui";
-import { FLAT_EFFECTS, type AudioEffects } from "../../services/tauri/player";
+import { FLAT_EFFECTS, playerEffectPresets, type AudioEffects, type EffectPreset } from "../../services/tauri/player";
 import { FIELD, Inset, NoteRow, SettingRow } from "./rows";
 
 const BANDS = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"];
-const PRESETS: { key: string; label: string; fx: Partial<AudioEffects> }[] = [
-  { key: "flat", label: "Flat", fx: {} },
-  { key: "bass", label: "Bass boost", fx: { bands: [5, 4, 3, 1, 0, 0, 0, 0, 0, 0], preamp: -3 } },
-  { key: "vocal", label: "Vocal", fx: { bands: [-2, -2, -1, 1, 3, 3, 2, 1, 0, -1] } },
-  { key: "bright", label: "Bright", fx: { bands: [0, 0, 0, 0, 0, 1, 2, 3, 4, 5], preamp: -3 } },
-  { key: "late", label: "Late night", fx: { bands: [2, 1, 0, 0, 0, 0, 0, 0, 0, 0], compressor: "heavy" } },
-  { key: "head", label: "Headphones", fx: { crossfeed: 35, bands: [1, 1, 0, 0, 0, 0, 0, 1, 1, 0] } },
-  { key: "live", label: "Live room", fx: { reverb: "room", stereoWidth: 130 } },
-];
 const db = (n: number) => `${n > 0 ? "+" : ""}${n} dB`;
 
 /** The equaliser curve through the ten band gains, so a change is visible as well as audible. */
@@ -40,6 +31,11 @@ function Slider({ label, value, min, max, step = 1, onChange, show }: { label: s
 /** Settings > Audio > Sound shaping. Edits apply live: changes are sent a moment after the last touch. */
 export function AudioEffectsPanel({ value, disabled, onChange }: { value: AudioEffects; disabled: boolean; onChange: (fx: AudioEffects) => void }) {
   const [draft, setDraft] = useState(value);
+  // The presets come from core: the same list the macOS Sound menu uses.
+  const [presets, setPresets] = useState<EffectPreset[]>([]);
+  useEffect(() => { void playerEffectPresets().then(setPresets, () => {}); }, []);
+  const groups = [...new Set(presets.map((p) => p.group))];
+  const current = presets.find((p) => JSON.stringify(p.effects) === JSON.stringify({ ...draft, enabled: true }))?.id ?? "";
   const timer = useRef<number | undefined>(undefined);
   useEffect(() => setDraft(value), [value]);
   useEffect(() => () => window.clearTimeout(timer.current), []);
@@ -56,9 +52,10 @@ export function AudioEffectsPanel({ value, disabled, onChange }: { value: AudioE
       <SettingRow label="Use sound shaping" hint="Off plays the song untouched and keeps your settings.">
         <Switch on={draft.enabled} onChange={(on) => set({ enabled: on })} name="Use sound shaping">{draft.enabled ? "On" : "Off"}</Switch>
       </SettingRow>
-      <SettingRow label="Preset" htmlFor="fx-preset">
-        <select id="fx-preset" className={FIELD} disabled={lock} value="" onChange={(e) => { const p = PRESETS.find((x) => x.key === e.target.value); if (p) set({ ...FLAT_EFFECTS, enabled: true, ...p.fx }); }}>
-          <option value="">Choose a preset…</option>{PRESETS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+      <SettingRow label="Preset" htmlFor="fx-preset" hint={`${presets.length} presets. Choosing one replaces your current settings.`}>
+        <select id="fx-preset" className={FIELD} disabled={lock || presets.length === 0} value={current} onChange={(e) => { const p = presets.find((x) => x.id === e.target.value); if (p) set({ ...FLAT_EFFECTS, ...p.effects, enabled: true }); }}>
+          <option value="">{current ? "" : "Custom"}</option>
+          {groups.map((g) => <optgroup key={g} label={g}>{presets.filter((p) => p.group === g).map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</optgroup>)}
         </select>
       </SettingRow>
       <div className="px-4 pt-1 pb-3">
@@ -79,6 +76,14 @@ export function AudioEffectsPanel({ value, disabled, onChange }: { value: AudioE
       <Slider label="Stereo width" value={draft.stereoWidth} min={0} max={200} step={5} onChange={(v) => set({ stereoWidth: v })} show={(v) => (v === 0 ? "Mono" : `${v}%`)} />
       <Slider label="Headphone crossfeed" value={draft.crossfeed} min={0} max={100} step={5} onChange={(v) => set({ crossfeed: v })} show={(v) => (v === 0 ? "Off" : `${v}%`)} />
       <Slider label="Speed" value={draft.speed} min={50} max={200} step={5} onChange={(v) => set({ speed: v })} show={(v) => `${(v / 100).toFixed(2)}×`} />
+      <SettingRow label="Keep pitch" hint="On: speed changes the tempo only. Off: pitch follows speed, faster and higher for nightcore, slower and lower for slowed.">
+        <Switch on={draft.keepPitch} onChange={(on) => set({ keepPitch: on })} name="Keep pitch">{draft.keepPitch ? "On" : "Off"}</Switch>
+      </SettingRow>
+      <SettingRow label="Moving sound" htmlFor="fx-spatial" hint="For headphones. The sound travels around your head. 8D is a slow circle; 4D is faster, wider and deeper.">
+        <select id="fx-spatial" className={FIELD} disabled={lock} value={draft.spatial} onChange={(e) => set({ spatial: e.target.value as AudioEffects["spatial"] })}>
+          <option value="off">Off</option><option value="8d">8D</option><option value="4d">4D</option>
+        </select>
+      </SettingRow>
       <SettingRow label="Room" htmlFor="fx-reverb">
         <select id="fx-reverb" className={FIELD} disabled={lock} value={draft.reverb} onChange={(e) => set({ reverb: e.target.value as AudioEffects["reverb"] })}>
           <option value="off">Off</option><option value="room">Small room</option><option value="hall">Hall</option>
@@ -92,7 +97,7 @@ export function AudioEffectsPanel({ value, disabled, onChange }: { value: AudioE
       <SettingRow label="Reset">
         <Button disabled={disabled} onClick={() => set({ ...FLAT_EFFECTS })}>Reset sound shaping</Button>
       </SettingRow>
-      <NoteRow tone="off">These filters run inside the player, so they work on every song. Boosts are followed by a limiter to avoid clipping. Speed keeps the pitch. Saved on this device.</NoteRow>
+      <NoteRow tone="off">These filters run inside the player, so they work on every song. Boosts are followed by a limiter to avoid clipping. Saved on this device.</NoteRow>
     </Inset>
   );
 }

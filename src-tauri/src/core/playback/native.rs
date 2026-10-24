@@ -148,6 +148,9 @@ impl PlayerHost for NativeHost {
                                         HostRejectKind::VerificationRequired,
                                     )
                                 }
+                                super::cache::CacheError::Refused => {
+                                    PlaybackErrorKind::HostRejected(HostRejectKind::MediaRefused)
+                                }
                                 _ => extract::failed(),
                             })?;
                         let url = reqwest::Url::from_file_path(&file.path)
@@ -235,6 +238,7 @@ fn run(
 ) {
     let mut revision = 0;
     let mut applied_audio = None;
+    let mut applied_device = String::from("auto");
     let mut pending: Option<(Request, Instant)> = None;
     let mut last_report = Instant::now();
     let mut buffering = false;
@@ -246,6 +250,7 @@ fn run(
         if applied_audio != Some(key) && shaping.apply_effects(&mpv).is_ok() {
             applied_audio = Some(key);
         }
+        audio.apply_device(&mpv, &mut applied_device);
         match commands.try_recv() {
             Ok(request) => {
                 if request.reply.is_closed() {

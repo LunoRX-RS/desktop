@@ -5,7 +5,7 @@
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 use tokio::sync::Mutex;
 
@@ -19,7 +19,6 @@ use crate::core::playback::native::NativeHost;
 use crate::core::playback::state::PlaybackState;
 use crate::core::registry::ProviderRegistry;
 use std::{collections::HashMap, time::Duration};
-use tauri::Manager;
 
 /// Event name for every state change, payload `PlayerStateDto`.
 pub const STATE_EVENT: &str = "core://player/state";
@@ -436,6 +435,7 @@ pub enum PlayerErrorCategory {
     StaleOutcome,
     Internal,
     VerificationRequired,
+    MediaRefused,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -463,6 +463,9 @@ impl PlayerError {
             Internal => "playback failed",
             VerificationRequired => {
                 "YouTube asked for verification; sign in with Google in Connections"
+            }
+            MediaRefused => {
+                "the media host refused the audio bytes; YouTube serves a stream in full only to a signed-in session"
             }
         };
         Self { category, message }
@@ -496,6 +499,7 @@ fn from_core(e: &CoreError) -> PlayerError {
             PlaybackErrorKind::HostRejected(HostRejectKind::VerificationRequired) => {
                 C::VerificationRequired
             }
+            PlaybackErrorKind::HostRejected(HostRejectKind::MediaRefused) => C::MediaRefused,
             PlaybackErrorKind::StaleOutcome => C::StaleOutcome,
             PlaybackErrorKind::Validation(_) => C::Validation,
         },
@@ -1323,6 +1327,23 @@ mod tests {
     }
 
     #[test]
+    fn a_refused_media_host_is_its_own_category_not_a_generic_failure() {
+        let refused = from_core(&CoreError::Playback(PlaybackErrorKind::HostRejected(
+            HostRejectKind::MediaRefused,
+        )));
+        assert_eq!(refused.category, PlayerErrorCategory::MediaRefused);
+        assert!(
+            refused.message.contains("signed-in session"),
+            "{}",
+            refused.message
+        );
+        assert_eq!(
+            serde_json::to_value(&refused).unwrap()["category"],
+            "mediaRefused"
+        );
+    }
+
+    #[test]
     fn cache_startup_errors_distinguish_lock_contention_from_audio_failure() {
         use crate::core::playback::cache::CacheError;
         assert_eq!(
@@ -1529,7 +1550,7 @@ mod tests {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioSettingsDto {
     settings: crate::core::playback::audio::AudioSettings,
@@ -1549,8 +1570,87 @@ pub fn player_audio_settings(state: State<'_, PlayerState>) -> AudioSettingsDto 
         available: state.available,
     }
 }
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioDevicesDto {
+    pub devices: Vec<crate::core::playback::audio::AudioDevice>,
+    /// The device in force: an id from `devices`, or `auto`.
+    pub selected: String,
+}
+
+/// Where sound can come out, and where it goes now. The list refreshes every few seconds while the player runs.
+#[tauri::command]
+pub fn player_audio_devices(state: State<'_, PlayerState>) -> AudioDevicesDto {
+    AudioDevicesDto {
+        devices: state.audio.devices(),
+        selected: state.audio.device(),
+    }
+}
+
+/// Sends sound to a device from the list (or back to automatic). Anything else is refused. Takes effect at once.
+#[tauri::command]
+pub fn player_set_audio_device(
+    state: State<'_, PlayerState>,
+    id: String,
+) -> Result<AudioDevicesDto, PlayerError> {
+    if !state.available {
+        return Err(PlayerError::new(PlayerErrorCategory::UnsupportedCapability));
+    }
+    if id.len() > 256 || !state.audio.set_device(&id) {
+        return Err(invalid());
+    }
+    Ok(player_audio_devices(state))
+}
+
+/// The sound presets, in display order. One list for the settings panel and the macOS Sound menu.
+#[tauri::command]
+pub fn player_effect_presets() -> Vec<crate::core::playback::presets::Preset> {
+    crate::core::playback::presets::all()
+}
+
+/// The effects now in force, for the macOS Sound menu.
+#[allow(dead_code)] // used by the macOS menu only
+pub(crate) fn current_effects(app: &AppHandle) -> crate::core::playback::audio::Effects {
+    app.state::<PlayerState>().audio.settings().effects
+}
+
+/// Changes the effects from outside the settings panel (the macOS Sound menu). Applies at once like the panel does, and
+/// tells the window, which saves the choice on this device and refreshes its controls.
+#[allow(dead_code)] // used by the macOS menu only
+pub(crate) fn change_effects(
+    app: &AppHandle,
+    change: impl FnOnce(&mut crate::core::playback::audio::Effects),
+) {
+    let state = app.state::<PlayerState>();
+    if !state.available {
+        return;
+    }
+    let mut settings = state.audio.settings();
+    change(&mut settings.effects);
+    if !settings.effects.valid() {
+        return;
+    }
+    *state
+        .audio
+        .settings
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = settings;
+    let dto = AudioSettingsDto {
+        settings,
+        output: state
+            .audio
+            .output
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone(),
+        available: state.available,
+    };
+    let _ = app.emit_to("main", "core://audio/settings", dto);
+}
+
 #[tauri::command]
 pub fn player_set_audio_settings(
+    app: AppHandle,
     state: State<'_, PlayerState>,
     settings: crate::core::playback::audio::AudioSettings,
 ) -> Result<AudioSettingsDto, PlayerError> {
@@ -1565,5 +1665,6 @@ pub fn player_set_audio_settings(
         .settings
         .lock()
         .unwrap_or_else(|e| e.into_inner()) = settings;
+    crate::platform::sound_changed(&app);
     Ok(player_audio_settings(state))
 }

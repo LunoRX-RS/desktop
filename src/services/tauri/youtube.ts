@@ -26,3 +26,6 @@ export function subscribeYouTubeImport(callback: (event: ImportEvent) => void): 
 export interface LikePush { enabled: boolean; pending: number }
 export function youtubeLikePushGet(): Promise<LikePush> { return invoke("youtube_like_push_get"); }
 export function youtubeLikePushSet(enabled: boolean): Promise<LikePush> { return invoke("youtube_like_push_set", { enabled }); }
+
+/** Imports a single YouTube / YouTube Music playlist (by URL or id) into the local library. Rejects with an ErrorCategory string. */
+export function youtubeImportPlaylistFromUrl(url: string): Promise<string> { return invoke("youtube_import_playlist_from_url", { url }); }
