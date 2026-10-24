@@ -186,7 +186,7 @@ export default function NativeQueue() {
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [shown, total, lookahead]);
+  }, [shown, total, lookahead, upcoming]); // upcoming: a reorder puts another row at the lookahead index
   async function saveQueue() {
     if (!track) return;
     // Read before the first await: the song can change while the playlist is being created.
