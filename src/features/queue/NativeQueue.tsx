@@ -10,7 +10,7 @@ import { LikeButton } from "../../components/LibraryActions";
 import { formatDuration } from "../../lib/media";
 import { Button, EmptyState, IconButton, cx } from "../../components/ui";
 import { VibePicker } from "../../components/PlayModeButtons";
-import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type Ref, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { OfflineTrack } from "../../services/tauri/offline";
 import { addToPlaylist } from "../../lib/playlistActions";
 import { syncCreateLocalPlaylist } from "../../services/tauri/sync";
@@ -81,8 +81,8 @@ const QueueRow = memo(function QueueRow({ item, index, busy, dragging, target, d
   && a.onDown === b.onDown && a.onMove === b.onMove && a.onUp === b.onUp && a.onCancel === b.onCancel && a.onKey === b.onKey && a.rowRef === b.rowRef);
 
 /** Two grey rows shown for the moment it takes to draw the next batch. */
-function PlaceholderRows() {
-  return <li aria-hidden="true" className="flex flex-col gap-2 px-2 py-2">
+function PlaceholderRows({ liRef }: { liRef: Ref<HTMLLIElement> }) {
+  return <li ref={liRef} aria-hidden="true" className="flex flex-col gap-2 px-2 py-2">
     {[0, 1].map((i) => <div key={i} className="flex items-center gap-3"><div className="size-10 rounded-[6px] bg-frost-200" /><div className="flex flex-1 flex-col gap-1.5"><div className="h-3 w-3/5 rounded bg-frost-200" /><div className="h-3 w-2/5 rounded bg-frost-100" /></div></div>)}
   </li>;
 }
@@ -178,14 +178,17 @@ export default function NativeQueue() {
   // When a row a few before the end of what is drawn is seen, draw the next batch.
   const total = upcoming.length;
   const lookahead = Math.max(0, Math.min(shown, total) - LOOKAHEAD_ROWS);
+  const placeholder = useRef<HTMLLIElement>(null);
   useEffect(() => {
     if (shown >= total) return;
-    const el = rows.current[lookahead];
-    if (!el) return;
+    // The placeholder at the end too: a jump straight to the bottom (End key, dragging the scrollbar) can pass the lookahead row
+    // without it ever being seen, and the placeholder is then what comes into view.
+    const els = [rows.current[lookahead], placeholder.current].filter((el): el is HTMLLIElement => !!el);
+    if (els.length === 0) return;
     const observer = new IntersectionObserver((entries) => {
       if (entries.some((e) => e.isIntersecting)) setShown((n) => Math.min(total, n + MORE_ROWS));
     });
-    observer.observe(el);
+    els.forEach((el) => observer.observe(el));
     return () => observer.disconnect();
   }, [shown, total, lookahead, upcoming]); // upcoming: a reorder puts another row at the lookahead index
   async function saveQueue() {
@@ -251,7 +254,7 @@ export default function NativeQueue() {
               status={index === 0 ? (NEXT_STATUS[next.state] ?? "Up next") : null} rowRef={rowRef(index)}
               onDown={onHandleDown} onMove={onHandleMove} onUp={onHandleUp} onCancel={onHandleCancel} onKey={onHandleKey} />;
           })}
-          {shown < total && <PlaceholderRows />}
+          {shown < total && <PlaceholderRows liRef={placeholder} />}
         </ol> : next.state !== "finding" && <p role="status" className="px-2 py-2 text-[13px] text-secondary-text">{NEXT_STATUS[next.state] ?? "Nothing after this song yet."}</p>}
 
       </section>

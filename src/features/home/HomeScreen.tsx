@@ -18,14 +18,15 @@ export default function HomeScreen(_props: Props) {
   const [often, setOften] = useState<SearchHitDto[]>([]);
   const [oftenFailed, setOftenFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  // Read again whenever the history changes (not only when the top song does) and when Retry is pressed.
+  // Read again whenever the history changes (not only when the top song does), when saving a play to the history fails (the
+  // history array does not change then, but the count may), and when Retry is pressed.
   useEffect(() => {
     let live = true;
     statsLocal()
       .then((v) => { if (live) { setOften(topPlayed(v.tracks)); setOftenFailed(false); } })
       .catch(() => { if (live) setOftenFailed(true); });
     return () => { live = false; };
-  }, [history, attempt]);
+  }, [history, historyError, attempt]);
   return <Screen id="home-title" title="Listen Now" caption="Real music from YouTube Music, your likes and listening on this device.">
     <div className="flex flex-col gap-8">
       {historyError && <StatusNote role="alert">{historyError}<Button onClick={() => void refreshHistory()}>Retry history</Button></StatusNote>}
