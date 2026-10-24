@@ -23,7 +23,7 @@ import { refreshLikes } from "../../lib/library";
 import HomeScreen from "../../features/home/HomeScreen";
 import {
   AccountsScreen, AlbumScreen, ArtistScreen, CommandPalette, ConnectionsScreen, ExploreScreen, LibraryScreen, LoginGate, LoginPage,
-  NowPlaying, PlayerScreen, PlaylistEditor, QueuePanel, SavedLibraryScreen, SearchScreen, SettingsScreen, SharedScreen, StatsScreen,
+  NowPlaying, PlayerScreen, PlaylistEditor, QueuePanel, ReplayScreen, SavedLibraryScreen, SearchScreen, SettingsScreen, SharedScreen,
   SyncPanel, preloadScreens,
 } from "./screens";
 import { SHARE_OPEN_EVENT, sharedLinkTake } from "../../services/tauri/share";
@@ -194,7 +194,7 @@ export default function AppShell() {
                     {view === "accounts" && <AccountsScreen />}
                     {view === "login" && <LoginPage />}
                     {view === "settings" && <SettingsScreen />}
-                    {view === "stats" && <StatsScreen />}
+                    {view === "replay" && <ReplayScreen />}
                     {view === "shared" && <SharedScreen />}
                     {view === "sync" && <div className="lx-scope"><SyncPanel /></div>}
                   </ViewFrame>

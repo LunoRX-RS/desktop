@@ -18,7 +18,7 @@ export type View =
   | "login"
   | "settings"
   | "sync"
-  | "stats"
+  | "replay"
   | "shared"
   | "artist"
   | "album";

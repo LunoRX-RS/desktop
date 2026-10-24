@@ -24,26 +24,19 @@ const VARIANT: Record<ButtonVariant, string> = {
   ghost: "text-secondary-text hover:bg-frost-100 hover:text-primary-text",
 };
 
-// `large` is DESIGN.md button-large: 44px tall, 12px radius, 24px padding.
-const SIZE = {
-  default: "h-8 rounded-[8px] px-3.5 text-[13px]",
-  large: "h-11 rounded-[12px] px-6 text-[14px]",
-} as const;
-
 export function Button({
   variant = "secondary",
-  size = "default",
   className,
   children,
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant; size?: keyof typeof SIZE }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: ButtonVariant }) {
   return (
     <button
       type="button"
+      data-ln-btn=""
       {...rest}
       className={cx(
-        "inline-flex items-center justify-center gap-1.5 font-medium lx-press disabled:pointer-events-none disabled:opacity-40",
-        SIZE[size],
+        "inline-flex h-8 items-center justify-center gap-1.5 rounded-[8px] px-3.5 text-[13px] font-medium lx-press disabled:pointer-events-none disabled:opacity-40",
         VARIANT[variant],
         className,
       )}
@@ -66,9 +59,10 @@ export function IconButton({
       aria-label={label}
       title={label}
       aria-pressed={rest["aria-pressed"]}
+      data-ln-icon=""
       {...rest}
       className={cx(
-        "inline-flex size-8 shrink-0 items-center justify-center rounded-[8px] lx-press disabled:pointer-events-none disabled:opacity-40",
+        "inline-flex size-11 shrink-0 items-center justify-center rounded-[8px] lx-press disabled:pointer-events-none disabled:opacity-40",
         active ? "text-lumen-lavender" : "text-secondary-text hover:bg-frost-100 hover:text-primary-text",
         className,
       )}
@@ -94,7 +88,7 @@ export function Scrubber({
   max: number;
   /** Fires on every move. Use for cheap, live values such as volume. */
   onChange?: (v: number) => void;
-  /** Fires once on release (or after a key press). While dragging, the knob follows the pointer. */
+  /** Fires once on release (or after a key press). Write to persistent storage. */
   onCommit?: (v: number) => void;
   label: string;
   valueText?: string;
@@ -114,7 +108,7 @@ export function Scrubber({
     }
   };
   return (
-    <div className={cx("group relative flex h-6 min-w-0 touch-none items-center", className)}>
+    <div data-ln-scrubber="" className={cx("group relative flex h-6 min-w-0 touch-none items-center", className)}>
       <div aria-hidden="true" className="relative h-[3px] w-full rounded-full bg-frost-300 transition-[height] duration-150 group-hover:h-1">
         {mounted && (
           <>
@@ -355,5 +349,27 @@ export function Segmented<T extends string>({
         );
       })}
     </div>
+  );
+}
+
+export function Switch({
+  on,
+  onChange,
+  name,
+}: {
+  on: boolean;
+  onChange: (next: boolean) => void;
+  name: string;
+}) {
+  return (
+    <label className="relative inline-flex cursor-pointer items-center gap-2 select-none">
+      <div className="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors duration-200"
+           onClick={() => onChange(!on)}
+           style={{ backgroundColor: on ? "var(--lumen-lavender)" : "var(--frost-300)" }}>
+        <div className={cx("pointer-events-none absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow-sm transition-transform duration-200",
+            on ? "translate-x-4" : "translate-x-0")} />
+      </div>
+      <span className="text-[13px] font-medium text-primary-text">{name}</span>
+    </label>
   );
 }
