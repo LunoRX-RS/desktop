@@ -754,6 +754,8 @@ pub(crate) async fn delete_playlist(h: &mut Host<'_>, local_id: &str) -> Result<
         e.store
             .delete_local(local_id)
             .map_err(|err| category(&err))?;
+        // A local edit made during the request may have queued a write; it would outlive its playlist.
+        e.queue.discard(&remote);
         e.commit()
     })
     .await
