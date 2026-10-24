@@ -115,6 +115,8 @@ export function useAntibot(): { frame: ReactNode; getTokens: (n: number) => Prom
           // A frame that never became ready (its "ready" message can be missed) gets one new frame, then one more try.
           if (!(e instanceof AntibotError && e.message === "unavailable") || i > 0) throw e;
           readyRef.current = freshReady();
+          // The old frame must not answer for the new one: its messages no longer match `frameRef`.
+          frameRef.current = null;
           setGeneration((g) => g + 1);
           out.push(await solveOne());
         }
