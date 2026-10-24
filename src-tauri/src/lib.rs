@@ -207,6 +207,7 @@ pub fn run() {
             commands::player::player_skip,
             commands::player::player_set_mode,
             commands::player::player_queue_edit,
+            commands::player::player_queue_more,
             commands::player::player_seek,
             commands::player::player_set_volume,
             commands::player::player_observe,

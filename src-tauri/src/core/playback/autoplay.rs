@@ -38,6 +38,9 @@ pub struct AutoplayStatus {
     /// True when that list came from a playlist or album, so related tracks wait until it is used up.
     #[serde(skip)]
     list: bool,
+    /// Bumped on every manual load, which replaces the queue; a slow `load_more` that started before it is dropped.
+    #[serde(skip)]
+    generation: u64,
 }
 impl Default for AutoplayStatus {
     fn default() -> Self {
@@ -52,6 +55,7 @@ impl Default for AutoplayStatus {
             back: Vec::new(),
             context: Vec::new(),
             list: false,
+            generation: 0,
         }
     }
 }
@@ -63,6 +67,7 @@ impl AutoplayStatus {
             repeat: self.repeat,
             radio: self.radio,
             vibe: self.vibe,
+            generation: self.generation.wrapping_add(1),
             ..Default::default()
         };
     }
@@ -148,7 +153,7 @@ pub enum QueueEdit {
         to: usize,
     },
 }
-const QUEUE_MAX: usize = 100;
+const QUEUE_MAX: usize = 500;
 /// Returns false when the edit does not apply (unknown id, index out of range).
 pub fn edit_queue(state: &Status, edit: QueueEdit) -> bool {
     let Ok(mut s) = state.lock() else {
@@ -522,6 +527,69 @@ pub async fn related(
     append(&mut queue, picked, history);
     queue
 }
+/// Appends the radio of a recently queued song to the up-next list, so the list keeps growing as the user scrolls.
+/// The newest songs are asked together and the first answer with something new wins; uploads and lyric videos are
+/// left out. Returns how many songs were added: 0 when the list is empty or full, or the service gave nothing new.
+pub async fn load_more(state: &Status, yt: &Yt) -> usize {
+    let (seeds, history, known, generation) = {
+        let Ok(s) = state.lock() else {
+            return 0;
+        };
+        if s.queue.is_empty() || s.queue.len() >= QUEUE_MAX {
+            return 0;
+        }
+        (
+            s.queue
+                .iter()
+                .rev()
+                .take(3)
+                .map(|t| t.id.clone())
+                .collect::<Vec<_>>(),
+            s.history.clone(),
+            s.queue.iter().map(|t| t.id.clone()).collect::<Vec<_>>(),
+            s.generation,
+        )
+    };
+    let mut asking = tokio::task::JoinSet::new();
+    for seed in seeds {
+        let yt = yt.clone();
+        asking.spawn(async move { radio(&yt, &seed, Duration::from_secs(8)).await });
+    }
+    let mut fresh = Vec::new();
+    while let Some(done) = asking.join_next().await {
+        let Ok(Some(page)) = done else {
+            continue;
+        };
+        append(
+            &mut fresh,
+            page.into_iter()
+                .filter(|(_, video)| !video)
+                .map(|(track, _)| track)
+                .filter(|t| !known.contains(&t.id)),
+            &history,
+        );
+        if !fresh.is_empty() {
+            break;
+        }
+    }
+    let Ok(mut s) = state.lock() else {
+        return 0;
+    };
+    // A manual load replaced the queue while the radios were being asked: these songs belong to the old one.
+    if s.generation != generation {
+        return 0;
+    }
+    let before = s.queue.len();
+    for track in fresh {
+        if s.queue.len() >= QUEUE_MAX {
+            break;
+        }
+        if !s.queue.iter().any(|old| old.id == track.id) {
+            s.queue.push(track);
+        }
+    }
+    s.queue.len() - before
+}
 fn reference(next: &OfflineTrack) -> Result<TrackReference, ()> {
     let mut track = TrackReference::new(
         ProviderId::YouTube,
@@ -654,6 +722,13 @@ mod tests {
         let queue = state.lock().unwrap().queue.clone();
         assert_eq!(queue.len(), 1);
         assert_eq!(queue[0].id, "r-G2pKr2_n8");
+    }
+    #[test]
+    fn a_manual_load_starts_a_new_queue_generation() {
+        let state: Status = Default::default();
+        let before = state.lock().unwrap().generation;
+        state.lock().unwrap().reset();
+        assert_ne!(state.lock().unwrap().generation, before);
     }
     #[test]
     fn the_up_next_list_can_be_edited_by_hand() {

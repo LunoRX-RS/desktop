@@ -245,6 +245,11 @@ export type QueueEditArgs =
   | { op: "remove"; id: string }
   | { op: "move"; from: number; to: number };
 
+/** Appends more related songs to the end of the up-next list; resolves with how many were added (0 at the end). */
+export function playerQueueMore(): Promise<number> {
+  return invoke<number>("player_queue_more");
+}
+
 export function playerQueueEdit(args: QueueEditArgs): Promise<void> {
   return invoke<void>("player_queue_edit", { args });
 }
