@@ -9,8 +9,11 @@ pub mod search;
 pub mod share_link;
 pub mod yt;
 
+pub mod activity;
 pub mod analytics;
+pub mod errorlog;
 pub mod library;
+pub mod secrets;
 pub mod stats;
 pub mod telemetry;
 pub mod youtube_import;
