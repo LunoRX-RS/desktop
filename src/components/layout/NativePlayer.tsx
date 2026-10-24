@@ -2,6 +2,7 @@
 import { ArtistLinks, LikeButton } from "../LibraryActions";
 
 import { useEffect } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { ListMusic, Pause, Play, Square, SkipBack, SkipForward, Volume2, MicVocal, Maximize2 } from "lucide-react";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import { RepeatButton, AutoplayButton } from "../PlayModeButtons";
@@ -39,15 +40,32 @@ export function PlaybackEvents() {
   return null;
 }
 
+// The position changes four times a second. Only this part subscribes to it, so the rest of the bar (cover, title,
+// like button, controls) is drawn again only when something it shows changes.
+function Progress({ restoring, resumeMs, durationMs, controllable }: { restoring: boolean; resumeMs: number; durationMs: number; controllable: boolean }) {
+  const live = usePlayback((s) => s.positionMs);
+  const position = restoring ? resumeMs : live;
+  return (
+    <div className="flex w-full max-w-[560px] items-center gap-2 text-[11px] tabular-nums text-secondary-text">
+      <span>{formatDuration(position / 1000)}</span>
+      <Scrubber label="Seek YouTube" max={Math.max(1, durationMs / 1000)} value={position / 1000}
+        disabled={restoring || !controllable || !durationMs} onCommit={(value) => void seekPlayback(value)} className="flex-1" />
+      <span>{formatDuration(durationMs / 1000)}</span>
+    </div>
+  );
+}
+
 export function NativePlayerBar() {
-  const s = usePlayback();
+  const s = usePlayback(useShallow((x) => ({
+    requested: x.requested, track: x.track, resume: x.resume, info: x.info, player: x.player,
+    busy: x.busy, error: x.error, volume: x.volume, durationMs: x.durationMs, autoplay: x.autoplay,
+  })));
   const queueOpen = useUi((u) => u.queueOpen);
   const live = s.requested ?? s.track;
   const restoring = !live && s.resume !== null;
   const track = live ?? s.resume?.track ?? null;
-  const shownPositionMs = restoring ? s.resume!.positionMs : s.positionMs;
   const shownDurationMs = restoring ? s.resume!.durationMs : s.durationMs;
-  const resumeAt = formatDuration(shownPositionMs / 1000);
+  const resumeAt = formatDuration((restoring ? s.resume!.positionMs : 0) / 1000);
   const info = s.info?.providerTrackId === track?.providerTrackId ? s.info : null;
   const title = info?.title ?? track?.title ?? "YouTube";
   const playing = s.player.state === "playing" || s.player.state === "buffering";
@@ -81,12 +99,7 @@ export function NativePlayerBar() {
           <AutoplayButton />
           <IconButton label={restoring ? "Forget the last track" : "Stop YouTube"} disabled={s.busy} onClick={() => void (restoring ? clearResume() : stopPlayback())}><Square size={15} /></IconButton>
         </div>
-        <div className="flex w-full max-w-[560px] items-center gap-2 text-[11px] tabular-nums text-secondary-text">
-          <span>{formatDuration(shownPositionMs / 1000)}</span>
-          <Scrubber label="Seek YouTube" max={Math.max(1, shownDurationMs / 1000)} value={shownPositionMs / 1000}
-            disabled={restoring || !controllable || !s.durationMs} onCommit={(value) => void seekPlayback(value)} className="flex-1" />
-          <span>{formatDuration(shownDurationMs / 1000)}</span>
-        </div>
+        <Progress restoring={restoring} resumeMs={s.resume?.positionMs ?? 0} durationMs={shownDurationMs} controllable={controllable} />
       </div>
       <div className="flex w-[20%] items-center justify-end gap-2 text-secondary-text">
         <IconButton label="Show lyrics" onClick={() => { useUi.getState().setLyrics(true); useUi.getState().setNowPlaying(true); }}><MicVocal size={17} /></IconButton>
