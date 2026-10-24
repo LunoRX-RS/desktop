@@ -13,6 +13,7 @@ use tauri_plugin_deep_link::DeepLinkExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
     platform::prepare_webview_environment();
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, _, _| {
