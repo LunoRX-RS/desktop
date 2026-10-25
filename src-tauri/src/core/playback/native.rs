@@ -243,6 +243,7 @@ fn run(
     let mut last_report = Instant::now();
     let mut buffering = false;
     let (mut last_position, mut last_duration) = (0, 0);
+    let mut loaded_file: Option<String> = None;
     loop {
         // Settings change from another thread; apply at once and again after any reset.
         let shaping = audio.settings();
@@ -261,6 +262,9 @@ fn run(
                 }
                 while mpv.event_context_mut().wait_event(0.0).is_some() {}
                 revision = request.revision;
+                if matches!(request.command, PlaybackCommand::Load(_)) {
+                    loaded_file = request.url.clone();
+                }
                 match apply(&mpv, &request) {
                     Err(_) => {
                         let _ = request.reply.send(Err(extract::failed()));
@@ -304,6 +308,25 @@ fn run(
             }
             Some(Ok(Event::EndFile(reason))) if reason == mpv_end_file_reason::Eof => {
                 let event = end_event(last_position, last_duration);
+                if last_duration == 0 {
+                    // The song ended before it had played at all: say what file that was and how big it is on disk.
+                    let (name, length) = loaded_file
+                        .as_deref()
+                        .and_then(|url| reqwest::Url::parse(url).ok())
+                        .and_then(|url| url.to_file_path().ok())
+                        .map(|path| {
+                            (
+                                path.file_name()
+                                    .map(|n| n.to_string_lossy().into_owned())
+                                    .unwrap_or_default(),
+                                std::fs::metadata(&path).map(|m| m.len()).ok(),
+                            )
+                        })
+                        .unwrap_or_default();
+                    eprintln!(
+                        "[player] the file ended at once: {name} is {length:?} bytes on disk"
+                    );
+                }
                 eprintln!(
                     "[player] end of file (revision {revision}) at {last_position} of {last_duration} ms: {}",
                     event_name(&event)
@@ -338,7 +361,7 @@ fn run(
             if let Some((request, start)) = pending.as_ref() {
                 eprintln!(
                     "[player] stopping mpv: {} request (revision {}) {} after {} ms",
-                    command_name(&request.command),
+                    request.command.name(),
                     request.revision,
                     if request.reply.is_closed() {
                         "was dropped by its caller"
@@ -387,20 +410,6 @@ fn run(
             }
             last_report = Instant::now();
         }
-    }
-}
-
-/// What a command is, without the track inside it: the log should say what happened, not which song.
-fn command_name(command: &PlaybackCommand) -> &'static str {
-    match command {
-        PlaybackCommand::Load(_) => "load",
-        PlaybackCommand::Play => "play",
-        PlaybackCommand::Resume => "resume",
-        PlaybackCommand::Pause => "pause",
-        PlaybackCommand::Stop => "stop",
-        PlaybackCommand::Seek { .. } => "seek",
-        PlaybackCommand::SetVolume(_) => "volume",
-        _ => "other",
     }
 }
 
