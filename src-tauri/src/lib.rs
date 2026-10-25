@@ -53,6 +53,10 @@ pub fn run() {
                 .map(|dir| dir.join("liked-songs.json"))
                 .map_err(|_| core::library::LibraryError::Storage);
             app.manage(commands::library::LibraryState::open(library_path));
+            // Liked-songs sync keeps its account files under the app data directory next to the signed-out file.
+            if let Ok(dir) = app.path().app_data_dir() {
+                app.manage(commands::likes::LikesState::new(dir));
+            }
             app.manage(commands::library::HistoryState(
                 commands::library::LibraryState::open(
                     app.path()
@@ -167,6 +171,7 @@ pub fn run() {
             commands::sync::start_auto_sync(app.handle().clone());
             app.manage(commands::remote::RemoteState::default());
             app.manage(commands::share::PendingShare::default());
+            commands::likes::start(app.handle());
             // Links that opened the app, and links while it runs (the single-instance plugin forwards them here).
             let handle = app.handle().clone();
             app.deep_link()

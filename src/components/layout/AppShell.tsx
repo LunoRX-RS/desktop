@@ -142,6 +142,19 @@ export default function AppShell() {
       unlisten?.();
     };
   }, [openShared]);
+  // Likes can change on another device: the sync engine emits the same event a local toggle does.
+  useEffect(() => {
+    let active = true;
+    let unlisten: UnlistenFn | undefined;
+    void listen("core://library/changed", () => void refreshLikes()).then((fn) => {
+      if (active) unlisten = fn;
+      else fn();
+    });
+    return () => {
+      active = false;
+      unlisten?.();
+    };
+  }, []);
   const setSelectedPlaylist = useUi((s) => s.setSelectedPlaylist);
   useGlobalKeys();
   useEffect(() => initHistory(), []);
