@@ -54,7 +54,7 @@ export function LinkPlay({ link }: { link: YouTubeLink }) {
           {state === "unknown" ? "Title not available. It can still play." : track.artists?.join(", ")}
         </p>
       </div>
-      <Button variant="primary" size="large" disabled={busy} onClick={() => void playTrack(track)}>
+      <Button variant="primary" disabled={busy} onClick={() => void playTrack(track)}>
         <Play size={16} fill="currentColor" aria-hidden="true" />
         Play
       </Button>

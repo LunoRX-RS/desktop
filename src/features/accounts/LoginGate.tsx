@@ -177,7 +177,7 @@ export function LoginGate() {
 
           {/* The way out, kept in the same column so it is found without hunting the corners of the window. */}
           <div className="mt-8 flex flex-col gap-3 border-t border-hairline pt-6">
-            <Button variant="secondary" size="large" disabled={busy} className="w-full" onClick={continueWithoutAccount}>
+            <Button variant="secondary" disabled={busy} className="w-full" onClick={continueWithoutAccount}>
               Continue without an account
             </Button>
             <p className="px-4 text-[13px] leading-[18px] text-secondary-text">

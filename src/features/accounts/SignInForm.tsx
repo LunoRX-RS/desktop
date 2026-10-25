@@ -168,7 +168,6 @@ export function SignInForm({
           <Button
             type="submit"
             variant="primary"
-            size="large"
             className="w-full"
             disabled={busy || checking || !!blockedReason}
             aria-describedby={blockedReason ? `${idPrefix}-hint` : undefined}
