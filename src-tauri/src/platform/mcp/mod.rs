@@ -31,6 +31,8 @@ const KEYRING_ACCOUNT: &str = "mcp-token";
 /// Requests handled at once; more wait. A local client sends one at a time.
 const MAX_CONCURRENT: usize = 4;
 const PROVIDER: &str = "YouTube";
+const BIND_ATTEMPTS: u32 = 5;
+const BIND_RETRY: std::time::Duration = std::time::Duration::from_millis(200);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -66,6 +68,14 @@ struct Server {
 impl Drop for Server {
     fn drop(&mut self) {
         self.task.abort();
+    }
+}
+
+impl Server {
+    /// Aborts the task and waits until it has ended, so its listener is closed and the port is free.
+    async fn stop(mut self) {
+        self.task.abort();
+        let _ = (&mut self.task).await;
     }
 }
 
@@ -168,10 +178,11 @@ pub fn apply(new: Settings) -> Result<(), &'static str> {
     let Some(sh) = SHARED.get() else {
         return Err("unavailable");
     };
+    // Saved first: a choice that could not be written must not look applied, then revert at the next launch.
+    let path = sh.path.as_ref().ok_or("unavailable")?;
+    let bytes = serde_json::to_vec(&new).map_err(|_| "unavailable")?;
+    std::fs::write(path, bytes).map_err(|_| "unavailable")?;
     *lock(&sh.settings) = new;
-    if let (Some(path), Ok(bytes)) = (&sh.path, serde_json::to_vec(&new)) {
-        let _ = std::fs::write(path, bytes);
-    }
     restart();
     Ok(())
 }
@@ -188,11 +199,13 @@ pub fn rotate_token() -> Result<(), &'static str> {
 
 fn restart() {
     let Some(sh) = SHARED.get() else { return };
-    // Dropping the old server aborts its task and frees the port before the new bind.
-    lock(&sh.server).take();
+    let old = lock(&sh.server).take();
     let s = *lock(&sh.settings);
     if !s.enabled {
         *lock(&sh.status) = Status::Off;
+        if let Some(old) = old {
+            tauri::async_runtime::spawn(old.stop());
+        }
         return;
     }
     let Some(token) = token() else {
@@ -201,14 +214,15 @@ fn restart() {
     };
     let app = sh.app.clone();
     let task = tauri::async_runtime::spawn(async move {
-        let listener = match TcpListener::bind(("127.0.0.1", s.port)).await {
-            Ok(l) => l,
-            Err(_) => {
-                if let Some(sh) = SHARED.get() {
-                    *lock(&sh.status) = Status::PortInUse;
-                }
-                return;
+        // Abort is asynchronous: wait for the old task so its listener is closed before binding the same port.
+        if let Some(old) = old {
+            old.stop().await;
+        }
+        let Some(listener) = bind(s.port).await else {
+            if let Some(sh) = SHARED.get() {
+                *lock(&sh.status) = Status::PortInUse;
             }
+            return;
         };
         if let Some(sh) = SHARED.get() {
             *lock(&sh.status) = Status::Listening;
@@ -216,6 +230,21 @@ fn restart() {
         serve(listener, app, token, s.port).await;
     });
     *lock(&sh.server) = Some(Server { task });
+}
+
+/// Binds the loopback port. A switch turned off and on again quickly can still find the previous listener closing
+/// (its stop runs on another task), so a busy port is retried briefly before it is reported as in use.
+async fn bind(port: u16) -> Option<TcpListener> {
+    for attempt in 0..BIND_ATTEMPTS {
+        match TcpListener::bind(("127.0.0.1", port)).await {
+            Ok(l) => return Some(l),
+            Err(e) if e.kind() == std::io::ErrorKind::AddrInUse && attempt + 1 < BIND_ATTEMPTS => {
+                tokio::time::sleep(BIND_RETRY).await;
+            }
+            Err(_) => return None,
+        }
+    }
+    None
 }
 
 async fn serve(listener: TcpListener, app: AppHandle, token: String, port: u16) {
@@ -426,5 +455,47 @@ impl Runner for AppRunner {
             Tool::PlayTrack { id } => self.play_track(id).await,
             Tool::QueueNext { id } => self.queue_next(id).await,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn block<F: std::future::Future>(f: F) -> F::Output {
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(f)
+    }
+
+    #[test]
+    fn bind_waits_for_a_listener_that_is_closing() {
+        block(async {
+            let old = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+            let port = old.local_addr().unwrap().port();
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                drop(old);
+            });
+            assert!(bind(port).await.is_some());
+        });
+    }
+
+    #[test]
+    fn bind_gives_up_on_a_port_that_stays_busy() {
+        block(async {
+            let held = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+            let port = held.local_addr().unwrap().port();
+            assert!(bind(port).await.is_none());
+        });
+    }
+
+    #[test]
+    fn privileged_ports_are_refused() {
+        assert!(!valid_port(80));
+        assert!(!valid_port(0));
+        assert!(valid_port(DEFAULT_PORT));
     }
 }
