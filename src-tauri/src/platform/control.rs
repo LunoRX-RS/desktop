@@ -21,10 +21,16 @@ const RESTART_AFTER_MS: u64 = 3_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Remote {
+    // Every OS gets the tray, which offers toggle, previous and next. The rest arrive from an OS
+    // media surface that only macOS and Linux have, so Windows never constructs them.
+    #[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
     Play,
+    #[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
     Pause,
     Toggle,
+    #[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
     Stop,
+    #[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
     SeekTo(i64),
     SeekBy(i64),
     #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
