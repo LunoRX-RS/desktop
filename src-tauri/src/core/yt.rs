@@ -78,9 +78,9 @@ impl Yt {
         }
         let verdict = match self.music().saved_playlists().await {
             Ok(_) | Err(Error::Parse) => Ok(()),
-            Err(Error::Network | Error::TooLarge | Error::RateLimited { .. }) => {
-                Err(SessionError::Unreachable)
-            }
+            Err(
+                Error::Network | Error::ServerError | Error::TooLarge | Error::RateLimited { .. },
+            ) => Err(SessionError::Unreachable),
             Err(_) => Err(SessionError::Rejected),
         };
         if verdict.is_err() {

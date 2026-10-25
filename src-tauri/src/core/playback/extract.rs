@@ -118,7 +118,7 @@ pub(super) fn checked_url(raw: &str) -> Result<String, PlaybackErrorKind> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use innerlight::{Client, FixtureTransport};
+    use innerlight::{Client, FixtureTransport, Policy};
     use serde_json::json;
     use std::sync::Arc;
 
@@ -128,8 +128,10 @@ mod tests {
     }
     fn yt_with(transport: FixtureTransport) -> (Yt, Arc<FixtureTransport>) {
         let transport = Arc::new(transport);
+        // No retry: these tests count requests, and the client's polite retry gate would answer a 5xx three times.
         let client = Client::builder()
             .transport(transport.clone())
+            .policy(Policy::no_retry())
             .build()
             .unwrap();
         (Yt::from_client(client), transport)

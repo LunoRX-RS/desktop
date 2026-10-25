@@ -538,7 +538,7 @@ pub async fn run_auto(app: &AppHandle, force: bool) {
 mod tests {
     use super::*;
     use crate::core::yt::Yt;
-    use innerlight::{Client, FixtureTransport};
+    use innerlight::{Client, FixtureTransport, Policy};
     use serde_json::json;
     use std::sync::Arc;
 
@@ -600,6 +600,8 @@ mod tests {
         );
         let client = Client::builder()
             .transport(transport.clone())
+            // No retry: innerlight's polite gate would re-send a 5xx twice more, and this test counts requests.
+            .policy(Policy::no_retry())
             .build()
             .unwrap();
         client.set_cookie("SAPISID=abc123; SID=x").unwrap();

@@ -26,13 +26,20 @@ pub fn emit_main<T: Serialize>(
     result
 }
 
-/// `core://player/progress` becomes `event.player-progress`. A name outside that shape is not logged at all rather than
-/// logged under a slug the backend would refuse.
+/// `core://player/progress` becomes `event.player-progress` and `remote://status` becomes `event.remote-status`,
+/// so the two hubs cannot collide on one slug. A name outside that shape is not logged at all rather than logged
+/// under a slug the backend would refuse.
 fn slug_for(event: &str) -> Option<String> {
-    let tail = event
-        .strip_prefix("core://")
-        .or_else(|| event.strip_prefix("remote://"))?;
-    let name = format!("event.{}", tail.replace('/', "-"));
+    let (scheme, tail) = event.split_once("://")?;
+    if !matches!(scheme, "core" | "remote") {
+        return None;
+    }
+    let prefix = if scheme == "remote" {
+        "event.remote-"
+    } else {
+        "event."
+    };
+    let name = format!("{prefix}{}", tail.replace('/', "-"));
     valid_name(ActivityKind::Event, &name).then_some(name)
 }
 
