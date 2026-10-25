@@ -305,14 +305,14 @@ fn run(
             Some(Ok(Event::EndFile(reason))) if reason == mpv_end_file_reason::Eof => {
                 let event = end_event(last_position, last_duration);
                 eprintln!(
-                    "[player] end of file at {last_position} of {last_duration} ms: {}",
+                    "[player] end of file (revision {revision}) at {last_position} of {last_duration} ms: {}",
                     event_name(&event)
                 );
                 notice = Some(event)
             }
             Some(Err(_)) | Some(Ok(Event::EndFile(mpv_end_file_reason::Error))) => {
                 eprintln!(
-                    "[player] mpv reported an error at {last_position} of {last_duration} ms; the song is marked failed"
+                    "[player] mpv reported an error (revision {revision}) at {last_position} of {last_duration} ms; the song is marked failed"
                 );
                 if let Some((request, _)) = pending.take() {
                     let _ = request.reply.send(Err(extract::failed()));
@@ -337,8 +337,9 @@ fn run(
         }) {
             if let Some((request, start)) = pending.as_ref() {
                 eprintln!(
-                    "[player] stopping mpv: {} request {} after {} ms",
+                    "[player] stopping mpv: {} request (revision {}) {} after {} ms",
                     command_name(&request.command),
+                    request.revision,
                     if request.reply.is_closed() {
                         "was dropped by its caller"
                     } else {
