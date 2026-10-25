@@ -34,6 +34,7 @@ pub mod lyric_sources;
 pub mod fonts;
 
 pub mod discord;
+pub mod mcp;
 
 pub mod autostart;
 
