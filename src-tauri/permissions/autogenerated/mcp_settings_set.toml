@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-mcp-settings-set"
+description = "Enables the mcp_settings_set command without any pre-configured scope."
+commands.allow = ["mcp_settings_set"]
+
+[[permission]]
+identifier = "deny-mcp-settings-set"
+description = "Denies the mcp_settings_set command without any pre-configured scope."
+commands.deny = ["mcp_settings_set"]
