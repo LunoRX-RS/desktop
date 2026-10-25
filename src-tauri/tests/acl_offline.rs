@@ -51,8 +51,8 @@ fn every_offline_handler_is_in_app_manifest_and_allowed() {
     let handlers = offline_handlers(&lib);
     assert_eq!(
         handlers.len(),
-        5,
-        "expected 5 offline handlers in generate_handler!, found {handlers:?}"
+        7,
+        "expected 7 offline handlers in generate_handler!, found {handlers:?}"
     );
 
     let mut missing = Vec::new();
