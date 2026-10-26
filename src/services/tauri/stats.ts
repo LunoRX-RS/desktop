@@ -37,3 +37,5 @@ export interface ListeningReport {
 }
 export const statsReport = (fromMs: number, toMs: number) =>
   invoke<ListeningReport>("stats_report", { args: { tzOffsetMin: new Date().getTimezoneOffset(), fromMs, toMs } });
+/** Deletes the songs autoplay learned its taste from (see core/playback/learn.rs). */
+export const tasteClear = () => invoke<void>("taste_clear");

@@ -83,6 +83,15 @@ pub fn run() {
                     .map(|dir| dir.join("listening-log.json"))
                     .map_err(|_| core::library::LibraryError::Storage),
             ));
+            // Autoplay's learning log: local only, 100 songs at most, cleared from Settings.
+            app.manage(std::sync::Arc::new(std::sync::Mutex::new(
+                core::playback::learn::TasteLog::open(
+                    app.path()
+                        .app_data_dir()
+                        .ok()
+                        .map(|dir| dir.join("autoplay-taste.json")),
+                ),
+            )));
             app.manage(commands::stats::StatsState::open(
                 app.path()
                     .app_data_dir()
@@ -264,6 +273,7 @@ pub fn run() {
             commands::stats::stats_local,
             commands::stats::stats_report,
             commands::stats::stats_clear_local,
+            commands::stats::taste_clear,
             commands::stats::stats_set_cloud,
             commands::stats::stats_cloud_sync,
             commands::stats::stats_cloud_clear,

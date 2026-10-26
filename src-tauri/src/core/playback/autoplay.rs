@@ -5,8 +5,9 @@ use super::{
     command::PlaybackCommand,
     engine::PlaybackEngine,
     extract::valid_id,
+    learn::Taste,
     state::PlaybackState,
-    taste::{Candidate, Profile, Vibe, sequence},
+    taste::{Candidate, Features, Profile, Vibe, features, sequence},
 };
 use crate::core::{
     domain::{ProviderId, TrackReference},
@@ -216,6 +217,7 @@ async fn session(
     yt: Yt,
     cache: Arc<DiskCache>,
     audio: AudioControl,
+    taste: Taste,
     mut reports: watch::Receiver<u64>,
     state: Status,
 ) {
@@ -271,13 +273,23 @@ async fn session(
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
+            // The weights follow what the device has learned so far; a session that is still young keeps the built-in ones.
+            if let Ok(log) = taste.lock() {
+                profile.learn(log.learned());
+            }
             let ctx = RadioContext {
                 profile: &profile,
                 vibe: Vibe::parse(vibe).unwrap_or(Vibe::Balanced),
                 recent,
                 current: offline_of(&current),
             };
-            queue = related(&yt, &seed, &history, queue, &ctx).await;
+            let (refilled, picks) = related(&yt, &seed, &history, queue, &ctx).await;
+            queue = refilled;
+            if let Ok(mut log) = taste.lock() {
+                for (id, x) in picks {
+                    log.expect(id, ctx.vibe, x);
+                }
+            }
         }
         if queue.is_empty() && repeat == "all" && !context.is_empty() {
             queue = context.iter().skip(1).cloned().collect();
@@ -321,6 +333,10 @@ async fn session(
             let mut player = engine.lock().await;
             match advance(&mut player, &seed, &next).await {
                 Ok(true) => {
+                    // The song ended, so it was listened to in full.
+                    if let Ok(mut log) = taste.lock() {
+                        log.finish(&seed, 1.0);
+                    }
                     push_back(&state, current.clone());
                     if !repeat_one {
                         queue.remove(0);
@@ -457,7 +473,8 @@ fn candidates_from(
 }
 
 /// Adds related songs to the queue, in an order that keeps the session's mood. Returns what was queued when the source is
-/// unavailable (nothing new is better than a wrong turn).
+/// unavailable (nothing new is better than a wrong turn). The songs added come with the terms they scored on, for the
+/// learning log.
 ///
 /// The radio answer has no next-page handle. Instead of walking on from the last song queued (each step drifts a little
 /// further), the playing song's radio and the radios of the songs just before it are read together, and a song that
@@ -468,7 +485,7 @@ pub async fn related(
     history: &VecDeque<String>,
     mut queue: Vec<OfflineTrack>,
     ctx: &RadioContext<'_>,
-) -> Vec<OfflineTrack> {
+) -> (Vec<OfflineTrack>, Vec<(String, Features)>) {
     queue.truncate(QUEUE_SIZE);
     let started = tokio::time::Instant::now();
     let recent: Vec<&String> = ctx
@@ -491,7 +508,9 @@ pub async fn related(
             }
         },
     );
-    let Some(primary) = primary else { return queue };
+    let Some(primary) = primary else {
+        return (queue, Vec::new());
+    };
     let mut others: Vec<RadioPage> = [a, b].into_iter().flatten().collect();
     let queued: std::collections::HashSet<String> = queue.iter().map(|t| t.id.clone()).collect();
     let skip =
@@ -516,16 +535,32 @@ pub async fn related(
         }
         candidates = candidates_from(primary, &others, skip);
     }
+    let radios = 1 + others.len();
+    let scored: Vec<Candidate> = candidates.clone();
     let picked = sequence(
         ctx.profile,
         ctx.vibe,
         candidates,
-        1 + others.len(),
+        radios,
         queue.last().or(Some(&ctx.current)),
         room,
     );
+    let terms: Vec<(String, Features)> = picked
+        .iter()
+        .filter_map(|t| {
+            scored
+                .iter()
+                .find(|c| c.track.id == t.id)
+                .map(|c| (t.id.clone(), features(ctx.profile, c, radios)))
+        })
+        .collect();
     append(&mut queue, picked, history);
-    queue
+    // A pick `append` turned away (a repeat, an unusable title) never plays, so it is not logged.
+    let terms = terms
+        .into_iter()
+        .filter(|(id, _)| queue.iter().any(|t| t.id == *id))
+        .collect();
+    (queue, terms)
 }
 /// Appends the radio of a recently queued song to the up-next list, so the list keeps growing as the user scrolls.
 /// The newest songs are asked together and the first answer with something new wins; uploads and lyric videos are
@@ -641,10 +676,11 @@ pub async fn run(
     yt: Yt,
     cache: Arc<DiskCache>,
     audio: AudioControl,
+    taste: Taste,
     reports: watch::Receiver<u64>,
     state: Status,
 ) {
-    session(engine, yt, cache, audio, reports, state.clone()).await;
+    session(engine, yt, cache, audio, taste, reports, state.clone()).await;
     let radio = state.lock().map(|s| s.radio).unwrap_or(true);
     // With autoplay off, running out of tracks is the normal end, not a failure.
     status(&state, if radio { "unavailable" } else { "idle" }, None);

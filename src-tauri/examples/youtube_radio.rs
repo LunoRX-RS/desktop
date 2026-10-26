@@ -22,7 +22,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         vec![],
         &ctx,
     )
-    .await;
+    .await
+    .0;
     println!("Radio returned {} unique upcoming songs", candidates.len());
     assert_eq!(
         candidates.len(),

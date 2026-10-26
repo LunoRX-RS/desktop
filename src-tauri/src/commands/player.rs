@@ -865,6 +865,20 @@ async fn load_track(
     if let Some(previous) = task.take() {
         previous.abort();
     }
+    // The song being left is logged with how much of it was heard. The engine's active track is the one playing now.
+    let leaving = state
+        .engine
+        .lock()
+        .await
+        .active_track()
+        .map(|t| t.provider_track_id.clone());
+    if let Some(id) = leaving.filter(|id| *id != track.provider_track_id) {
+        let (position, duration) = *state.progress.lock().await;
+        let share = crate::core::playback::learn::listened_share(position, duration);
+        if let Ok(mut log) = app.state::<crate::core::playback::learn::Taste>().lock() {
+            log.finish(&id, share);
+        }
+    }
     if !queue_selection {
         if let Ok(mut status) = state.autoplay_status.lock() {
             status.reset();
@@ -897,6 +911,9 @@ async fn load_track(
                 yt,
                 cache,
                 state.audio.clone(),
+                app.state::<crate::core::playback::learn::Taste>()
+                    .inner()
+                    .clone(),
                 state.reports.subscribe(),
                 state.autoplay_status.clone(),
             );
