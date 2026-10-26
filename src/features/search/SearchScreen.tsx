@@ -18,8 +18,9 @@ import LiveFeed from "../discovery/LiveFeed";
 import { ResultRow, SourceGroup, providerName } from "./SourceGroup";
 import { LinkPlay, linkTrack } from "./LinkPlay";
 import { parseYouTubeLink } from "../../lib/ytLink";
-import { playTrack } from "../../lib/playback";
+import { playTrack, usePlayback } from "../../lib/playback";
 import { playerTrackInfo } from "../../services/tauri/player";
+import NativeQueue from "../queue/NativeQueue";
 
 const GENERIC_ERROR = "Something went wrong. Try again.";
 
@@ -55,6 +56,8 @@ export default function SearchScreen() {
   const [view, setView] = useState<View>(IDLE);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // The autoplay side panel shows only once something is loaded; before that the search has the whole width.
+  const hasTrack = usePlayback((s) => s.track !== null);
 
   // The field is ready to type in as soon as the view opens.
   useEffect(() => {
@@ -150,7 +153,8 @@ export default function SearchScreen() {
 
   return (
     <Screen id="search-title" title="Search" caption="Search YouTube Music and YouTube videos in one list.">
-      <div ref={rootRef} onKeyDown={onRootKeyDown} className="flex flex-col gap-8">
+      <div className={hasTrack ? "grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_360px]" : undefined}>
+      <div ref={rootRef} onKeyDown={onRootKeyDown} className="flex min-w-0 flex-col gap-8">
         <form
           role="search"
           className="flex flex-col gap-3"
@@ -250,7 +254,8 @@ export default function SearchScreen() {
           // videos are not crowded out by songs.
           <Section id="search-songs" title="Songs">
             <ul aria-label="Search results" className="lx-stagger flex flex-col">
-              {hits.map((hit, i) => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} following={hits.slice(i + 1)} />)}
+              {/* Playing a result starts autoplay from that song (its related songs), not a queue of the remaining results. */}
+              {hits.map((hit) => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} />)}
             </ul>
           </Section>
         )}
@@ -310,6 +315,12 @@ export default function SearchScreen() {
             <LiveFeed kind="home" limit={6} />
           </>
         )}
+      </div>
+      {hasTrack && (
+        <aside aria-label="Autoplay" className="min-w-0 lg:sticky lg:top-6 lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
+          <NativeQueue />
+        </aside>
+      )}
       </div>
     </Screen>
   );
