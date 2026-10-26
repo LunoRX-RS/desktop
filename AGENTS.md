@@ -49,6 +49,7 @@ Dependency rules:
 6. **Entry identity ≠ track identity.** The same track can appear many times. An id from one provider is never substituted for another's. Do not merge search results by title alone.
 7. **No placeholders in production paths.** Do not replace working logic with stubs, and do not add empty abstraction layers.
 8. **Minimal diffs.** Change what the task needs. Do not change public API, serialized formats, IPC command names or DTO field names to satisfy a lint.
+9. **Work stays local until you are asked to publish.** Never commit, push, create a branch or open a PR as part of doing the work — not for a large feature, not for a small fix, and never one PR per change. Implement and verify in the working tree, report exactly what you ran, and let the user decide when and how it lands. Commit, push, merge and open PRs only on an explicit request, scoped to precisely what was asked.
 
 ## Commands
 

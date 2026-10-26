@@ -828,7 +828,7 @@ async fn download(audio: &ResolvedAudio, path: &Path) -> Result<()> {
         .clear()
         .extend_pairs(query)
         .append_pair("range", &format!("0-{}", audio.size - 1));
-    let client = reqwest::Client::builder()
+    let client = extract::bind_to_signed_family(reqwest::Client::builder(), &url)
         .timeout(Duration::from_secs(45))
         .connect_timeout(Duration::from_secs(8))
         .redirect(reqwest::redirect::Policy::custom(|a| {
@@ -852,6 +852,12 @@ async fn download(audio: &ResolvedAudio, path: &Path) -> Result<()> {
         .map_err(|_| CacheError::Download)?;
     let status = response.status();
     if !status.is_success() {
+        eprintln!(
+            "download refused: http {} (link issued for {}, connected over {})",
+            status.as_u16(),
+            extract::family_name(extract::signed_ip(response.url())),
+            extract::family_name(response.remote_addr().map(|a| a.ip()))
+        );
         return Err(if matches!(status.as_u16(), 401 | 403 | 404 | 410) {
             CacheError::Refused
         } else {
