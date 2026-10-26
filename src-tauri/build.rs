@@ -56,6 +56,8 @@ fn main() {
             "discord_settings_get",
             "discord_settings_set",
             "discord_preview",
+            "autostart_get",
+            "autostart_set",
             "search_suggestions",
             "library_likes",
             "library_set_like",

@@ -35,4 +35,6 @@ pub mod fonts;
 
 pub mod discord;
 
+pub mod autostart;
+
 pub mod update;

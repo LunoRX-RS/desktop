@@ -11,6 +11,7 @@
 
 use std::ptr::NonNull;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use block2::RcBlock;
@@ -19,13 +20,14 @@ use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
 use objc2_app_kit::NSImage;
 use objc2_core_foundation::CGSize;
-use objc2_foundation::{NSData, NSDictionary, NSNumber, NSString};
+use objc2_foundation::{NSArray, NSData, NSDictionary, NSNumber, NSString};
 use objc2_media_player::{
     MPChangePlaybackPositionCommandEvent, MPMediaItemArtwork, MPMediaItemPropertyArtist,
     MPMediaItemPropertyArtwork, MPMediaItemPropertyPlaybackDuration, MPMediaItemPropertyTitle,
     MPNowPlayingInfoCenter, MPNowPlayingInfoPropertyElapsedPlaybackTime,
     MPNowPlayingInfoPropertyPlaybackRate, MPNowPlayingPlaybackState, MPRemoteCommand,
     MPRemoteCommandCenter, MPRemoteCommandEvent, MPRemoteCommandHandlerStatus,
+    MPSkipIntervalCommand, MPSkipIntervalCommandEvent,
 };
 use tauri::{AppHandle, Manager};
 use tokio::sync::Notify;
@@ -35,6 +37,13 @@ use super::menu::{self, PlaybackMenu};
 use crate::commands::player::{PlaybackStateDto, PlayerProgressDto, PlayerState, progress};
 
 static CHANGED: Notify = Notify::const_new();
+
+/// Whether a track is currently loaded, kept in step by the publisher so a media-key handler can answer
+/// semantically on the OS thread without awaiting core.
+static TRACK_LOADED: AtomicBool = AtomicBool::new(false);
+
+/// The ±skip intervals offered in Control Center, in seconds.
+const SKIP_INTERVALS: [f64; 2] = [15.0, 30.0];
 
 pub fn poke() {
     CHANGED.notify_one();
@@ -288,10 +297,16 @@ fn publish_controls(c: Controls) {
         center.changePlaybackPositionCommand().setEnabled(c.seek);
         center.nextTrackCommand().setEnabled(c.skip);
         center.previousTrackCommand().setEnabled(c.skip);
+        center.skipForwardCommand().setEnabled(c.seek);
+        center.skipBackwardCommand().setEnabled(c.seek);
     }
 }
 
 fn spawn_command(app: &AppHandle, cmd: Remote) -> MPRemoteCommandHandlerStatus {
+    // Every remote command needs a loaded track; answer honestly instead of a hollow Success while idle.
+    if !TRACK_LOADED.load(Ordering::Relaxed) {
+        return MPRemoteCommandHandlerStatus::NoActionableNowPlayingItem;
+    }
     tauri::async_runtime::spawn(control::run(app.clone(), cmd));
     MPRemoteCommandHandlerStatus::Success
 }
@@ -335,8 +350,47 @@ fn register_all(app: &AppHandle) {
             .changePlaybackPositionCommand()
             .addTargetWithHandler(&block);
         std::mem::forget(token);
+
+        let numbers: Vec<Retained<NSNumber>> = SKIP_INTERVALS
+            .iter()
+            .map(|s| NSNumber::new_f64(*s))
+            .collect();
+        let intervals =
+            NSArray::from_slice(&numbers.iter().map(|n| &**n).collect::<Vec<&NSNumber>>());
+        center
+            .skipForwardCommand()
+            .setPreferredIntervals(&intervals);
+        center
+            .skipBackwardCommand()
+            .setPreferredIntervals(&intervals);
+        register_skip(&center.skipForwardCommand(), app, true);
+        register_skip(&center.skipBackwardCommand(), app, false);
     }
     publish_controls(controls(PlaybackStateDto::Idle));
+}
+
+/// Registers a ±skip command whose event carries the interval the user chose. Main thread only.
+fn register_skip(command: &MPSkipIntervalCommand, app: &AppHandle, forward: bool) {
+    let app = app.clone();
+    let block = RcBlock::new(move |event: NonNull<MPRemoteCommandEvent>| {
+        // SAFETY: this handler is only attached to a skip command, whose events are MPSkipIntervalCommandEvent,
+        // and `interval` is a plain accessor on the retained event.
+        let seconds = unsafe {
+            event
+                .cast::<MPSkipIntervalCommandEvent>()
+                .as_ref()
+                .interval()
+        };
+        if seconds.is_finite() && seconds >= 0.0 {
+            let delta = (seconds * 1000.0) as i64;
+            spawn_command(&app, Remote::SeekBy(if forward { delta } else { -delta }))
+        } else {
+            MPRemoteCommandHandlerStatus::CommandFailed
+        }
+    });
+    // SAFETY: the block matches the handler signature and is copied by the command.
+    let token = unsafe { command.addTargetWithHandler(&block) };
+    std::mem::forget(token);
 }
 
 /// Registers media keys and starts the publisher. Must run on the main thread (Tauri `setup`).
@@ -352,6 +406,7 @@ pub fn install(app: &AppHandle, menu: Option<PlaybackMenu>) {
             CHANGED.notified().await;
             let dto = progress(&app.state::<PlayerState>()).await;
             let mut info = map(&dto);
+            TRACK_LOADED.store(info.is_some(), Ordering::Relaxed);
             track_artwork(&mut info);
             let cover = artwork_slot().1.clone().filter(|_| info.is_some());
             let ctl = controls(dto.player.state);

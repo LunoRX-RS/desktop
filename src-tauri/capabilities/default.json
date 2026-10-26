@@ -132,6 +132,8 @@
     "allow-discord-settings-get",
     "allow-discord-settings-set",
     "allow-discord-preview",
+    "allow-autostart-get",
+    "allow-autostart-set",
     "allow-search-suggestions",
     "allow-lrc-load",
     "allow-lrc-save",

@@ -45,6 +45,10 @@ pub fn run() {
         // Self-update: signed releases only (public key in tauri.conf.json); the user confirms before installing.
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .manage(commands::update::UpdateState::default())
         .setup(|app| {
             let library_path = app
@@ -190,6 +194,8 @@ pub fn run() {
             commands::discord::discord_settings_get,
             commands::discord::discord_settings_set,
             commands::discord::discord_preview,
+            commands::autostart::autostart_get,
+            commands::autostart::autostart_set,
             commands::discovery::search_suggestions,
             commands::library::library_likes,
             commands::library::library_set_like,

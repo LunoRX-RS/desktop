@@ -83,6 +83,7 @@ export const SEARCH_INDEX: { cat: CategoryKey; group: string; label: string }[] 
   { cat: "discord", group: "settings-discord", label: "Discord Application ID" },
   { cat: "discord", group: "settings-discord-card", label: "Discord card design" },
   { cat: "playback", group: "settings-startup", label: "Restore last track" },
+  { cat: "playback", group: "settings-startup", label: "Open at login launch at startup boot" },
   { cat: "audio", group: "settings-effects", label: "Sound shaping equalizer bass treble speed" },
   { cat: "audio", group: "settings-effects", label: "Nightcore slowed reverb 8D 4D moving sound keep pitch" },
   { cat: "audio", group: "settings-audio", label: "Stream quality" },
@@ -127,7 +128,7 @@ export const SEARCH_INDEX: { cat: CategoryKey; group: string; label: string }[] 
 export function CategoryPane({ cat, mac, platform }: { cat: CategoryKey; mac: boolean; platform: string }) {
   switch (cat) {
     case "appearance": return <Appearance />;
-    case "playback": return <Playback />;
+    case "playback": return <Playback mac={mac} />;
     case "audio": return <Audio />;
     case "lyrics": return <Lyrics />;
     case "storage": return <Storage />;
