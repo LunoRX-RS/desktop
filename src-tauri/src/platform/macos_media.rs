@@ -17,9 +17,9 @@ use block2::RcBlock;
 use objc2::AnyThread;
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2_app_kit::{NSApplication, NSImage};
+use objc2_app_kit::NSImage;
 use objc2_core_foundation::CGSize;
-use objc2_foundation::{MainThreadMarker, NSData, NSDictionary, NSNumber, NSString};
+use objc2_foundation::{NSData, NSDictionary, NSNumber, NSString};
 use objc2_media_player::{
     MPChangePlaybackPositionCommandEvent, MPMediaItemArtwork, MPMediaItemPropertyArtist,
     MPMediaItemPropertyArtwork, MPMediaItemPropertyPlaybackDuration, MPMediaItemPropertyTitle,
@@ -143,20 +143,6 @@ impl Throttle {
             self.last = Some((now.clone(), at));
         }
         send
-    }
-}
-
-/// An unbundled dev run (`tauri dev`) has no .app, so macOS shows a blank grid as the app icon, including as the
-/// badge on the Now Playing widget. Setting the icon at runtime fixes that; a bundled app already has the same icon.
-/// Main thread only.
-pub fn set_app_icon() {
-    static ICON: &[u8] = include_bytes!("../../icons/icon.png");
-    let Some(mtm) = MainThreadMarker::new() else {
-        return;
-    };
-    if let Some(image) = NSImage::initWithData(NSImage::alloc(), &NSData::with_bytes(ICON)) {
-        // SAFETY: plain AppKit call on the main thread with a valid image.
-        unsafe { NSApplication::sharedApplication(mtm).setApplicationIconImage(Some(&image)) };
     }
 }
 

@@ -6,6 +6,8 @@ pub mod fonts;
 
 mod control;
 #[cfg(target_os = "macos")]
+mod dark_icon;
+#[cfg(target_os = "macos")]
 mod macos_media;
 #[cfg(target_os = "macos")]
 mod menu;
@@ -19,7 +21,7 @@ mod tray;
 /// `PlayerState` is managed. A failure is logged once and never retried.
 #[cfg(target_os = "macos")]
 pub fn install(app: &tauri::AppHandle) {
-    macos_media::set_app_icon();
+    dark_icon::install();
     let menu = menu::install(app);
     sound_menu::install(app);
     macos_media::install(app, menu);
