@@ -15,6 +15,24 @@ pub enum PlaybackCommand {
     GetState,
 }
 
+impl PlaybackCommand {
+    /// What the command is, without the track inside it, so a log can say what happened and not which song.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Load(_) => "load",
+            Self::Play => "play",
+            Self::Pause => "pause",
+            Self::Resume => "resume",
+            Self::Stop => "stop",
+            Self::Seek { .. } => "seek",
+            Self::Next => "next",
+            Self::Previous => "previous",
+            Self::SetVolume(_) => "volume",
+            Self::GetState => "state",
+        }
+    }
+}
+
 // Private field: the only way to build a Volume is new(), so SetVolume cannot carry an out-of-range value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Volume(u8);

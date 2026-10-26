@@ -122,6 +122,7 @@ fn plan(
 /// Runs one OS command. Core errors are dropped: the OS widget has nowhere to show them, and the engine
 /// state is unchanged when it refuses.
 pub async fn run(app: AppHandle, cmd: Remote) {
+    eprintln!("[control] {cmd:?} from the tray, a media key or the system");
     let state = app.state::<PlayerState>();
     let now = progress(&state).await;
     let (plan, remembered) = plan(

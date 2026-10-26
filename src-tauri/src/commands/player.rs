@@ -682,6 +682,9 @@ fn settle(engine: &PlaybackEngine, before: PlayerStateDto, result: Result<(), Co
 // One engine call under the lock. Errors can change state too (a host rejection moves it to Error), so
 // the state comparison runs on both outcomes.
 pub(crate) async fn dispatch(state: &PlayerState, cmd: PlaybackCommand) -> Reply {
+    if matches!(cmd, PlaybackCommand::Pause | PlaybackCommand::Stop) {
+        eprintln!("[command] {} requested", cmd.name());
+    }
     // Serialize Stop with manual Load, including Stop from macOS media controls.
     let mut autoplay = if matches!(cmd, PlaybackCommand::Stop) {
         Some(state.autoplay.lock().await)

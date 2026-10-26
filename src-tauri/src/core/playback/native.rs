@@ -243,6 +243,7 @@ fn run(
     let mut last_report = Instant::now();
     let mut buffering = false;
     let (mut last_position, mut last_duration) = (0, 0);
+    let mut loaded_file: Option<String> = None;
     loop {
         // Settings change from another thread; apply at once and again after any reset.
         let shaping = audio.settings();
@@ -261,6 +262,9 @@ fn run(
                 }
                 while mpv.event_context_mut().wait_event(0.0).is_some() {}
                 revision = request.revision;
+                if matches!(request.command, PlaybackCommand::Load(_)) {
+                    loaded_file = request.url.clone();
+                }
                 match apply(&mpv, &request) {
                     Err(_) => {
                         let _ = request.reply.send(Err(extract::failed()));
@@ -303,9 +307,36 @@ fn run(
                 }
             }
             Some(Ok(Event::EndFile(reason))) if reason == mpv_end_file_reason::Eof => {
-                notice = Some(end_event(last_position, last_duration))
+                let event = end_event(last_position, last_duration);
+                if last_duration == 0 {
+                    // The song ended before it had played at all: say what file that was and how big it is on disk.
+                    let (name, length) = loaded_file
+                        .as_deref()
+                        .and_then(|url| reqwest::Url::parse(url).ok())
+                        .and_then(|url| url.to_file_path().ok())
+                        .map(|path| {
+                            (
+                                path.file_name()
+                                    .map(|n| n.to_string_lossy().into_owned())
+                                    .unwrap_or_default(),
+                                std::fs::metadata(&path).map(|m| m.len()).ok(),
+                            )
+                        })
+                        .unwrap_or_default();
+                    eprintln!(
+                        "[player] the file ended at once: {name} is {length:?} bytes on disk"
+                    );
+                }
+                eprintln!(
+                    "[player] end of file (revision {revision}) at {last_position} of {last_duration} ms: {}",
+                    event_name(&event)
+                );
+                notice = Some(event)
             }
             Some(Err(_)) | Some(Ok(Event::EndFile(mpv_end_file_reason::Error))) => {
+                eprintln!(
+                    "[player] mpv reported an error (revision {revision}) at {last_position} of {last_duration} ms; the song is marked failed"
+                );
                 if let Some((request, _)) = pending.take() {
                     let _ = request.reply.send(Err(extract::failed()));
                 }
@@ -327,6 +358,19 @@ fn run(
         if pending.as_ref().is_some_and(|(r, start)| {
             r.reply.is_closed() || start.elapsed() > Duration::from_secs(12)
         }) {
+            if let Some((request, start)) = pending.as_ref() {
+                eprintln!(
+                    "[player] stopping mpv: {} request (revision {}) {} after {} ms",
+                    request.command.name(),
+                    request.revision,
+                    if request.reply.is_closed() {
+                        "was dropped by its caller"
+                    } else {
+                        "timed out"
+                    },
+                    start.elapsed().as_millis()
+                );
+            }
             let _ = mpv.command("stop", &[]);
             if let Some((request, _)) = pending.take() {
                 let _ = request.reply.send(Err(PlaybackErrorKind::HostRejected(
@@ -369,6 +413,16 @@ fn run(
     }
 }
 
+fn event_name(event: &PlayerEvent) -> &'static str {
+    match event {
+        PlayerEvent::Ended => "ended",
+        PlayerEvent::Failed => "failed",
+        PlayerEvent::Buffering => "buffering",
+        PlayerEvent::Playing => "playing",
+        _ => "other",
+    }
+}
+
 fn end_event(position_ms: u64, duration_ms: u64) -> PlayerEvent {
     if duration_ms > 0 && duration_ms.saturating_sub(position_ms) > 2000 {
         PlayerEvent::Failed
@@ -399,6 +453,119 @@ mod tests {
             native_controls(bits);
         }
     }
+    /// Writes a silent mono 16-bit WAV of `seconds` and returns its path.
+    fn silent_wav(name: &str, seconds: usize) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("lunor-{name}-{}.wav", std::process::id()));
+        let samples = vec![0u8; 8_000 * 2 * seconds];
+        let mut wav = Vec::new();
+        wav.extend(b"RIFF");
+        wav.extend((36 + samples.len() as u32).to_le_bytes());
+        wav.extend(b"WAVEfmt ");
+        wav.extend(16u32.to_le_bytes());
+        wav.extend(1u16.to_le_bytes());
+        wav.extend(1u16.to_le_bytes());
+        wav.extend(8_000u32.to_le_bytes());
+        wav.extend(16_000u32.to_le_bytes());
+        wav.extend(2u16.to_le_bytes());
+        wav.extend(16u16.to_le_bytes());
+        wav.extend(b"data");
+        wav.extend((samples.len() as u32).to_le_bytes());
+        wav.extend(samples);
+        std::fs::write(&path, wav).unwrap();
+        path
+    }
+
+    /// A song left paused for a while must carry on and end normally: no stop, no failure, one Ended at the end.
+    #[test]
+    fn a_long_pause_does_not_end_or_fail_the_song() {
+        if cfg!(windows) && std::env::var_os("CI").is_some() {
+            return;
+        }
+        let path = silent_wav("long-pause", 4);
+        let mpv = Mpv::with_initializer(|init| {
+            init.set_option("config", "no")?;
+            init.set_option("ao", "null")?;
+            init.set_option("vid", "no")?;
+            init.set_option("terminal", "no")
+        })
+        .unwrap();
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let (reports, mut seen) = tokio::sync::mpsc::unbounded_channel();
+        let worker = thread::spawn(move || run(mpv, receiver, reports, AudioControl::default()));
+        let track = TrackReference::new(
+            ProviderId::YouTube,
+            "a_B-9zZ0-_x".into(),
+            "https://www.youtube.com/watch?v=a_B-9zZ0-_x".into(),
+            "Test".into(),
+        )
+        .unwrap();
+        let mut revision = 0;
+        let mut send = |command: PlaybackCommand, url: Option<String>| {
+            revision += 1;
+            let (reply, mut outcome) = oneshot::channel();
+            sender
+                .send(Request {
+                    revision,
+                    command,
+                    audio: AudioSettings::default(),
+                    url,
+                    reply,
+                })
+                .unwrap();
+            let deadline = Instant::now() + Duration::from_secs(15);
+            loop {
+                match outcome.try_recv() {
+                    Ok(result) => return result,
+                    Err(oneshot::error::TryRecvError::Empty) if Instant::now() < deadline => {
+                        thread::sleep(Duration::from_millis(10))
+                    }
+                    other => panic!("no answer: {other:?}"),
+                }
+            }
+        };
+        assert_eq!(
+            send(
+                PlaybackCommand::Load(track),
+                Some(path.to_string_lossy().into_owned())
+            ),
+            Ok(())
+        );
+        assert_eq!(send(PlaybackCommand::Play, None), Ok(()));
+        thread::sleep(Duration::from_secs(1));
+        assert_eq!(send(PlaybackCommand::Pause, None), Ok(()));
+        // Left paused well past every timeout in the host (the pending-request limit is 12 s; a short stand-in here).
+        thread::sleep(Duration::from_secs(5));
+        let during_pause: Vec<_> = std::iter::from_fn(|| seen.try_recv().ok()).collect();
+        assert!(
+            during_pause
+                .iter()
+                .all(|r| !matches!(r.event, Some(PlayerEvent::Ended | PlayerEvent::Failed))),
+            "the song ended or failed while it was only paused"
+        );
+        assert_eq!(send(PlaybackCommand::Resume, None), Ok(()));
+        let mut end = None;
+        let deadline = Instant::now() + Duration::from_secs(15);
+        while end.is_none() && Instant::now() < deadline {
+            while let Ok(report) = seen.try_recv() {
+                if matches!(report.event, Some(PlayerEvent::Ended | PlayerEvent::Failed)) {
+                    end = Some(report);
+                    break;
+                }
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+        let end = end.expect("the song never ended after the resume");
+        assert!(
+            matches!(end.event, Some(PlayerEvent::Ended)),
+            "ended as a failure at {} of {} ms",
+            end.position_ms,
+            end.duration_ms
+        );
+        drop(sender);
+        worker.join().unwrap();
+        std::fs::remove_file(path).unwrap();
+    }
+
     fn native_controls(bits: u16) {
         let path = std::env::temp_dir().join(format!(
             "lunor-audio-test-{}-{bits}.wav",
