@@ -2,6 +2,7 @@
 
 import {
   AudioLines,
+  Bot,
   Bug,
   HardDrive,
   Info,
@@ -16,6 +17,7 @@ import {
 } from "lucide-react";
 import { About } from "./zones/About";
 import { Accounts } from "./zones/Accounts";
+import { AiControl } from "./zones/AiControl";
 import { Appearance } from "./zones/Appearance";
 import { Audio } from "./zones/Audio";
 import { DevMode } from "./zones/DevMode";
@@ -35,6 +37,7 @@ export type CategoryKey =
   | "storage"
   | "accounts"
   | "discord"
+  | "ai"
   | "privacy"
   | "shortcuts"
   | "dev"
@@ -55,6 +58,7 @@ export const CATEGORIES: Category[] = [
   { key: "storage", label: "Storage", description: "Disk cache and playlists kept for offline listening.", Icon: HardDrive },
   { key: "accounts", label: "Accounts & sync", description: "Music provider sign-in, your LunoRX account and playlist sync.", Icon: UserRound },
   { key: "discord", label: "Discord", description: "Show what you play on your Discord profile.", Icon: MessageCircle },
+  { key: "ai", label: "AI control", description: "Let AI tools on this computer play, search and queue music.", Icon: Bot },
   { key: "privacy", label: "Privacy & data", description: "What the app may send about how it is used, what failed and what you did.", Icon: ShieldCheck },
   { key: "shortcuts", label: "Keyboard shortcuts", description: "Keys that work across the app.", Icon: Keyboard },
   { key: "dev", label: "Dev Mode", description: "Raw failure reasons, recent errors and what the app can reach.", Icon: Bug },
@@ -82,6 +86,8 @@ export const SEARCH_INDEX: { cat: CategoryKey; group: string; label: string }[] 
   { cat: "discord", group: "settings-discord", label: "Discord Rich Presence" },
   { cat: "discord", group: "settings-discord", label: "Discord Application ID" },
   { cat: "discord", group: "settings-discord-card", label: "Discord card design" },
+  { cat: "ai", group: "settings-ai", label: "AI control MCP server Claude" },
+  { cat: "ai", group: "settings-ai", label: "MCP port and token" },
   { cat: "playback", group: "settings-startup", label: "Restore last track" },
   { cat: "playback", group: "settings-startup", label: "Open at login launch at startup boot" },
   { cat: "audio", group: "settings-effects", label: "Sound shaping equalizer bass treble speed" },
@@ -134,6 +140,7 @@ export function CategoryPane({ cat, mac, platform }: { cat: CategoryKey; mac: bo
     case "storage": return <Storage />;
     case "accounts": return <Accounts />;
     case "discord": return <Discord />;
+    case "ai": return <AiControl />;
     case "privacy": return <Privacy />;
     case "shortcuts": return <Shortcuts mac={mac} />;
     case "dev": return <DevMode />;

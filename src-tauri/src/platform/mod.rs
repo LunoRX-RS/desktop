@@ -3,6 +3,7 @@
 
 pub mod discord;
 pub mod fonts;
+pub mod mcp;
 
 mod control;
 #[cfg(target_os = "macos")]

@@ -144,6 +144,7 @@ pub fn run() {
             platform::discord::start(app.path().app_data_dir().ok());
             commands::player::PlayerState::start(app.handle());
             platform::install(app.handle());
+            platform::mcp::start(app.handle());
             tauri::async_runtime::spawn(commands::youtube::YouTubeState::restore(
                 app.handle().clone(),
             ));
@@ -194,8 +195,14 @@ pub fn run() {
             commands::discord::discord_settings_get,
             commands::discord::discord_settings_set,
             commands::discord::discord_preview,
+            commands::discord::discord_settings_get,
+            commands::discord::discord_settings_set,
+            commands::discord::discord_preview,
             commands::autostart::autostart_get,
             commands::autostart::autostart_set,
+            commands::mcp::mcp_settings_get,
+            commands::mcp::mcp_settings_set,
+            commands::mcp::mcp_rotate_token,
             commands::discovery::search_suggestions,
             commands::library::library_likes,
             commands::library::library_set_like,
