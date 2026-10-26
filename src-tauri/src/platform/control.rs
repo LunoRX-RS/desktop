@@ -29,6 +29,7 @@ pub enum Remote {
     Pause,
     Toggle,
     #[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
+    // only the macOS/Linux media surfaces build a stop command
     Stop,
     #[cfg_attr(not(any(target_os = "macos", target_os = "linux")), allow(dead_code))]
     SeekTo(i64),

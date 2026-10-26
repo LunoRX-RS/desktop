@@ -132,6 +132,7 @@
     "allow-discord-settings-get",
     "allow-discord-settings-set",
     "allow-discord-preview",
+    "allow-discord-preview",
     "allow-autostart-get",
     "allow-autostart-set",
     "allow-mcp-settings-get",

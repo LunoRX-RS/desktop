@@ -56,6 +56,7 @@ fn main() {
             "discord_settings_get",
             "discord_settings_set",
             "discord_preview",
+            "discord_preview",
             "autostart_get",
             "autostart_set",
             "mcp_settings_get",
