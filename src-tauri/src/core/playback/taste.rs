@@ -37,6 +37,17 @@ impl Vibe {
             Self::Explore => "explore",
         }
     }
+    pub fn index(self) -> usize {
+        match self {
+            Self::Same => 0,
+            Self::Balanced => 1,
+            Self::Explore => 2,
+        }
+    }
+    /// The built-in weights of the learnable terms, where fitting starts from.
+    pub fn prior(self) -> Features {
+        self.weights().to_array()
+    }
     fn weights(self) -> Weights {
         match self {
             Self::Same => Weights {
@@ -70,6 +81,11 @@ impl Vibe {
     }
 }
 
+/// The terms the score weighs, in the order of `Weights::to_array`. What the learning in `learn.rs` fits.
+pub const FEATURES: usize = 6;
+pub type Features = [f32; FEATURES];
+
+#[derive(Clone, Copy)]
 struct Weights {
     rank: f32,
     votes: f32,
@@ -78,6 +94,31 @@ struct Weights {
     script: f32,
     artist: f32,
     repeat_artist: f32,
+}
+
+impl Weights {
+    fn to_array(self) -> Features {
+        [
+            self.rank,
+            self.votes,
+            self.mood,
+            self.folk,
+            self.script,
+            self.artist,
+        ]
+    }
+    /// The weights a fit gives for `vibe`; `repeat_artist` is not learned and keeps its built-in value.
+    fn learned(vibe: Vibe, x: Features) -> Self {
+        Self {
+            rank: x[0],
+            votes: x[1],
+            mood: x[2],
+            folk: x[3],
+            script: x[4],
+            artist: x[5],
+            repeat_artist: vibe.weights().repeat_artist,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -342,9 +383,23 @@ pub struct Profile {
     artists: HashMap<String, f32>,
     variants: f32,
     total: f32,
+    /// Fitted weights per vibe (see `Vibe::index`); `None` keeps the built-in ones for that vibe.
+    learned: [Option<Features>; 3],
 }
 
 impl Profile {
+    /// Replaces the fitted weights. Taken from the listening log, so the same songs always score the same way.
+    pub fn learn(&mut self, learned: [Option<Features>; 3]) {
+        self.learned = learned;
+    }
+
+    fn weights(&self, vibe: Vibe) -> Weights {
+        match self.learned[vibe.index()] {
+            Some(x) => Weights::learned(vibe, x),
+            None => vibe.weights(),
+        }
+    }
+
     /// Older songs fade by `keep` (0..1) before a new one is added, so a change of taste takes over in a few songs.
     pub fn fade(&mut self, keep: f32) {
         for v in self.tags.iter_mut().chain(self.scripts.iter_mut()) {
@@ -461,8 +516,9 @@ fn script_fit(profile: &Profile, script: Script) -> f32 {
     }
 }
 
-/// How well a candidate fits the profile, before its place in the order is known. Higher is better.
-fn fit(profile: &Profile, w: &Weights, c: &Candidate, radios: usize) -> f32 {
+/// What a candidate looks like to the score: the learnable terms, in `Weights::to_array` order. The profile terms are zero
+/// before the session has any songs.
+pub fn features(profile: &Profile, c: &Candidate, radios: usize) -> Features {
     let tags = tags_of(&c.track.title, &c.track.artists);
     let rank = 1.0 / (1.0 + c.rank as f32 / 8.0); // 1.0 first, 0.5 at the ninth, long tail below
     let votes = if radios > 1 {
@@ -470,13 +526,22 @@ fn fit(profile: &Profile, w: &Weights, c: &Candidate, radios: usize) -> f32 {
     } else {
         0.0
     };
-    let mut score = w.rank * rank + w.votes * votes;
-    if !profile.is_empty() {
-        score += w.mood * mood_fit(profile, &tags)
-            + w.folk * folk_fit(profile, &tags)
-            + w.script * script_fit(profile, song_script(&c.track.title, &c.track.artists))
-            + w.artist * profile.artist_share(&c.track.artists);
+    if profile.is_empty() {
+        return [rank, votes, 0.0, 0.0, 0.0, 0.0];
     }
+    [
+        rank,
+        votes,
+        mood_fit(profile, &tags),
+        folk_fit(profile, &tags),
+        script_fit(profile, song_script(&c.track.title, &c.track.artists)),
+        profile.artist_share(&c.track.artists),
+    ]
+}
+
+/// How well a candidate fits the profile, before its place in the order is known. Higher is better.
+fn fit(profile: &Profile, w: &Weights, c: &Candidate, x: &Features) -> f32 {
+    let mut score: f32 = w.to_array().iter().zip(x).map(|(a, b)| a * b).sum();
     if is_variant(&c.track.title) && profile.variants < 0.5 {
         score -= 1.2;
     }
@@ -553,11 +618,11 @@ pub fn sequence(
     previous: Option<&OfflineTrack>,
     limit: usize,
 ) -> Vec<OfflineTrack> {
-    let w = vibe.weights();
+    let w = profile.weights(vibe);
     let mut pool: Vec<(f32, Candidate)> = candidates
         .into_iter()
         .filter(|c| vibe != Vibe::Same || !breaks_vibe(profile, c))
-        .map(|c| (fit(profile, &w, &c, radios), c))
+        .map(|c| (fit(profile, &w, &c, &features(profile, &c, radios)), c))
         .collect();
     let mut out: Vec<OfflineTrack> = Vec::new();
     let mut last = previous.cloned();

@@ -110,6 +110,21 @@ pub fn stats_clear_local(
     state.with(PlayStats::clear)
 }
 
+/// Deletes what autoplay learned from listening. The next autoplay uses the built-in weights until new songs are logged.
+#[tauri::command]
+pub fn taste_clear(
+    window: WebviewWindow,
+    taste: State<'_, crate::core::playback::learn::Taste>,
+) -> Result<(), LibraryError> {
+    main(&window)?;
+    taste
+        .lock()
+        .map_err(|_| LibraryError::Storage)?
+        .clear()
+        .map_err(|_| LibraryError::Storage)?;
+    Ok(())
+}
+
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReportArgs {

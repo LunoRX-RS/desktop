@@ -90,6 +90,13 @@ Lint policy: zero warnings; no blanket `#[allow]`; a targeted `#[allow]` needs t
 
 Behavior implemented, errors handled, security rules above hold, the relevant commands pass (state which you ran), tests cover the new behavior, docs updated if contracts changed. Core logic must be testable without the Tauri UI or the backend.
 
+## Code review (CodeRabbit)
+
+- Before reporting a PR-related task as done, read the CodeRabbit review on the PR for the current branch: review summaries, inline comments and nitpicks (`gh pr view <n> --comments`, `gh api repos/{owner}/{repo}/pulls/<n>/comments`, `gh api repos/{owner}/{repo}/pulls/<n>/reviews`).
+- For each CodeRabbit finding: fix it if it is valid, or state in the reply why it does not apply. Do not fix by silencing (no `#[allow]`, no disabled tests, no lint-config changes to hide it).
+- Re-run the Commands checks after fixing (`bun run lint`, `bun run build`, `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked`) and report the results.
+- Fixes stay in the working tree until the user asks to commit or push (Hard rule 9).
+
 ## Reporting
 
 When finishing a significant task, report: what changed (files and why), what you verified (exact commands and results), what you could not verify, and remaining risks.

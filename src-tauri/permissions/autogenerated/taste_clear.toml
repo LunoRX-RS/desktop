@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-taste-clear"
+description = "Enables the taste_clear command without any pre-configured scope."
+commands.allow = ["taste_clear"]
+
+[[permission]]
+identifier = "deny-taste-clear"
+description = "Denies the taste_clear command without any pre-configured scope."
+commands.deny = ["taste_clear"]

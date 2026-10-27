@@ -245,6 +245,9 @@ async fn repeat_one() -> Result<(), Box<dyn std::error::Error>> {
         yt,
         cache,
         audio,
+        Arc::new(std::sync::Mutex::new(
+            lunorx_lib::core::playback::learn::TasteLog::open(None),
+        )),
         rx,
         status.clone(),
     ));

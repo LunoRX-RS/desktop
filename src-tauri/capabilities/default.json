@@ -74,6 +74,7 @@
     "allow-stats-set-cloud",
     "allow-stats-cloud-sync",
     "allow-stats-cloud-clear",
+    "allow-taste-clear",
     "allow-sync-remove-local-entry",
     "allow-sync-flush-pending",
     "allow-sync-register",

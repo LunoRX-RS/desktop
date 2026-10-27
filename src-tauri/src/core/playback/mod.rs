@@ -16,6 +16,8 @@ pub mod cache;
 
 pub mod autoplay;
 
+pub mod learn;
+
 mod lyrics_cache;
 
 pub mod lyric_prefs;

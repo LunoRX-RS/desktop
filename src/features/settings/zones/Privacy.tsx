@@ -3,6 +3,7 @@
 import { TelemetrySettings } from "../TelemetrySettings";
 import { ReportsSettings } from "../ReportsSettings";
 import { ActivitySettings } from "../ActivitySettings";
+import { TasteSettings } from "../TasteSettings";
 
 export function Privacy() {
   return (
@@ -10,6 +11,7 @@ export function Privacy() {
       <TelemetrySettings />
       <ReportsSettings />
       <ActivitySettings />
+      <TasteSettings />
     </>
   );
 }

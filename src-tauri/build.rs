@@ -122,6 +122,7 @@ fn main() {
             "stats_set_cloud",
             "stats_cloud_sync",
             "stats_cloud_clear",
+            "taste_clear",
             "sync_remove_local_entry",
             "sync_flush_pending",
             "sync_register",
