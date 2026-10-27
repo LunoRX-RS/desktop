@@ -886,13 +886,15 @@ async fn load_track(
     // Manual replacement abandons every queued autoplay pick. Keep the one still playing when this load
     // reuses the active track; otherwise clear them all.
     if let Ok(mut log) = app.state::<crate::core::playback::learn::Taste>().lock() {
-        if leaving_finished {
-            log.forget_pending_except(None);
-        } else if leaving.is_some() {
-            log.forget_pending_except(Some(track.provider_track_id.as_str()));
+        // A queue selection (Next or clicking an autoplay-queued track) keeps that pick's expectation;
+        // a manual replacement that reuses the active track keeps it too. Otherwise all abandoned
+        // picks are dropped, including the one that was just finished above.
+        let keep = if queue_selection || !leaving_finished && leaving.is_some() {
+            Some(track.provider_track_id.as_str())
         } else {
-            log.forget_pending_except(None);
-        }
+            None
+        };
+        log.forget_pending_except(keep);
     }
     if !queue_selection {
         if let Ok(mut status) = state.autoplay_status.lock() {
