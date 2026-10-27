@@ -117,7 +117,11 @@ pub fn taste_clear(
     taste: State<'_, crate::core::playback::learn::Taste>,
 ) -> Result<(), LibraryError> {
     main(&window)?;
-    taste.lock().map_err(|_| LibraryError::Storage)?.clear();
+    taste
+        .lock()
+        .map_err(|_| LibraryError::Storage)?
+        .clear()
+        .map_err(|_| LibraryError::Storage)?;
     Ok(())
 }
 

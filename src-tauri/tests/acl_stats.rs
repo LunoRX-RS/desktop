@@ -51,8 +51,8 @@ fn every_stats_handler_is_in_app_manifest_and_allowed() {
     let handlers = stats_handlers(&lib);
     assert_eq!(
         handlers.len(),
-        6,
-        "expected 6 stats handlers in generate_handler!, found {handlers:?}"
+        7,
+        "expected 7 stats handlers in generate_handler!, found {handlers:?}"
     );
 
     let mut missing = Vec::new();

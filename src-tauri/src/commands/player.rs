@@ -872,11 +872,26 @@ async fn load_track(
         .await
         .active_track()
         .map(|t| t.provider_track_id.clone());
-    if let Some(id) = leaving.filter(|id| *id != track.provider_track_id) {
+    let leaving_finished = leaving
+        .as_ref()
+        .map(|id| *id != track.provider_track_id)
+        .unwrap_or(false);
+    if let Some(id) = leaving.clone().filter(|id| *id != track.provider_track_id) {
         let (position, duration) = *state.progress.lock().await;
         let share = crate::core::playback::learn::listened_share(position, duration);
         if let Ok(mut log) = app.state::<crate::core::playback::learn::Taste>().lock() {
             log.finish(&id, share);
+        }
+    }
+    // Manual replacement abandons every queued autoplay pick. Keep the one still playing when this load
+    // reuses the active track; otherwise clear them all.
+    if let Ok(mut log) = app.state::<crate::core::playback::learn::Taste>().lock() {
+        if leaving_finished {
+            log.forget_pending_except(None);
+        } else if leaving.is_some() {
+            log.forget_pending_except(Some(track.provider_track_id.as_str()));
+        } else {
+            log.forget_pending_except(None);
         }
     }
     if !queue_selection {
@@ -1070,6 +1085,24 @@ pub async fn player_stop(
     app: AppHandle,
     state: State<'_, PlayerState>,
 ) -> Result<PlayerStateDto, PlayerError> {
+    // Finish the active track's learning row before the autoplay session is aborted, then drop the
+    // abandoned picks so none of them can later be logged against a different track.
+    let leaving = state
+        .engine
+        .lock()
+        .await
+        .active_track()
+        .map(|t| t.provider_track_id.clone());
+    if let Some(id) = leaving {
+        let (position, duration) = *state.progress.lock().await;
+        let share = crate::core::playback::learn::listened_share(position, duration);
+        if let Ok(mut log) = app.state::<crate::core::playback::learn::Taste>().lock() {
+            log.finish(&id, share);
+        }
+        if let Ok(mut log) = app.state::<crate::core::playback::learn::Taste>().lock() {
+            log.forget_pending_except(None);
+        }
+    }
     finish(&app, dispatch(&state, PlaybackCommand::Stop).await)
 }
 

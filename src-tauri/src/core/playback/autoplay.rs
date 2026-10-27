@@ -258,6 +258,9 @@ async fn session(
         let vibe = vibe_of(&state);
         if planned_vibe.is_some_and(|v| v != vibe) && !list {
             queue.clear();
+            if let Ok(mut log) = taste.lock() {
+                log.forget_pending_except(Some(&seed));
+            }
         }
         planned_vibe = Some(vibe);
         // A playlist or album plays through first; related tracks come in only once it is used up.

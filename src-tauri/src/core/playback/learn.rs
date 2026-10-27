@@ -71,6 +71,11 @@ impl TasteLog {
         self.pending.insert(id, (vibe, x));
     }
 
+    /// Drops abandoned picks. Keeps `keep`, the active pick, when it is still playing.
+    pub fn forget_pending_except(&mut self, keep: Option<&str>) {
+        self.pending.retain(|id, _| Some(id.as_str()) == keep);
+    }
+
     /// The song `id` is done (or left) after `listened` of it. Songs that were not autoplay picks are ignored.
     pub fn finish(&mut self, id: &str, listened: f32) {
         let Some((vibe, x)) = self.pending.remove(id) else {
@@ -99,12 +104,19 @@ impl TasteLog {
     }
 
     /// Deletes every logged song and pick. The file is removed too.
-    pub fn clear(&mut self) {
+    pub fn clear(&mut self) -> std::io::Result<()> {
         self.rows.clear();
         self.pending.clear();
-        if let Some(path) = &self.path {
-            let _ = fs::remove_file(path);
-        }
+        let Some(path) = &self.path else {
+            return Ok(());
+        };
+        let remove = |file| match fs::remove_file(file) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+            _ => Ok(()),
+        };
+        remove(path.with_extension("json.tmp"))?;
+        remove(path.clone())?;
+        Ok(())
     }
 
     fn trim(&mut self) {
