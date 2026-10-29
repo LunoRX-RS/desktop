@@ -27,6 +27,7 @@
     "allow-youtube-import-playlist-from-url",
     "allow-youtube-like-push-get",
     "allow-youtube-like-push-set",
+    "allow-youtube-po-token-set",
     "allow-youtube-disconnect",
     "allow-remote-start",
     "allow-remote-stop",

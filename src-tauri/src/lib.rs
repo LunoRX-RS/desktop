@@ -230,6 +230,7 @@ pub fn run() {
             commands::youtube_import::youtube_import_playlist_from_url,
             commands::youtube::youtube_like_push_get,
             commands::youtube::youtube_like_push_set,
+            commands::youtube::youtube_po_token_set,
             commands::youtube::youtube_disconnect,
             commands::share::shared_link_take,
             commands::share::shared_token_from_url,

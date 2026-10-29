@@ -1,5 +1,6 @@
 pub mod clock;
 pub mod dto;
+pub mod page_host;
 pub mod player;
 pub mod providers;
 pub mod remote;

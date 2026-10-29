@@ -16,6 +16,8 @@ pub struct Yt {
     scripts: Arc<ScriptCache>,
     /// One script download and analysis at a time; the others wait and then hit the cache.
     gate: Arc<tokio::sync::Mutex<()>>,
+    /// The token the app's own browser view handed over, if any. Never made here.
+    po_tokens: Arc<crate::core::po_token::PoTokenStore>,
 }
 
 /// Why a cookie was not accepted as a signed-in session.
@@ -40,9 +42,13 @@ impl Yt {
             client,
             scripts: Arc::new(ScriptCache::new()),
             gate: Arc::new(tokio::sync::Mutex::new(())),
+            po_tokens: Arc::default(),
         }
     }
 
+    pub fn po_tokens(&self) -> &Arc<crate::core::po_token::PoTokenStore> {
+        &self.po_tokens
+    }
     pub fn client(&self) -> &Client {
         &self.client
     }
