@@ -6,6 +6,7 @@ use crate::core::{
     domain::ProviderId,
     errors::{HostRejectKind, PlaybackErrorKind},
     playback::{
+        audio::{AudioControl, Effects},
         command::PlaybackCommand,
         host::{HostFuture, HostOutcome, HostRequest, PlayerEvent, PlayerHost},
         native::{NativeHost, NativeReport},
@@ -68,16 +69,45 @@ pub struct PageHost {
     revision: Arc<AtomicU64>,
     shared: Arc<Mutex<Shared>>,
     ready: Arc<Notify>,
+    /// Set when a new page loads, so the sound settings are sent to it again.
+    resend: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl PageHost {
-    pub fn new(app: &AppHandle, reports: UnboundedSender<NativeReport>) -> Self {
+    pub fn new(
+        app: &AppHandle,
+        reports: UnboundedSender<NativeReport>,
+        audio: AudioControl,
+    ) -> Self {
+        let resend = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        // The page applies the same sound settings the native player does (speed and pitch, equaliser, 8D/4D, reverb...).
+        let (watch_app, watch_resend) = (app.clone(), resend.clone());
+        tauri::async_runtime::spawn(async move {
+            let mut sent: Option<Effects> = None;
+            loop {
+                tokio::time::sleep(Duration::from_millis(400)).await;
+                let now = audio.settings().effects;
+                let again = watch_resend.swap(false, Ordering::Relaxed);
+                if again || sent != Some(now) {
+                    if let Some(w) = watch_app.get_webview_window(WINDOW)
+                        && let Ok(json) = serde_json::to_string(&now)
+                        && w.eval(format!("window.__lunorx&&window.__lunorx.effects({json})"))
+                            .is_ok()
+                    {
+                        sent = Some(now);
+                    } else if again {
+                        watch_resend.store(true, Ordering::Relaxed);
+                    }
+                }
+            }
+        });
         Self {
             app: app.clone(),
             reports,
             revision: Arc::new(AtomicU64::new(0)),
             shared: Arc::default(),
             ready: Arc::default(),
+            resend,
         }
     }
 
@@ -114,10 +144,15 @@ impl PageHost {
             })
             .on_new_window(|_, _| NewWindowResponse::Deny)
             .on_document_title_changed(move |_, title| {
+                #[cfg(debug_assertions)]
+                if let Some(rest) = title.strip_prefix("LUNORX_URL|") {
+                    spike_probe(rest);
+                    return;
+                }
                 let Some((id, pos, dur, state)) = parse_title(&title) else {
                     return;
                 };
-                let mut s = shared.lock().unwrap_or_else(|e| e.into_inner());
+                let mut s = lock(&shared);
                 if id != s.expected {
                     return;
                 }
@@ -147,7 +182,7 @@ impl PageHost {
             .parse()
             .map_err(|_| failed())?;
         {
-            let mut s = self.shared.lock().unwrap_or_else(|e| e.into_inner());
+            let mut s = lock(&self.shared);
             *s = Shared {
                 expected: video_id.to_owned(),
                 loading: true,
@@ -163,7 +198,7 @@ impl PageHost {
         let waited = tokio::time::timeout(Duration::from_secs(25), async {
             loop {
                 let notified = self.ready.notified();
-                if self.shared.lock().unwrap_or_else(|e| e.into_inner()).ready {
+                if lock(&self.shared).ready {
                     return;
                 }
                 notified.await;
@@ -175,10 +210,8 @@ impl PageHost {
         }
         // Loaded: hold it paused, as the engine expects, then let reports through.
         let _ = window.eval("window.__lunorx&&window.__lunorx.pause()");
-        self.shared
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .loading = false;
+        lock(&self.shared).loading = false;
+        self.resend.store(true, Ordering::Relaxed);
         Ok(())
     }
 
@@ -190,9 +223,15 @@ impl PageHost {
     fn stop(&self) {
         if let Some(w) = self.app.get_webview_window(WINDOW) {
             let _ = w.eval("window.__lunorx&&window.__lunorx.pause()");
-            let _ = w.close();
+            // Destroyed at once, not asked to close: a later load reuses the label straight away.
+            let _ = w.destroy();
         }
     }
+}
+
+/// A poisoned lock still holds consistent data here (plain flags and numbers), so keep going with it.
+fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 fn failed() -> PlaybackErrorKind {
@@ -274,7 +313,7 @@ impl PlayerHost for RoutingHost {
     }
     fn prepare<'a>(&'a self, req: HostRequest) -> HostFuture<'a> {
         Box::pin(async move {
-            let on_page = *self.on_page.lock().unwrap_or_else(|e| e.into_inner());
+            let on_page = *lock(&self.on_page);
             match &req.command {
                 PlaybackCommand::Load(_) => {
                     // A new load always starts from the direct player; leave the page paused and closed.
@@ -288,20 +327,19 @@ impl PlayerHost for RoutingHost {
                     };
                     match self.native.prepare(req).await {
                         confirmed @ HostOutcome::Confirmed { .. } => {
-                            *self.on_page.lock().unwrap_or_else(|e| e.into_inner()) = false;
+                            *lock(&self.on_page) = false;
                             confirmed
                         }
                         HostOutcome::Rejected { .. } => {
                             let outcome = self.page.prepare(retry).await;
-                            *self.on_page.lock().unwrap_or_else(|e| e.into_inner()) =
-                                matches!(outcome, HostOutcome::Confirmed { .. });
+                            *lock(&self.on_page) = matches!(outcome, HostOutcome::Confirmed { .. });
                             outcome
                         }
                     }
                 }
                 PlaybackCommand::Stop => {
                     self.page.stop();
-                    *self.on_page.lock().unwrap_or_else(|e| e.into_inner()) = false;
+                    *lock(&self.on_page) = false;
                     self.native.prepare(req).await
                 }
                 _ if on_page => self.page.prepare(req).await,
@@ -309,6 +347,62 @@ impl PlayerHost for RoutingHost {
             }
         })
     }
+}
+
+/// Debug-only spike: does an audio address taken from the page open outside it? Prints host, parameter names and the
+/// HTTP status of a 1 KiB ranged read, never the address itself.
+#[cfg(debug_assertions)]
+fn spike_probe(rest: &str) {
+    use std::sync::atomic::AtomicBool;
+    static ONCE: AtomicBool = AtomicBool::new(false);
+    let Some((id, url)) = rest.split_once('|') else {
+        return;
+    };
+    let Ok(parsed) = tauri::Url::parse(url) else {
+        return;
+    };
+    if ONCE.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    let names: Vec<String> = parsed.query_pairs().map(|(k, _)| k.into_owned()).collect();
+    eprintln!(
+        "[page-url] {id} host={} params={}",
+        parsed.host_str().unwrap_or("-"),
+        names.join(",")
+    );
+    let url = url.to_owned();
+    tauri::async_runtime::spawn(async move {
+        for (label, agent) in [
+            ("no-agent", None),
+            (
+                "safari",
+                Some(
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
+                ),
+            ),
+        ] {
+            let mut b = reqwest::Client::builder();
+            if let Some(a) = agent {
+                b = b.user_agent(a);
+            }
+            let Ok(client) = b.build() else { continue };
+            let r = client
+                .get(&url)
+                .header("Range", "bytes=0-1023")
+                .send()
+                .await;
+            match r {
+                Ok(r) => eprintln!(
+                    "[page-url] {label}: HTTP {} bytes-header={:?}",
+                    r.status().as_u16(),
+                    r.headers()
+                        .get("content-length")
+                        .map(|v| v.to_str().unwrap_or("?"))
+                ),
+                Err(e) => eprintln!("[page-url] {label}: error {}", e.without_url()),
+            }
+        }
+    });
 }
 
 #[cfg(test)]
