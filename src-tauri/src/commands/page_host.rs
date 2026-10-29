@@ -1,5 +1,5 @@
 //! Plays YouTube through its own real page in an app-owned window, for when the direct stream is refused. The page
-//! is the provider's player, ads included, so the window stays visible. The window has no Tauri IPC: it reports state
+//! is the provider's own player, ads included; the window is not shown. The window has no Tauri IPC: it reports state
 //! through its title and takes play/pause/seek/volume as plain script calls. Only the player's own reports settle
 //! playback state.
 use crate::core::{
@@ -94,6 +94,10 @@ impl PageHost {
         WebviewWindowBuilder::new(&self.app, WINDOW, WebviewUrl::External(first_url.clone()))
             .title("LunoRX: YouTube player")
             .inner_size(480.0, 300.0)
+            // Kept out of sight at the user's request: the page still runs and plays its own player, ads included.
+            .visible(false)
+            // A hidden WebView is otherwise suspended by the OS after a few minutes, which would stop the music.
+            .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
             .initialization_script(SCRIPT)
             .on_navigation(|u| {
                 u.scheme() == "https"
