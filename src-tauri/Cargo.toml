@@ -1,6 +1,6 @@
 [package]
 name = "lunorx"
-version = "1.0.1-rc.5"
+version = "1.0.1"
 description = "A Tauri App"
 authors = ["EvarinthoSec"]
 license = "MIT"

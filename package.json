@@ -2,7 +2,7 @@
   "name": "lunorx",
   "private": true,
   "license": "MIT",
-  "version": "1.0.1-rc.5",
+  "version": "1.0.1",
   "type": "module",
   "scripts": {
     "dev": "next dev --port 1420",
