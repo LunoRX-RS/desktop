@@ -52,7 +52,6 @@
   };
   const build = (m) => {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const src = ctx.createMediaElementSource(m);
     const pre = ctx.createGain();
     const eq = BANDS.map((f) => { const b = ctx.createBiquadFilter(); b.type = "peaking"; b.frequency.value = f; b.Q.value = 1.4; return b; });
     const bass = ctx.createBiquadFilter(); bass.type = "lowshelf"; bass.frequency.value = 100;
@@ -63,12 +62,11 @@
     lfo.type = "sine"; lfo.connect(depth); depth.connect(pan.pan); depth.gain.value = 0; lfo.start();
     const spatial = echo(ctx), room = echo(ctx);
     const comp = ctx.createDynamicsCompressor();
-    let node = src;
-    const chain = [pre, ...eq, bass, treble];
-    chain.forEach((n) => { node.connect(n); node = n; });
+    let node = pre;
+    [...eq, bass, treble].forEach((n) => { node.connect(n); node = n; });
     node.connect(width.input); width.out.connect(feed.input); feed.out.connect(pan);
     pan.connect(spatial.input); spatial.out.connect(room.input); room.out.connect(comp); comp.connect(ctx.destination);
-    g = { ctx, pre, eq, bass, treble, width, feed, depth, lfo, spatial, room, comp };
+    g = { ctx, pre, eq, bass, treble, width, feed, depth, lfo, spatial, room, comp, attached: false };
   };
   const neutral = (c) => !c.enabled || (c.preamp === 0 && c.bands.every((b) => b === 0) && c.bass === 0 && c.treble === 0 &&
     c.stereoWidth === 100 && c.crossfeed === 0 && c.reverb === "off" && c.compressor === "off" && c.spatial === "off");
@@ -82,7 +80,13 @@
     if (!g) { if (neutral(cfg)) return; try { build(m); } catch (_) { return; } }
     const live = !neutral(cfg);
     const db = (x) => Math.pow(10, x / 20);
-    g.ctx.resume().catch(() => {});
+    // Take over the element's sound only once the graph exists and the context is really running; capturing it into a
+    // suspended context would leave the page silent.
+    g.ctx.resume().then(() => {
+      if (g.ctx.state === "running" && !g.attached) {
+        try { g.ctx.createMediaElementSource(m).connect(g.pre); g.attached = true; } catch (_) {}
+      }
+    }).catch(() => {});
     g.pre.gain.value = live ? db(cfg.preamp) : 1;
     g.eq.forEach((b, i) => { b.gain.value = live ? cfg.bands[i] : 0; });
     g.bass.gain.value = live ? cfg.bass : 0;
@@ -101,14 +105,6 @@
     g.comp.threshold.value = lv ? lv[0] : 0; g.comp.ratio.value = lv ? lv[1] : 1;
     g.comp.attack.value = lv ? lv[2] / 1000 : 0.003; g.comp.release.value = lv ? lv[3] / 1000 : 0.25;
   };
-  // Debug spike: the audio stream address the page itself is fetching, to learn whether it can be opened elsewhere.
-  let lastUrl = "";
-  setInterval(() => {
-    try {
-      const hit = performance.getEntriesByType("resource").filter((e) => e.name.includes("videoplayback") && /mime=audio/.test(e.name)).pop();
-      if (hit && hit.name !== lastUrl && id()) { lastUrl = hit.name; document.title = "LUNORX_URL|" + id() + "|" + hit.name; }
-    } catch (_) {}
-  }, 1000);
   window.__lunorx = {
     effects,
     play: () => { const m = media(); if (m) m.play().catch(() => {}); },

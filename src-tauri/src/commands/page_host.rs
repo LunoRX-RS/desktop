@@ -144,11 +144,6 @@ impl PageHost {
             })
             .on_new_window(|_, _| NewWindowResponse::Deny)
             .on_document_title_changed(move |_, title| {
-                #[cfg(debug_assertions)]
-                if let Some(rest) = title.strip_prefix("LUNORX_URL|") {
-                    spike_probe(rest);
-                    return;
-                }
                 let Some((id, pos, dur, state)) = parse_title(&title) else {
                     return;
                 };
@@ -347,62 +342,6 @@ impl PlayerHost for RoutingHost {
             }
         })
     }
-}
-
-/// Debug-only spike: does an audio address taken from the page open outside it? Prints host, parameter names and the
-/// HTTP status of a 1 KiB ranged read, never the address itself.
-#[cfg(debug_assertions)]
-fn spike_probe(rest: &str) {
-    use std::sync::atomic::AtomicBool;
-    static ONCE: AtomicBool = AtomicBool::new(false);
-    let Some((id, url)) = rest.split_once('|') else {
-        return;
-    };
-    let Ok(parsed) = tauri::Url::parse(url) else {
-        return;
-    };
-    if ONCE.swap(true, Ordering::Relaxed) {
-        return;
-    }
-    let names: Vec<String> = parsed.query_pairs().map(|(k, _)| k.into_owned()).collect();
-    eprintln!(
-        "[page-url] {id} host={} params={}",
-        parsed.host_str().unwrap_or("-"),
-        names.join(",")
-    );
-    let url = url.to_owned();
-    tauri::async_runtime::spawn(async move {
-        for (label, agent) in [
-            ("no-agent", None),
-            (
-                "safari",
-                Some(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
-                ),
-            ),
-        ] {
-            let mut b = reqwest::Client::builder();
-            if let Some(a) = agent {
-                b = b.user_agent(a);
-            }
-            let Ok(client) = b.build() else { continue };
-            let r = client
-                .get(&url)
-                .header("Range", "bytes=0-1023")
-                .send()
-                .await;
-            match r {
-                Ok(r) => eprintln!(
-                    "[page-url] {label}: HTTP {} bytes-header={:?}",
-                    r.status().as_u16(),
-                    r.headers()
-                        .get("content-length")
-                        .map(|v| v.to_str().unwrap_or("?"))
-                ),
-                Err(e) => eprintln!("[page-url] {label}: error {}", e.without_url()),
-            }
-        }
-    });
 }
 
 #[cfg(test)]
