@@ -79,6 +79,7 @@ fn main() {
             "youtube_import",
             "youtube_like_push_get",
             "youtube_like_push_set",
+            "youtube_po_token_set",
             "youtube_disconnect",
             "sync_sign_in",
             "sync_register",

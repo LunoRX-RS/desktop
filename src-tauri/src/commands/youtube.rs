@@ -456,6 +456,23 @@ pub fn youtube_like_push_set(
     ))
 }
 
+/// The app's own signed-in view hands over the proof-of-origin token its real session produced. Main window only;
+/// the value is checked, kept in memory for one video for a few minutes and never logged.
+#[tauri::command]
+pub fn youtube_po_token_set(
+    window: WebviewWindow,
+    state: State<'_, YouTubeState>,
+    video_id: String,
+    token: String,
+    ttl_seconds: u64,
+) -> Result<(), YouTubeError> {
+    main_only(&window)?;
+    let yt = state.yt.as_ref().ok_or(YouTubeError::Unavailable)?;
+    yt.po_tokens()
+        .set(&video_id, &token, Duration::from_secs(ttl_seconds))
+        .map_err(|_| YouTubeError::SessionRejected)
+}
+
 #[tauri::command]
 pub async fn youtube_disconnect(
     app: AppHandle,
@@ -468,6 +485,7 @@ pub async fn youtube_disconnect(
         let _ = login.close();
     }
     if let Some(yt) = &state.yt {
+        yt.po_tokens().clear();
         yt.clear_session();
     }
     if state.store.clear().is_err() {

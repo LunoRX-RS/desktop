@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-youtube-po-token-set"
+description = "Enables the youtube_po_token_set command without any pre-configured scope."
+commands.allow = ["youtube_po_token_set"]
+
+[[permission]]
+identifier = "deny-youtube-po-token-set"
+description = "Denies the youtube_po_token_set command without any pre-configured scope."
+commands.deny = ["youtube_po_token_set"]

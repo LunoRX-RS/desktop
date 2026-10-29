@@ -80,7 +80,7 @@ async fn player(yt: &Yt, id: &str, quality_wish: AudioQuality) -> Result<Resolve
     let mut script_refreshed = false;
     loop {
         let script = yt.decipher().await;
-        let mut handle = Player::new(yt.client());
+        let mut handle = Player::new(yt.client()).with_po_token_source(yt.po_tokens().clone());
         if let Some(script) = &script {
             handle = handle.with_decipher(script.clone());
         }

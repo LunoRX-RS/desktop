@@ -131,11 +131,15 @@ impl PlayerState {
                     .map_err(|_| PlaybackErrorKind::UnsupportedCapability)?
                     .cache
                     .clone();
-                NativeHost::with_yt(yt, reports).map(|host| host.with_cache(cache))
+                let page = crate::commands::page_host::PageHost::new(app, reports.clone());
+                NativeHost::with_yt(yt, reports)
+                    .map(|host| host.with_cache(cache))
+                    .map(|host| (host, page))
             });
         let state = match native {
-            Ok(host) => {
+            Ok((host, page)) => {
                 let audio = host.audio.clone();
+                let host = crate::commands::page_host::RoutingHost::new(host, page);
                 let mut registry = ProviderRegistry::new();
                 let caps = ProviderCapabilities {
                     playback: CapabilityStatus::Supported,

@@ -57,8 +57,8 @@ fn every_provider_credential_handler_is_in_app_manifest_and_allowed() {
     let handlers = provider_handlers(&lib);
     assert_eq!(
         handlers.len(),
-        10,
-        "expected 10 provider credential handlers in generate_handler!, found {handlers:?}"
+        11,
+        "expected 11 provider credential handlers in generate_handler!, found {handlers:?}"
     );
 
     let mut missing = Vec::new();
