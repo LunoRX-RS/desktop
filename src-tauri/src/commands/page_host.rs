@@ -96,6 +96,8 @@ impl PageHost {
             .inner_size(480.0, 300.0)
             // Kept out of sight at the user's request: the page still runs and plays its own player, ads included.
             .visible(false)
+            // A hidden WebView is otherwise suspended by the OS after a few minutes, which would stop the music.
+            .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
             .initialization_script(SCRIPT)
             .on_navigation(|u| {
                 u.scheme() == "https"
