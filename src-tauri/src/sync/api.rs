@@ -115,6 +115,41 @@ pub struct ActivityItem<'a> {
     pub count: u32,
 }
 
+/// One followed artist, the shape of `GET /api/v1/followed-artists` (and of the app's own list). `artist_key` is the
+/// provider's artist id, or the name when there is none.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FollowedArtist {
+    pub provider: String,
+    pub artist_key: String,
+    pub artist_id: Option<String>,
+    pub name: String,
+    pub artwork_url: Option<String>,
+    #[serde(default)]
+    pub followed_at_ms: i64,
+}
+
+#[derive(Deserialize)]
+struct FollowedList {
+    artists: Vec<FollowedArtist>,
+}
+
+/// Percent-encodes everything but unreserved characters, so an artist name is one safe path segment.
+fn path_segment(s: &str) -> Result<String, SyncError> {
+    if s.is_empty() || s.chars().count() > 200 || s.chars().any(char::is_control) {
+        return Err(SyncError::Internal("invalid key in request path".into()));
+    }
+    Ok(s.bytes()
+        .fold(String::with_capacity(s.len()), |mut out, b| {
+            if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
+                out.push(b as char);
+            } else {
+                out.push_str(&format!("%{b:02X}"));
+            }
+            out
+        }))
+}
+
 /// One track's play count, the shape of `PUT /api/v1/stats/{deviceId}` and `GET /api/v1/stats`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -609,6 +644,66 @@ impl ApiClient {
             .http
             .delete(self.url("/api/v1/stats"))
             .bearer_auth(token);
+        self.send(req).await.map(|_| ())
+    }
+
+    pub async fn list_followed_artists(
+        &self,
+        token: &str,
+    ) -> Result<Vec<FollowedArtist>, SyncError> {
+        let req = self
+            .http
+            .get(self.url("/api/v1/followed-artists"))
+            .bearer_auth(token);
+        Ok(decode::<FollowedList>(&self.send(req).await?)?.artists)
+    }
+
+    pub async fn put_followed_artist(
+        &self,
+        token: &str,
+        a: &FollowedArtist,
+    ) -> Result<(), SyncError> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Body<'a> {
+            artist_id: Option<&'a str>,
+            name: &'a str,
+            artwork_url: Option<&'a str>,
+        }
+        let url = format!(
+            "/api/v1/followed-artists/{}/{}",
+            path_id(&a.provider)?,
+            path_segment(&a.artist_key)?
+        );
+        // Only an https artwork address is accepted by the server; anything else is simply left out.
+        let artwork = a
+            .artwork_url
+            .as_deref()
+            .filter(|u| u.starts_with("https://") && u.len() <= 2048);
+        let req = self
+            .http
+            .put(self.url(&url))
+            .bearer_auth(token)
+            .json(&Body {
+                artist_id: a.artist_id.as_deref(),
+                name: &a.name,
+                artwork_url: artwork,
+            });
+        self.send(req).await.map(|_| ())
+    }
+
+    pub async fn delete_followed_artist(
+        &self,
+        token: &str,
+        provider: &str,
+        key: &str,
+    ) -> Result<(), SyncError> {
+        let url = format!(
+            "/api/v1/followed-artists/{}/{}",
+            path_id(provider)?,
+            path_segment(key)?
+        );
+        let req = self.http.delete(self.url(&url)).bearer_auth(token);
         self.send(req).await.map(|_| ())
     }
 

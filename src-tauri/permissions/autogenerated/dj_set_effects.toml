@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dj-set-effects"
+description = "Enables the dj_set_effects command without any pre-configured scope."
+commands.allow = ["dj_set_effects"]
+
+[[permission]]
+identifier = "deny-dj-set-effects"
+description = "Denies the dj_set_effects command without any pre-configured scope."
+commands.deny = ["dj_set_effects"]

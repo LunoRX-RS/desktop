@@ -65,19 +65,34 @@
     let node = pre;
     [...eq, bass, treble].forEach((n) => { node.connect(n); node = n; });
     node.connect(width.input); width.out.connect(feed.input); feed.out.connect(pan);
-    pan.connect(spatial.input); spatial.out.connect(room.input); room.out.connect(comp); comp.connect(ctx.destination);
-    g = { ctx, pre, eq, bass, treble, width, feed, depth, lfo, spatial, room, comp, attached: false };
+    pan.connect(spatial.input); spatial.out.connect(room.input); room.out.connect(comp);
+    // DJ stage after the shaping: a sweep filter, a tempo echo and the channel level.
+    const filter = ctx.createBiquadFilter(); filter.type = "allpass";
+    const post = ctx.createGain(), trim = ctx.createGain();
+    const delay = ctx.createDelay(4), feedback = ctx.createGain(), wet = ctx.createGain();
+    feedback.gain.value = 0; wet.gain.value = 0;
+    comp.connect(filter); filter.connect(post);
+    post.connect(trim);
+    post.connect(delay); delay.connect(feedback); feedback.connect(delay); delay.connect(wet); wet.connect(trim);
+    trim.connect(ctx.destination);
+    // Listens to the deck before its fader, for the waveform.
+    const analyser = ctx.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0.2;
+    post.connect(analyser);
+    g = { ctx, pre, eq, bass, treble, width, feed, depth, lfo, spatial, room, comp, filter, trim, delay, feedback, wet, analyser, attached: false };
   };
   const neutral = (c) => !c.enabled || (c.preamp === 0 && c.bands.every((b) => b === 0) && c.bass === 0 && c.treble === 0 &&
     c.stereoWidth === 100 && c.crossfeed === 0 && c.reverb === "off" && c.compressor === "off" && c.spatial === "off");
+  let baseRate = 1, bend = 0, force = false, lastCfg = null;
   const effects = (cfg) => {
+    lastCfg = cfg;
     const m = media();
     if (!m) return;
     const on = cfg.enabled;
-    m.playbackRate = on ? cfg.speed / 100 : 1;
+    baseRate = on ? cfg.speed / 100 : 1;
+    m.playbackRate = baseRate * (1 + bend / 100);
     const keep = !on || cfg.keepPitch;
     m.preservesPitch = keep; m.webkitPreservesPitch = keep; m.mozPreservesPitch = keep;
-    if (!g) { if (neutral(cfg)) return; try { build(m); } catch (_) { return; } }
+    if (!g) { if (neutral(cfg) && !force) return; try { build(m); } catch (_) { return; } }
     const live = !neutral(cfg);
     const db = (x) => Math.pow(10, x / 20);
     // Take over the element's sound only once the graph exists and the context is really running; capturing it into a
@@ -105,8 +120,80 @@
     g.comp.threshold.value = lv ? lv[0] : 0; g.comp.ratio.value = lv ? lv[1] : 1;
     g.comp.attack.value = lv ? lv[2] / 1000 : 0.003; g.comp.release.value = lv ? lv[3] / 1000 : 0.25;
   };
+  // A loop the page keeps itself, so the jump back is tight rather than a round trip to the app.
+  let loop = null;
+  setInterval(() => {
+    const m = media();
+    if (loop && m && !m.paused && m.currentTime * 1000 >= loop[1]) m.currentTime = loop[0] / 1000;
+  }, 25);
+  // Live DJ controls. They need the audio graph, so the first one builds it even when no shaping is set.
+  const ready = () => {
+    if (g) return true;
+    force = true;
+    effects(lastCfg || { enabled: true, preamp: 0, bands: [0,0,0,0,0,0,0,0,0,0], bass: 0, treble: 0, stereoWidth: 100, crossfeed: 0, reverb: "off", compressor: "off", speed: 100, keepPitch: true, spatial: "off" });
+    return !!g;
+  };
+  let level = { trim: 100, fader: 100 };
+  const control = (c) => {
+    const m = media();
+    if (!m) return;
+    if (c.kind === "bend") { bend = c.value; m.playbackRate = baseRate * (1 + bend / 100); return; }
+    if (c.kind === "brake") {
+      const from = m.playbackRate, start = performance.now();
+      const step = () => {
+        const k = Math.min(1, (performance.now() - start) / 1200);
+        m.playbackRate = Math.max(0.07, from * (1 - k));
+        if (k < 1) requestAnimationFrame(step); else { m.pause(); m.playbackRate = baseRate * (1 + bend / 100); }
+      };
+      requestAnimationFrame(step);
+      return;
+    }
+    if (!ready()) return;
+    if (c.kind === "filter") {
+      const v = c.value;
+      if (v === 0) { g.filter.type = "allpass"; return; }
+      // Left of centre closes a low-pass from 20 kHz down to 200 Hz; right opens a high-pass from 20 Hz up to 8 kHz.
+      g.filter.type = v < 0 ? "lowpass" : "highpass";
+      const k = Math.abs(v) / 100;
+      g.filter.frequency.value = v < 0 ? 20000 * Math.pow(200 / 20000, k) : 20 * Math.pow(8000 / 20, k);
+      g.filter.Q.value = 0.9;
+      return;
+    }
+    if (c.kind === "trim" || c.kind === "fader") {
+      level = { ...level, [c.kind]: c.value };
+      g.trim.gain.value = (level.trim / 100) * (level.fader / 100);
+      return;
+    }
+    if (c.kind === "echo") {
+      const on = c.delayMs > 0;
+      if (on) g.delay.delayTime.value = Math.min(4, c.delayMs / 1000);
+      g.feedback.gain.value = on ? c.feedback / 100 : 0;
+      g.wet.gain.value = on ? 0.6 : 0;
+    }
+  };
+  // Waveform: every 50 ms, the energy of the lows, mids and highs (0 to 255) at the playhead, sent in batches of four.
+  let wave = [], waveAt = 0;
+  const bins = new Uint8Array(512);
+  setInterval(() => {
+    const m = media();
+    if (!m || m.paused || !id() || (first && id() !== first)) return;
+    if (!g) ready();
+    if (!g || !g.attached) return;
+    g.analyser.getByteFrequencyData(bins);
+    const hz = g.ctx.sampleRate / 1024;
+    const band = (lo, hi) => {
+      let sum = 0, n = 0;
+      for (let i = Math.max(1, Math.floor(lo / hz)); i < Math.min(512, Math.ceil(hi / hz)); i++) { sum += bins[i]; n++; }
+      return n ? Math.round(sum / n) : 0;
+    };
+    if (!wave.length) waveAt = Math.round(m.currentTime * 1000);
+    wave.push(band(20, 250) + "." + band(250, 4000) + "." + band(4000, 16000));
+    if (wave.length >= 4) { document.title = "LUNORX_WF|" + id() + "|" + waveAt + "|" + wave.join(","); wave = []; }
+  }, 50);
   window.__lunorx = {
     effects,
+    control,
+    loop: (a, b) => { loop = Number.isFinite(a) && Number.isFinite(b) && b > a ? [a, b] : null; },
     play: () => { const m = media(); if (m) m.play().catch(() => {}); },
     pause: () => { const m = media(); if (m) m.pause(); },
     seek: (ms) => { const m = media(); if (m) m.currentTime = ms / 1000; },

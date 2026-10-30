@@ -652,6 +652,54 @@ pub(crate) async fn stats_sync(
     api.get_stats(&token).await.map_err(|e| category(&e))
 }
 
+/// Brings the followed artists in line with the server: first the unfollows made here, then every artist followed
+/// here and missing there. Returns the server's list, which is then the truth for this device.
+pub(crate) async fn artists_sync(
+    h: &mut Host<'_>,
+    local: &[super::api::FollowedArtist],
+    removed: &[(String, String)],
+) -> Result<Vec<super::api::FollowedArtist>, ErrorCategory> {
+    let (api, token) = h.step(|e| Ok((e.api.clone(), e.token()?))).await?;
+    for (provider, key) in removed {
+        api.delete_followed_artist(&token, provider, key)
+            .await
+            .map_err(|e| category(&e))?;
+    }
+    let remote = api
+        .list_followed_artists(&token)
+        .await
+        .map_err(|e| category(&e))?;
+    for a in local {
+        if !remote
+            .iter()
+            .any(|r| r.provider == a.provider && r.artist_key == a.artist_key)
+        {
+            api.put_followed_artist(&token, a)
+                .await
+                .map_err(|e| category(&e))?;
+        }
+    }
+    api.list_followed_artists(&token)
+        .await
+        .map_err(|e| category(&e))
+}
+
+/// Follows (or unfollows) one artist on the server at once.
+pub(crate) async fn artist_follow(
+    h: &mut Host<'_>,
+    artist: &super::api::FollowedArtist,
+    follow: bool,
+) -> Result<(), ErrorCategory> {
+    let (api, token) = h.step(|e| Ok((e.api.clone(), e.token()?))).await?;
+    let r = if follow {
+        api.put_followed_artist(&token, artist).await
+    } else {
+        api.delete_followed_artist(&token, &artist.provider, &artist.artist_key)
+            .await
+    };
+    r.map_err(|e| category(&e))
+}
+
 /// Deletes every stats row the signed-in user has on the server.
 pub(crate) async fn stats_clear_remote(h: &mut Host<'_>) -> Result<(), ErrorCategory> {
     let (api, token) = h.step(|e| Ok((e.api.clone(), e.token()?))).await?;

@@ -1,4 +1,6 @@
+pub mod artists;
 pub mod clock;
+pub mod dj;
 pub mod dto;
 pub mod page_host;
 pub mod player;

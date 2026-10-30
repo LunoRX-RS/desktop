@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dj-stop"
+description = "Enables the dj_stop command without any pre-configured scope."
+commands.allow = ["dj_stop"]
+
+[[permission]]
+identifier = "deny-dj-stop"
+description = "Denies the dj_stop command without any pre-configured scope."
+commands.deny = ["dj_stop"]

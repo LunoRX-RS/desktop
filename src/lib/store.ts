@@ -19,6 +19,7 @@ export type View =
   | "settings"
   | "sync"
   | "replay"
+  | "dj"
   | "shared"
   | "artist"
   | "album";

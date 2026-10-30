@@ -16,6 +16,7 @@ const load = {
   loginGate: () => import("../../features/accounts/LoginGate"),
   settings: () => import("../../features/settings/SettingsScreen"),
   replay: () => import("../../features/replay/ReplayScreen"),
+  dj: () => import("../../features/dj/DjScreen"),
   shared: () => import("../../features/shared/SharedScreen"),
   sync: () => import("../../features/sync/SyncPanel"),
   nowPlaying: () => import("./NowPlaying"),
@@ -37,6 +38,7 @@ export const LoginPage = dynamic(load.login, { ssr: false });
 export const LoginGate = dynamic(() => load.loginGate().then((m) => m.LoginGate), { ssr: false });
 export const SettingsScreen = dynamic(load.settings, { ssr: false });
 export const ReplayScreen = dynamic(load.replay, { ssr: false });
+export const DjScreen = dynamic(load.dj, { ssr: false });
 export const SharedScreen = dynamic(load.shared, { ssr: false });
 export const SyncPanel = dynamic(load.sync, { ssr: false });
 export const NowPlaying = dynamic(load.nowPlaying, { ssr: false });

@@ -26,10 +26,10 @@ use tokio::sync::{Notify, mpsc::UnboundedSender};
 
 const WINDOW: &str = "youtube-player";
 const PREFIX: &str = "LUNORX_ST|";
-const SCRIPT: &str = include_str!("page_player.js");
+pub(crate) const SCRIPT: &str = include_str!("page_player.js");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PageState {
+pub(crate) enum PageState {
     Playing,
     Paused,
     Waiting,
@@ -38,7 +38,7 @@ enum PageState {
 }
 
 /// `LUNORX_ST|<video id>|<position ms>|<duration ms>|<state>` from the page title.
-fn parse_title(title: &str) -> Option<(&str, u64, u64, PageState)> {
+pub(crate) fn parse_title(title: &str) -> Option<(&str, u64, u64, PageState)> {
     let mut p = title.strip_prefix(PREFIX)?.split('|');
     let id = p.next()?;
     let pos = p.next()?.parse().ok()?;
@@ -129,19 +129,7 @@ impl PageHost {
             // A hidden WebView is otherwise suspended by the OS after a few minutes, which would stop the music.
             .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
             .initialization_script(SCRIPT)
-            .on_navigation(|u| {
-                u.scheme() == "https"
-                    && matches!(
-                        u.host_str(),
-                        Some(
-                            "www.youtube.com"
-                                | "youtube.com"
-                                | "consent.youtube.com"
-                                | "accounts.google.com"
-                                | "www.google.com"
-                        )
-                    )
-            })
+            .on_navigation(allowed_page_url)
             .on_new_window(|_, _| NewWindowResponse::Deny)
             .on_document_title_changed(move |_, title| {
                 let Some((id, pos, dur, state)) = parse_title(&title) else {
@@ -222,6 +210,21 @@ impl PageHost {
             let _ = w.destroy();
         }
     }
+}
+
+/// Where a player page may go: YouTube itself and the sign-in and consent hops it can send you through.
+pub(crate) fn allowed_page_url(u: &tauri::Url) -> bool {
+    u.scheme() == "https"
+        && matches!(
+            u.host_str(),
+            Some(
+                "www.youtube.com"
+                    | "youtube.com"
+                    | "consent.youtube.com"
+                    | "accounts.google.com"
+                    | "www.google.com"
+            )
+        )
 }
 
 /// A poisoned lock still holds consistent data here (plain flags and numbers), so keep going with it.

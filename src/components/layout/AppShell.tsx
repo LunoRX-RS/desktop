@@ -1,4 +1,6 @@
 "use client";
+import { syncAll } from "../../lib/syncAll";
+import { useSettingsStore } from "../../lib/settingsStore";
 
 import { loadCustomFonts } from "../../lib/textStyle";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -24,7 +26,7 @@ import { refreshLikes } from "../../lib/library";
 import HomeScreen from "../../features/home/HomeScreen";
 import {
   AccountsScreen, AlbumScreen, ArtistScreen, CommandPalette, ConnectionsScreen, ExploreScreen, LibraryScreen, LoginGate, LoginPage,
-  NowPlaying, PlayerScreen, PlaylistEditor, QueuePanel, ReplayScreen, SavedLibraryScreen, SearchScreen, SettingsScreen, SharedScreen,
+  NowPlaying, PlayerScreen, PlaylistEditor, QueuePanel, DjScreen, ReplayScreen, SavedLibraryScreen, SearchScreen, SettingsScreen, SharedScreen,
   SyncPanel, preloadScreens,
 } from "./screens";
 import { SHARE_OPEN_EVENT, sharedLinkTake } from "../../services/tauri/share";
@@ -99,6 +101,9 @@ function ViewFrame({ mounted, children }: { mounted: boolean; children: ReactNod
 }
 
 export default function AppShell() {
+  // Everything set up syncs once when the app opens: account, YouTube, playlist uploads, stats.
+  useEffect(() => { const t = window.setTimeout(() => void syncAll(), 4000); return () => window.clearTimeout(t); }, []);
+  const djMode = useSettingsStore((st) => st.djMode);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { void loadCustomFonts(); }, []);
   // CSS hook for per-OS rendering differences (globals.css: html[data-platform="linux"]).
@@ -210,6 +215,7 @@ export default function AppShell() {
                     {view === "login" && <LoginPage />}
                     {view === "settings" && <SettingsScreen />}
                     {view === "replay" && <ReplayScreen />}
+                    {view === "dj" && djMode && <DjScreen />}
                     {view === "shared" && <SharedScreen />}
                     {view === "sync" && <div className="lx-scope"><SyncPanel /></div>}
                   </ViewFrame>
