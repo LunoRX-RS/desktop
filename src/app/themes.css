@@ -68,6 +68,11 @@ html[data-theme="light"] .glass { background-color: rgba(250, 250, 252, 0.55); }
 html[data-theme="light"] .glass-bar { background-color: rgba(248, 248, 250, 0.78); }
 html[data-theme="light"] .glass-pane { background-color: rgba(255, 255, 255, 0.55); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06); }
 html[data-theme="light"] .lx-app-ambient-scrim { background-color: rgba(255, 255, 255, var(--lx-bg-dim, 0.6)); }
+/* Popovers keep dark tint rules from globals.css; on a light canvas they take a light surface with dark text. */
+html[data-theme="light"] .glass-solid,
+html[data-theme="light"] .lx-player-dock .glass-solid,
+html[data-theme="light"] .glass-card .glass-solid,
+html[data-theme="light"] .glass-bar .glass-solid { background-color: rgba(255, 255, 255, 0.94); color: #1d1d1f; }
 
 /* Backdrop behind the glass. The dim slider drives the scrim in every theme. */
 .lx-app-ambient-scrim { background-color: rgba(0, 0, 0, var(--lx-bg-dim, 0.6)); }

@@ -66,10 +66,23 @@ if [[ -n "$APP" ]]; then
   mkdir -p "$APP/Contents/PlugIns"
   rm -rf "$APP/Contents/PlugIns/LunoWidget.appex"; cp -R $W "$APP/Contents/PlugIns/"
   # The app needs the same group; keep its other entitlements (if any) and re-sign the whole bundle, inside out.
+  # Keep the app's own entitlements and add this group to its list; a bare app gets a new file with just the group.
   codesign -d --entitlements :- "$APP" 2>/dev/null > $OUT/app.entitlements || true
-  if ! grep -q application-groups $OUT/app.entitlements 2>/dev/null; then
-    entitlements '' > $OUT/app.entitlements
-  fi
+  /usr/bin/python3 - "$OUT/app.entitlements" "$GROUP" <<'PY'
+import plistlib, sys
+path, group = sys.argv[1], sys.argv[2]
+try:
+    with open(path, "rb") as f:
+        data = plistlib.load(f)
+except Exception:
+    data = {}
+groups = list(data.get("com.apple.security.application-groups", []))
+if group not in groups:
+    groups.append(group)
+data["com.apple.security.application-groups"] = groups
+with open(path, "wb") as f:
+    plistlib.dump(data, f)
+PY
   codesign --force --sign "$SIGN_ID" --entitlements $OUT/app.entitlements "$APP"
   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP"
   pluginkit -a "$APP/Contents/PlugIns/LunoWidget.appex"
