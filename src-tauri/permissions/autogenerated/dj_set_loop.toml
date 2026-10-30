@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dj-set-loop"
+description = "Enables the dj_set_loop command without any pre-configured scope."
+commands.allow = ["dj_set_loop"]
+
+[[permission]]
+identifier = "deny-dj-set-loop"
+description = "Denies the dj_set_loop command without any pre-configured scope."
+commands.deny = ["dj_set_loop"]

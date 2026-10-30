@@ -1,4 +1,6 @@
 "use client";
+import { syncAll } from "../../lib/syncAll";
+import { useSettingsStore } from "../../lib/settingsStore";
 
 import { loadCustomFonts } from "../../lib/textStyle";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -24,13 +26,14 @@ import { refreshLikes } from "../../lib/library";
 import HomeScreen from "../../features/home/HomeScreen";
 import {
   AccountsScreen, AlbumScreen, ArtistScreen, CommandPalette, ConnectionsScreen, ExploreScreen, LibraryScreen, LoginGate, LoginPage,
-  NowPlaying, PlayerScreen, PlaylistEditor, QueuePanel, ReplayScreen, SavedLibraryScreen, SearchScreen, SettingsScreen, SharedScreen,
+  NowPlaying, PlayerScreen, PlaylistEditor, QueuePanel, DjScreen, ReplayScreen, SavedLibraryScreen, SearchScreen, SettingsScreen, SharedScreen,
   SyncPanel, preloadScreens,
 } from "./screens";
 import { SHARE_OPEN_EVENT, sharedLinkTake } from "../../services/tauri/share";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import PlayerBar from "./PlayerBar";
+import { AmbientBackdrop } from "./AmbientBackdrop";
 import { PlaybackEvents } from "./NativePlayer";
 import { usePlayback, togglePlayback } from "../../lib/playback";
 import { DUR, tween } from "../../lib/motion";
@@ -89,7 +92,7 @@ function ViewFrame({ mounted, children }: { mounted: boolean; children: ReactNod
   if (!mounted) return <div>{children}</div>;
   return (
     <motion.div
-      initial={{ opacity: 0, y: reduce ? 0 : 8 }}
+      initial={{ opacity: 0, y: reduce ? 0 : 14 }}
       animate={{ opacity: 1, y: 0, transition: tween(DUR.base) }}
       exit={{ opacity: 0, transition: tween(DUR.exit) }}
     >
@@ -99,6 +102,9 @@ function ViewFrame({ mounted, children }: { mounted: boolean; children: ReactNod
 }
 
 export default function AppShell() {
+  // Everything set up syncs once when the app opens: account, YouTube, playlist uploads, stats.
+  useEffect(() => { const t = window.setTimeout(() => void syncAll(), 4000); return () => window.clearTimeout(t); }, []);
+  const djMode = useSettingsStore((st) => st.djMode);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { void loadCustomFonts(); }, []);
   // CSS hook for per-OS rendering differences (globals.css: html[data-platform="linux"]).
@@ -173,6 +179,7 @@ export default function AppShell() {
 
   return (
     <MotionConfig reducedMotion="user">
+      <AmbientBackdrop />
       <PlaybackEvents />
       <UpdateBanner />
       <ErrorReportBanner />
@@ -184,14 +191,14 @@ export default function AppShell() {
       >
         Skip to content
       </a>
-      <div className="flex h-dvh flex-col bg-night-canvas">
+      <div className="glass relative flex h-dvh flex-col">
         <TopBar />
-        <div className="glass flex min-h-0 flex-1">
+        <div className="flex min-h-0 flex-1">
           <Sidebar />
-          <div className="mr-3 mb-3 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] bg-night-canvas">
+          <div className="glass-pane mr-3 mb-3 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[12px]">
             {libraryError && <div role="alert" className="mx-8 mt-2 mb-3 flex shrink-0 items-center justify-between gap-4 rounded-lg bg-frost-200 px-4 py-2 text-[13px] text-secondary-text"><p>{libraryError}</p><Button className="shrink-0" onClick={() => void refreshLikes()}>Retry likes</Button></div>}
             <main ref={mainRef} id="main-content" tabIndex={-1} className="min-h-0 flex-1 overflow-y-auto outline-none">
-              <div className={view === "artist" ? "w-full pb-16" : "mx-auto w-full max-w-content px-8 pt-4 pb-16"}>
+              <div className={view === "artist" ? "w-full pb-16" : "@container mx-auto w-full max-w-content px-8 pt-8 pb-16"}>
                 <AnimatePresence mode="wait" initial={false} onExitComplete={() => mainRef.current?.scrollTo({ top: 0 })}>
                   <ViewFrame key={view} mounted={mounted}>
                     {view === "home" && <HomeScreen onNavigate={navigate} onOpenPlaylist={(id) => { setSelectedPlaylist(id); navigate("playlists"); }} />}
@@ -210,6 +217,7 @@ export default function AppShell() {
                     {view === "login" && <LoginPage />}
                     {view === "settings" && <SettingsScreen />}
                     {view === "replay" && <ReplayScreen />}
+                    {view === "dj" && djMode && <DjScreen />}
                     {view === "shared" && <SharedScreen />}
                     {view === "sync" && <div className="lx-scope"><SyncPanel /></div>}
                   </ViewFrame>
@@ -217,10 +225,12 @@ export default function AppShell() {
               </div>
             </main>
           </div>
+          <AnimatePresence initial={false}>{queueOpen && !nowPlayingOpen && <QueuePanel docked />}</AnimatePresence>
         </div>
-        <PlayerBar />
+        <div className="lx-player-dock mx-3 mb-3">
+          <PlayerBar />
+        </div>
       </div>
-      <AnimatePresence>{queueOpen && !nowPlayingOpen && <QueuePanel />}</AnimatePresence>
       <NowPlaying />
       <CommandPalette />
       <ContextMenuHost />

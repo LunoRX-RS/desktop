@@ -15,6 +15,8 @@ mod menu;
 #[cfg(target_os = "linux")]
 mod mpris;
 #[cfg(target_os = "macos")]
+mod shared_state;
+#[cfg(target_os = "macos")]
 mod sound_menu;
 mod tray;
 
@@ -28,6 +30,16 @@ pub fn install(app: &tauri::AppHandle) {
     macos_media::install(app, menu);
     tray::install(app);
 }
+
+/// A track's lyrics were loaded: shares the timed lines with the macOS Widget and Screen Saver. No-op elsewhere.
+#[cfg(target_os = "macos")]
+pub fn note_lyrics(info: &crate::core::playback::track_info::TrackInfo) {
+    shared_state::note_lyrics(info);
+    macos_media::poke();
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn note_lyrics(_info: &crate::core::playback::track_info::TrackInfo) {}
 
 /// The sound settings changed (from the settings panel): refresh the Sound menu's checks.
 #[cfg(target_os = "macos")]

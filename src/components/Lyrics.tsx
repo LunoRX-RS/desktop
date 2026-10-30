@@ -285,7 +285,7 @@ export function SyncedLyrics({ lines: given, offsetMs = 0, source, attribution, 
         </OptionsMenu>
       </Slot>
       <Slot at={slots.notes}>
-        {note && <p role="status" className="ln-np-note text-primary-text">{note}</p>}
+        {note && <p role="status" title={note} className="ln-np-note text-primary-text">{note}</p>}
         {parts.length > 0 && <MetaLine parts={parts} />}
       </Slot>
     </div>

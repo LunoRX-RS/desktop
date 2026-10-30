@@ -211,7 +211,7 @@ components:
 
 LUNOR follows macOS Music conventions in a dark theme: a translucent sidebar, a quiet toolbar, large artwork, sentence-case type and almost no containers. Artwork is the only saturated colour on screen. One small light, Lumen Lavender, marks selection, active controls and links.
 
-Pages are flat. Content sits on the canvas, grouped by space and by large section titles rather than by boxes. Glass is limited to the sidebar, the player bar and the Home and details cards (Frost 100 over a 1px inner rim). The system is one dark theme on macOS, Windows and Linux alike; the overlay title bar is macOS only.
+Pages are flat. Content sits on a translucent pane, grouped by space and by large section titles rather than by boxes. Behind the whole window is one app ambient layer: the current artwork, blurred, under a scrim (a lavender and blue gradient when nothing is loaded). Every chrome surface is glass over it: the top bar, sidebar and player bar, the content pane, the Home and details cards (Frost 100 over a 1px inner rim) and the popovers. The system is one dark theme on macOS, Windows and Linux alike; the overlay title bar is macOS only.
 
 Confirmed rejections: the dot-matrix texture and the Doto display face; bordered cards and panels; uppercase tracked mono labels; repeated "demo" chips; one repeated placeholder artwork.
 
@@ -234,9 +234,9 @@ A near-black palette with translucent white fills, one lavender light and three 
 
 ### Neutral
 - **Night Canvas** (`night-canvas`): the app canvas.
-- **Sidebar Night**, **Surface**, **Elevated**, **Elevated Deep**: solid steps used as reduced-transparency fallbacks and for popovers (queue, add-to-playlist, command palette).
+- **Sidebar Night**, **Surface**, **Elevated**, **Elevated Deep**: solid steps used as reduced-transparency fallbacks. Elevated at 78% under blur is the popover glass (queue, add-to-playlist, command palette).
 - **Frost 100 / 200 / 300**: translucent white fills for hover, fields, segmented controls and inset groups.
-- **Frost Dark** and the sidebar and player glass tints: translucent chrome, only on the sidebar and player bar.
+- **Frost Dark** and the sidebar and player glass tints: translucent chrome on the top bar, sidebar and player bar.
 - **Scrim**: darkening layer over the Now Playing field and under dialogs.
 - **Primary Text** (off-white), **Secondary Text**, **Tertiary Text** (placeholders only), **Disabled Text**, **Ink Bright** (active lyric line).
 - **Hairline** (`hairline`): the only line colour. Used under the first section title, between rows of tables and inset groups, and at the top edge of the player.
@@ -244,7 +244,7 @@ A near-black palette with translucent white fills, one lavender light and three 
 ### Named Rules
 **The One Light Rule.** Lumen Lavender means selected or active, and covers under 5% of any screen. Titles stay Primary Text.
 
-**The Clamped Glow Rule.** The Now Playing background is the artwork, blurred, under a 66% scrim, plus a glow clamped to OKLCH L <= 0.25 and C <= 0.10. That keeps text at 4.5:1 or better.
+**The Clamped Glow Rule.** The Now Playing background is the artwork, blurred and saturated 2x at 60% opacity, under a scrim (76% Full, 70% Split, 62% Page; worst case, a white cover, still gives neighbour lines about 5:1), plus a glow clamped to OKLCH L <= 0.25 and C <= 0.10. That keeps text at 4.5:1 or better.
 
 ## Typography
 
@@ -277,11 +277,15 @@ Tokens (Tailwind v4 `@theme` in `desktop/src/app/globals.css`): sidebar 240px, c
 
 ## Elevation & Depth
 
-Layers are Night Canvas, sidebar glass and player glass. Glass is `backdrop-filter: blur(40px) saturate(1.5-1.8)` over a translucent fill (applied through `--lx-glass` and an `@supports` block so the minifier keeps the unprefixed property). Sidebar and player have no rim (the player has one hairline top edge); Home and details cards (`.glass-card`) use Frost 100 with an inset 1px rim. Tiles carry a faint 1px-offset shadow; popovers (queue, add-to-playlist, palette) are solid Elevated with a soft large shadow.
+Layers are the app ambient (`AmbientBackdrop`, `.lx-app-ambient`: artwork at blur 96px, 60% opacity, under a 0.6 black scrim, so a white cover still leaves Secondary Text above 4.5:1 on the shell glass; static, it never drifts, so the glass above it does not repaint every frame), the shell glass (top bar, sidebar, player), the content pane (`.glass-pane`, 0.34 black tint and a 1px inset rim, no blur of its own because the shell glass already blurs the ambient) and frosted popovers (`.glass-solid`, Elevated at 78% with blur 40px). Glass is `backdrop-filter: blur(40px) saturate(1.5-1.8)` over a translucent fill (applied through `--lx-glass` and an `@supports` block so the minifier keeps the unprefixed property). One `.glass` on the window root covers the top bar and sidebar, which have no rim. The player is a rimmed floating island (see Player bar). Home and details cards (`.glass-card`) use Frost 100 with an inset 1px rim. Tiles carry a faint 1px-offset shadow; popovers (queue, add-to-playlist, palette) are frosted Elevated with a soft large shadow.
 
-**The Two-Glass Rule.** Glass is the sidebar, the player bar and Home and details cards, with at most two frost levels in view (Frost 100 card, Frost 200 hover). Never put glass on artwork.
+**The Hairline Rule.** Every edge that has to read at 1x is drawn, not implied: covers carry a 1px white 10% inset ring over the image (a pseudo-element, since an inset shadow on the box would sit under the picture), active pills a 7% ring, secondary buttons a 7% inset rim, cards 9% with an 8% top highlight, the player island 12%. Tile radius is 6px. Section titles are bold at -0.022em, page titles -0.03em.
 
-**The Solid Fallback Rule.** Under `prefers-reduced-transparency: reduce`, all glass becomes solid Surface with no blur.
+**The Two-Glass Rule.** Inside the content pane, at most two frost levels are in view (Frost 100 card, Frost 200 hover). Never put glass on artwork tiles. The ambient artwork is the only artwork under glass.
+
+**The Nested Glass Rule.** A backdrop-filter inside another backdrop-filter cannot see the page behind its parent. A popover opened from inside the player island or a glass card is therefore solid Elevated, not frosted; frosted popovers are only for those that sit directly over the window root.
+
+**The Solid Fallback Rule.** Under `prefers-reduced-transparency: reduce`, the app ambient is hidden, the content pane is Night Canvas, shell glass becomes solid Surface and popovers solid Elevated, all with no blur.
 
 ## Shapes
 
@@ -301,7 +305,9 @@ Layers are Night Canvas, sidebar glass and player glass. Glass is `backdrop-filt
 | sheet spring | stiffness 320, damping 34 | Now Playing only; damping ratio about 0.95, overshoot far under 2% |
 
 **What animates.**
-- *Navigation:* the incoming view fades and rises 8px (220ms); the old one fades out in 120ms; scroll resets to top when the old view has gone. The active row in the sidebar nav, the library rows, the filter chips and the Library tabs share one highlight pill that slides between items (`layoutId`).
+- *Tiles and sections:* track rail tiles, media cards and the featured card answer hover and keyboard focus. The tile rises 4px (260ms) and its artwork zooms to 1.05 inside the cover clip (500ms). The featured card does not rise; only its cover zooms, and its blurred-cover glow fades in on track change. Rails pad their top by 12px so the lift is never clipped. A `Section` that starts below the fold waits hidden, then rises 6px and fades in once (420ms) when it scrolls into the pane, through an IntersectionObserver. Sections already on screen at mount are drawn at once. This is deliberately not a CSS view timeline: a scroll-driven animation never ends, so each section would stay the containing block for its fixed tips and popovers.
+- *Hover growth:* icon buttons scale to 1.08 and text buttons to 1.02 on hover, on top of the 0.97 press. The sidebar nav glyph nudges 2px right, and library row art zooms to 1.08.
+- *Navigation:* the incoming view fades and rises 14px (220ms); the old one fades out in 120ms; scroll resets to top when the old view has gone. The active row in the sidebar nav, the library rows, the filter chips and the Library tabs share one highlight pill that slides between items (`layoutId`).
 - *Lists:* the first 12 children of tile rails, grids, track tables and lists rise 6px and fade in, 30ms apart, once when the list mounts. Item 13 onward appears at once. Removed recent searches collapse (height and opacity). Short sidebar lists animate layout on reorder; lists over 50 items never do.
 - *Controls:* buttons press to 0.97; hover colour fades in 150ms; the hover play button on tiles scales in from the cover's lower left corner; the like heart pops 1 to 1.2 to 1 in 180ms when it turns on; the focus ring grows in over 100ms and is visible from the first frame.
 - *Player:* bar artwork cross-fades on track change; the progress fill eases linearly (250ms) between ticks but has no transition at all while the pointer is held, so seek and volume follow the pointer exactly; Now Playing rises from the bottom edge on the sheet spring and leaves in 220ms; its ambient artwork layer cross-fades over 400ms on track change; the active lyric line is bright and the others fall off by distance (300ms).
@@ -357,6 +363,20 @@ A Frost 200 recessed track with the selected segment raised on Frost 300. The Li
 ### Tiles and rails
 Square artwork at 8px radius, title (13px semibold) and subtitle (13px Secondary Text) underneath, no container. A small dark circular play button appears over the art on hover and keyboard focus. Rails scroll horizontally, snap to tiles and hide their scrollbar. Top Picks tiles are full-bleed artwork at 16px with a bottom scrim tinted from the art's tone, title and subtitle laid over it.
 
+### Window structure
+Three columns under the top bar, over one app glass: the icon rail (72px, the collapsed sidebar, now the default; Expand in the rail opens the 240px sidebar and the choice is remembered), the page pane in the middle, and an optional docked panel at the right (340px, 380px from 1500px) that holds the queue. The panel is a column of the window, not a floater: opening it narrows the page instead of covering it. The page is a CSS container, so its bands (Home and Explore hero + list, the hero's row layout) switch on the page's own width (`@3xl` at 768px, `@2xl` at 672px), not the window's, and stay readable with the panel open. The dock has two tabs, Now playing (square cover, title and artist with like, a four-line lyric window that follows the playback position, and a Full lyrics button) and Queue. Every page built on `Screen` gets a condensed bar: once the big title has scrolled away, a 56px glass strip with the same title and the page actions fades in at the top of the page (opacity and transform only, a hairline under it), so the actions never leave reach. The player bar floats below all three. Now Playing is still its own full-window view.
+
+### Unified Replay
+No hero banner, no gradients or blurred blobs on any tab. The Replay tab is one reading order: the month as a 30px title with previous and next (next is off in the current month), then the number that matters ("You listened for 12h 13m", 84px, units small) with plays, songs, artists and new songs under it, a per-day bar strip (the busiest day in off-white, the rest Frost 300), and "Song of the month" as one large cover on the right. Below: Top artists and Top songs as ranked rows whose backing bar is each row's share of the leader, "When you listen" as 24 hour bars with the peak hour in off-white, and the year as four plain figures under a hairline. A month with no plays says so and keeps the arrows. The other four tabs follow the same order: one large statement first, then the figures, then charts. **Music DNA:** the top artist's name at 56px with its share of plays, the share of plays held by the top 1%, 5% and 10% of songs (only once there are 20 songs; with fewer the three bars would all read the same), six plain figures (peak hour, active days, streaks, completion, skips), a weekday chart and ranked artists. **Crossover:** how many songs the providers share (or the one provider you use), a stacked share bar with a legend, and the top five songs per provider. **Timeline:** the current streak at 84px with the longest streak and days with music, the last 45 days with the busiest day named, and hour-of-day and weekday charts. **All-time:** total listening time at 84px with plays, songs, artists and the month it began, completion and skips, and the top ten songs and artists. Charts share one component: the tallest bar off-white, the rest Frost 300, the value in each bar's title; ranked rows share one component with a backing bar sized to the leader.
+
+### Home layout
+Listen Now opens with one band: the featured song (a glass card with a blurred-cover glow, 192px cover, content centred, Play and like) takes 1.7 parts and "Jump back in" takes 1 part beside it, from 1024px up. Jump back in is the five songs played last, as 56px rows (cover, title, artist links; the whole row plays and queues the rest, the artist links stay separate targets, a play disc shows on hover and focus). Clear history sits in its header. Below the band: "Earlier" (history from the sixth song on, as a rail), Most played, then the feed rails and liked songs. With no history the featured card spans the full width.
+
+**Honest nudges (Home).** Two behaviours come from behavioural research and use only true data. A song left part-way shows "m:ss left" and a 2px progress bar in its Jump back in row (unfinished things pull us back; the number is the real saved position), and pressing it plays from that minute. Every action that cannot be undone uses one shared `ConfirmButton`: the first press only changes the label ("Press again to delete", coral, no shaming), a second press within 4 seconds does it, and waiting or moving focus away puts it back. It covers Clear history, Delete my activity log, usage data and error reports, Delete autoplay learning, Delete cloud stats and Clear this device. Deleting a playlist keeps its own Cancel and Delete step. A search with no results offers the same query without its last word as a button (a real next step, not only advice). The lyric glow is part of the design and stays: 36px white at 30% on the active line (plus a soft dark shadow) and 22px at 55% on the sung word. Nothing on screen invents scarcity, counts or urgency.
+
+### Explore layout
+One row of four mood tiles ("Show all N" opens the rest, and a tile chosen from the hidden part stays visible), then the chosen topic's name over the same band as Home: the featured song at 1.7 parts and "Top picks" (the next five songs of the feed's first section) at 1 part, then the feed's rails. Without picks the featured card spans the full width.
+
 ### Featured album
 One per Home. A glass card holds a 280px cover (10px radius, separate focus target that opens details), a 34/40 bold title (also a separate button; two-line clamp, `title` attribute), artist at 17px, a year and provider line, then one 44px off-white Play button and a quiet "View album" ghost button. Play is always visible.
 
@@ -394,9 +414,20 @@ The toolbar Search pill and the Search view field are Frost 200 pills; other fie
 A transparent native range over a 3px track; the fill is Secondary Text and the 12px knob appears on hover and focus. Times sit at both ends in 11px tabular numerals. Volume uses the same control, thinner and shorter.
 
 ### Player bar
-88px, translucent, one hairline top edge. Left: 56px art at 6px radius (opens Now Playing), title and artist in 13px, heart. Centre: transport, then the scrubber with times. Right: lyrics, queue, AirPlay (disabled, no device), volume, expand. Titles are Primary Text.
+88px, a floating island inside the shell glass (`.lx-player-dock`): 12px from the window edges, 16px radius, Frost 100-level fill, a 1px inset rim and a soft 32px shadow. Left: 56px art at 6px radius (opens Now Playing), title and artist in 13px, heart. Centre: transport, then the scrubber with times. Right: lyrics, queue, AirPlay (disabled, no device), volume, expand. Titles are Primary Text.
 
 ### Now Playing and Lyrics
+Lyric lines carry depth as well as fade. Inactive lines sit at scale 0.9 (0.95 for the two beside the active one), anchored at their left edge; the active line grows to 1 over 420ms and carries a soft white glow (36px) that rides its opacity transition. The glow and scale are transform and opacity work only; no `filter` transition was added to the existing blur. Word-timed lines add a 22px glow on the current word, and only lines with real word timing get any word effect.
+
+Both ambient scrims (Now Playing and the app backdrop) carry a 4% fine-grain SVG noise (`--lx-grain`). A 90px blur under a dark scrim spans so few levels that it bands into visible contour rings and vertical streaks; the grain dithers them. It adds about 5 levels of lightness, already inside the contrast numbers above.
+
+The controls pill is 920px wide, 28px radius, two rows (104px): progress with times and volume on top; below it a three-column grid with the lyric source at the left, the transport centred (repeat, previous, a 48px solid off-white play disc, next, autoplay) and the tools at the right (options, layout toggle, full screen, queue, lyrics, collapse, grouped by 1px dividers). It is the only filled control in the window. The lyrics-file button shows only while lyrics are closed; with lyrics open it lives in the options menu.
+
+Under the title row, the lyric source note (for example a fallback to another source) is one quiet pill that ellipsizes, with the full sentence in its `title`; the source credit sits under it at 11px in Tertiary Text. Lines use line-height 1.34 so Thai tone marks and vowels do not collide, and inactive lines sit at 0.88 (0.94 beside the active one).
+
+### macOS widget, screen saver and lock screen
+The app writes one snapshot (`now-playing.json` plus the cover as `artwork.img`) when the track, state, seek, cover or lyrics change, never per tick (`src-tauri/src/platform/shared_state.rs`). Readers extrapolate the position from its wall-clock stamp. `desktop/macos/` holds the two native targets, built with `macos/build.sh`: a Now Playing widget (small, medium, large; cover, title, artist, the sung line and the next one; one timeline entry per lyric line) and a screen saver (blurred cover backdrop, cover and song at the left, the sung line large; idle drift every five minutes). System Now Playing, lock-screen and media-key controls already come from `platform/macos_media.rs`. The macOS login window cannot host an app, so nothing runs there.
+
 Lyrics closed: artwork centred at 16px radius with title and artist under it, the close chevron top-left right of the traffic lights (76px inset, 24px in native full screen), the controls pill at the bottom. The background is the blurred artwork under a scrim (`--np-scrim`, default 0.65 black; the worst case, a white cover, still gives 14.7:1 for the active line and 5.5:1 for neighbours).
 
 Lyrics open: two layouts, a 2-icon radiogroup in the pill ("Lyrics layout": "Full window lyrics", "Artwork and lyrics"), remembered in `lunorx.lyricsLayout` (`full` default, `split`).
@@ -459,6 +490,6 @@ Demo content is flagged once, in the sidebar foot ("Demo content · no audio"; a
 - **Don't** reintroduce the dot-matrix texture or the Doto face.
 - **Don't** colour titles or buttons Lumen Lavender; primary actions are off-white.
 - **Don't** use provider brand colours or logos in LUNOR chrome.
-- **Don't** put glass anywhere except the sidebar and the player bar.
+- **Don't** put glass on artwork tiles. Glass belongs to the window chrome, the content pane, cards and popovers (see Elevation & Depth).
 - **Don't** add a looping or bouncing animation, or any motion that suggests audio is playing when it is not.
 - **Don't** use a circle inside a circle as placeholder art.

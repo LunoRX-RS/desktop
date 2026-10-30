@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dj-load"
+description = "Enables the dj_load command without any pre-configured scope."
+commands.allow = ["dj_load"]
+
+[[permission]]
+identifier = "deny-dj-load"
+description = "Denies the dj_load command without any pre-configured scope."
+commands.deny = ["dj_load"]

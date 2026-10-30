@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dj-status"
+description = "Enables the dj_status command without any pre-configured scope."
+commands.allow = ["dj_status"]
+
+[[permission]]
+identifier = "deny-dj-status"
+description = "Denies the dj_status command without any pre-configured scope."
+commands.deny = ["dj_status"]

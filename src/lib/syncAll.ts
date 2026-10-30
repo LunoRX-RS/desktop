@@ -1,10 +1,11 @@
 "use client";
 import { create } from "zustand";
 import { statsCloudSync, statsLocal } from "../services/tauri/stats";
-import { syncFlushPending, syncStatus } from "../services/tauri/sync";
+import { syncFlushPending, syncListLocalPlaylists, syncStatus, syncUploadPlaylist } from "../services/tauri/sync";
 import { telemetryFlush, telemetryGet } from "../services/tauri/telemetry";
 import { youtubeConnectionStatus, youtubeImport } from "../services/tauri/youtube";
 import { refreshLikes } from "./library";
+import { syncFollowedArtists } from "./likedArtists";
 
 export type PartState = "ok" | "skipped" | "failed";
 export interface Part { key: string; label: string; state: PartState; detail: string }
@@ -21,6 +22,23 @@ async function account(): Promise<Outcome> {
   if (s.state.state === "signedOut") return skipped("Signed out of your LunoRX account");
   const sent = await syncFlushPending();
   return { state: "ok", detail: sent ? `${sent} queued ${sent === 1 ? "change" : "changes"} sent` : "Playlists up to date" };
+}
+/** Uploads every playlist not yet on the cloud, or only part-uploaded. One already there (including an imported
+ * YouTube playlist uploaded before) has a remote id and nothing unsent, so it is skipped, never copied twice. */
+async function playlists(): Promise<Outcome> {
+  const s = await syncStatus();
+  if (s.state.state === "signedOut") return skipped("Signed out of your LunoRX account");
+  const todo = (await syncListLocalPlaylists()).filter((p) => p.remoteId === null || p.unsentEntries > 0);
+  let done = 0;
+  for (const p of todo) { try { await syncUploadPlaylist(p.id); done++; } catch { /* retried on the next sync */ } }
+  if (done < todo.length) return failed(`${done} of ${todo.length} playlists uploaded; the rest are retried next time`);
+  return { state: "ok", detail: todo.length ? `${done} ${done === 1 ? "playlist" : "playlists"} uploaded` : "Every playlist is on the cloud" };
+}
+async function artists(): Promise<Outcome> {
+  const s = await syncStatus();
+  if (s.state.state === "signedOut") return skipped("Signed out of your LunoRX account");
+  const n = await syncFollowedArtists();
+  return { state: "ok", detail: `${n} followed ${n === 1 ? "artist" : "artists"} in sync` };
 }
 async function youtube(): Promise<Outcome> {
   if ((await youtubeConnectionStatus()) !== "connected") return skipped("YouTube is not connected");
@@ -41,6 +59,8 @@ async function usage(): Promise<Outcome> {
 const STEPS: [string, string, () => Promise<Outcome>][] = [
   ["account", "LunoRX account", account],
   ["youtube", "YouTube and YouTube Music", youtube],
+  ["playlists", "Playlists to the cloud", playlists],
+  ["artists", "Followed artists", artists],
   ["stats", "Listening stats", stats],
   ["usage", "Usage data", usage],
 ];

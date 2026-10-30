@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Switch } from "../../components/Lyrics";
-import { Button } from "../../components/ui";
+import { Button, ConfirmButton } from "../../components/ui";
 import { telemetryDelete, telemetryFlush, telemetryGet, telemetrySet, type TelemetryViewDto } from "../../services/tauri/telemetry";
 import { Inset, NoteRow, SettingRow } from "./rows";
 
@@ -43,7 +43,7 @@ export function TelemetrySettings() {
           </NoteRow>
           <SettingRow label="Upload and delete">
             <Button disabled={busy || pending.length === 0} onClick={() => void sendNow()}>Send now</Button>
-            <Button disabled={busy} onClick={() => void remove()}>Delete my usage data</Button>
+            <ConfirmButton disabled={busy} confirmLabel="Press again to delete" onConfirm={() => void remove()}>Delete my usage data</ConfirmButton>
           </SettingRow>
         </>
       )}

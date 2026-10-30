@@ -1,4 +1,5 @@
 pub mod capabilities;
+pub mod dj;
 pub mod domain;
 pub mod errors;
 pub mod playback;

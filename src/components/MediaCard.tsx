@@ -31,7 +31,7 @@ export function MediaCard({
   className?: string;
 }) {
   return (
-    <div className={cx("lx-reveal-host flex min-w-0 flex-col gap-2", className)}>
+    <div className={cx("lx-reveal-host lx-lift flex min-w-0 flex-col gap-2", className)}>
       <div className="relative w-full">
         {onOpen ? (
           <button type="button" onClick={onOpen} aria-label={openLabel ?? `Open ${title}`} className="block w-full rounded-[8px]">
@@ -116,7 +116,7 @@ export function FeatureTile({
 // Horizontal rail of tiles that scrolls sideways.
 export function Rail({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div role="list" aria-label={label} className="lx-rail lx-stagger -mx-8 flex snap-x scroll-px-8 gap-5 overflow-x-auto px-8 pb-1">
+    <div role="list" aria-label={label} className="lx-rail lx-stagger -mx-8 -mt-3 flex snap-x scroll-px-8 gap-5 overflow-x-auto px-8 pt-3 pb-1">
       {children}
     </div>
   );

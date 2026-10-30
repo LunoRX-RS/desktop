@@ -122,6 +122,7 @@ pub fn run() {
             let yt = core::playback::extract::resolver().ok();
             app.manage(commands::state::SearchState::production(yt.clone()));
             app.manage(commands::youtube::YouTubeState::new(yt));
+            app.manage(commands::dj::DjState::default());
             let offline = app
                 .path()
                 .app_data_dir()
@@ -231,6 +232,18 @@ pub fn run() {
             commands::youtube::youtube_like_push_get,
             commands::youtube::youtube_like_push_set,
             commands::youtube::youtube_po_token_set,
+            commands::dj::dj_load,
+            commands::dj::dj_play,
+            commands::dj::dj_pause,
+            commands::dj::dj_seek,
+            commands::dj::dj_set_effects,
+            commands::dj::dj_set_loop,
+            commands::dj::dj_set_mix,
+            commands::dj::dj_stop,
+            commands::dj::dj_control,
+            commands::dj::dj_status,
+            commands::artists::artists_cloud_sync,
+            commands::artists::artists_cloud_follow,
             commands::youtube::youtube_disconnect,
             commands::share::shared_link_take,
             commands::share::shared_token_from_url,

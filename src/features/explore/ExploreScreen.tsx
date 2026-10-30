@@ -3,7 +3,8 @@ import { useEffect, useState } from "react";
 import { Art, SCRIM_BG } from "../../components/Art";
 import { Button, Screen, Section, cx } from "../../components/ui";
 import LiveFeed from "../discovery/LiveFeed";
-import { loadFeed } from "../../lib/discovery";
+import { loadFeed, useFeed } from "../../lib/discovery";
+import { QuickPicks } from "../home/QuickPicks";
 import { toneFor } from "../../lib/media";
 import { discoveryGenres, type Genre } from "../../services/tauri/discovery";
 
@@ -11,8 +12,8 @@ import { discoveryGenres, type Genre } from "../../services/tauri/discovery";
 const FALLBACK: Genre[] = [["thai", "Thai music"], ["pop", "Pop"], ["hiphop", "Hip-hop"], ["focus", "Focus"], ["chill", "Chill"], ["acoustic", "Acoustic"]]
   .map(([id, name]) => ({ id: `fixed:${id}`, name, mood: false }));
 const KEY = "lunorx.exploreGenres";
-// Two rows of four on a wide window; the rest open with "Show all".
-const SHOWN = 8;
+// One row of four on a wide window, so the music starts above the fold; the rest open with "Show all".
+const SHOWN = 4;
 const topicOf = (g: Genre) => (g.id.startsWith("fixed:") ? g.id.slice(6) : `genre:${g.id}`);
 
 function readGenres(): Genre[] | null {
@@ -48,6 +49,9 @@ export default function ExploreScreen() {
   const [topic, setTopic] = useState("charts");
   const [genres, setGenres] = useState<Genre[]>(FALLBACK);
   const [all, setAll] = useState(false);
+  const feed = useFeed("explore", topic);
+  // The first song is the featured card; the next five make the list beside it.
+  const picks = feed.sections[0]?.tracks.slice(1, 6) ?? [];
   useEffect(() => {
     let live = true;
     const cached = readGenres();
@@ -82,11 +86,15 @@ export default function ExploreScreen() {
           </nav>
         </Section>
 
-        <div className="flex flex-col gap-2">
-          <h2 className="font-display text-[22px] leading-7 font-semibold tracking-[-0.015em] text-primary-text" aria-live="polite">
+        <div className="flex flex-col gap-4">
+          <h2 className="font-display text-[22px] leading-7 font-bold tracking-[-0.022em] text-primary-text" aria-live="polite">
             {title}
           </h2>
-          <LiveFeed key={topic} kind="explore" topic={topic} featured rail />
+          <div className={cx("grid items-stretch gap-6", picks.length > 0 && "@3xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]")}>
+            <LiveFeed key={topic} kind="explore" topic={topic} featured part="hero" />
+            {picks.length > 0 && <QuickPicks id="explore-picks" title="Top picks" hits={picks} />}
+          </div>
+          <LiveFeed key={`${topic}:rails`} kind="explore" topic={topic} part="rails" rail />
         </div>
       </div>
     </Screen>

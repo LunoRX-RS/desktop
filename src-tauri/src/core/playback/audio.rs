@@ -295,6 +295,83 @@ pub struct AudioSettings {
     #[serde(default)]
     pub effects: Effects,
 }
+
+/// Best-effort read of the default output device's nominal sample rate on macOS (Core Audio), so "Automatic" can follow
+/// the notified device rate instead of the source rate and avoid resampling glitches on devices that are not 96 kHz.
+#[cfg(target_os = "macos")]
+fn device_sample_rate() -> Option<i64> {
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct AudioObjectPropertyAddress {
+        m_selector: u32,
+        m_scope: u32,
+        m_element: u32,
+    }
+    #[link(name = "CoreAudio", kind = "framework")]
+    unsafe extern "C" {
+        fn AudioObjectGetPropertyData(
+            in_object_id: u32,
+            in_address: *const AudioObjectPropertyAddress,
+            in_qualifier_data_size: u32,
+            in_qualifier_data: *const std::ffi::c_void,
+            io_data_size: *mut u32,
+            out_data: *mut std::ffi::c_void,
+        ) -> i32;
+    }
+    const K_AUDIO_OBJECT_SYSTEM_OBJECT: u32 = 1;
+    const K_AUDIO_HARDWARE_PROPERTY_DEFAULT_OUTPUT_DEVICE: u32 = 0x644F7574; // 'dOut'
+    const K_AUDIO_DEVICE_PROPERTY_NOMINAL_SAMPLE_RATE: u32 = 0x6E737274; // 'nsrt'
+    const K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL: u32 = 0;
+    const K_AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN: u32 = 0;
+
+    let addr = AudioObjectPropertyAddress {
+        m_selector: K_AUDIO_HARDWARE_PROPERTY_DEFAULT_OUTPUT_DEVICE,
+        m_scope: K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+        m_element: K_AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
+    };
+    let mut device: u32 = 0;
+    let mut size: u32 = std::mem::size_of::<u32>() as u32;
+    let status = unsafe {
+        AudioObjectGetPropertyData(
+            K_AUDIO_OBJECT_SYSTEM_OBJECT,
+            &addr,
+            0,
+            std::ptr::null(),
+            &mut size,
+            &mut device as *mut u32 as *mut std::ffi::c_void,
+        )
+    };
+    if status != 0 || device == 0 {
+        return None;
+    }
+    let addr2 = AudioObjectPropertyAddress {
+        m_selector: K_AUDIO_DEVICE_PROPERTY_NOMINAL_SAMPLE_RATE,
+        m_scope: K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL,
+        m_element: K_AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN,
+    };
+    let mut rate: f64 = 0.0;
+    let mut size2: u32 = std::mem::size_of::<f64>() as u32;
+    let status2 = unsafe {
+        AudioObjectGetPropertyData(
+            device,
+            &addr2,
+            0,
+            std::ptr::null(),
+            &mut size2,
+            &mut rate as *mut f64 as *mut std::ffi::c_void,
+        )
+    };
+    if status2 != 0 || !rate.is_finite() || rate <= 0.0 {
+        None
+    } else {
+        Some(rate as i64)
+    }
+}
+#[cfg(not(target_os = "macos"))]
+fn device_sample_rate() -> Option<i64> {
+    None
+}
+
 impl AudioSettings {
     /// The whole `af` value: the user's effects first, then loudness levelling, then a limiter when anything can boost.
     pub fn filter_chain(&self) -> String {
@@ -319,7 +396,19 @@ impl AudioSettings {
     }
     pub fn apply(self, mpv: &Mpv) -> libmpv2::Result<()> {
         mpv.set_property("options/audio-format", self.pcm_format.mpv())?;
-        mpv.set_property("options/audio-samplerate", self.sample_rate.hz())
+        // "Automatic" follows the notified device rate on macOS CoreAudio (via Core Audio) instead of the source rate,
+        // so a 48 kHz built-in speaker is not forced to 96 kHz and no longer pops; an explicit choice still forces
+        // that rate. Only query the device on the coreaudio backend so non-macOS/null-output tests keep 0 for Auto.
+        let requested = self.sample_rate.hz();
+        let on_coreaudio =
+            mpv.get_property::<String>("current-ao").ok().as_deref() == Some("coreaudio");
+        let rate = if self.sample_rate == SampleRate::Auto && on_coreaudio {
+            device_sample_rate().unwrap_or(requested)
+        } else {
+            requested
+        };
+        mpv.set_property("audio-samplerate", rate)?;
+        mpv.set_property("options/audio-samplerate", rate)
     }
 }
 #[derive(Clone, Debug, Default, Serialize)]

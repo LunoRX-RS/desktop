@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { Button } from "../../components/ui";
+import { ConfirmButton } from "../../components/ui";
 import { tasteClear } from "../../services/tauri/stats";
 import { Inset, NoteRow, SettingRow } from "./rows";
 
@@ -17,7 +17,7 @@ export function TasteSettings() {
         label="Delete autoplay learning"
         hint="Autoplay keeps how far it listened to its last 100 picks, on this device only, and uses that to choose what plays next. Nothing is uploaded. Deleting it resets autoplay to its built-in taste."
       >
-        <Button variant="ghost" onClick={() => void clear()}>Delete</Button>
+        <ConfirmButton variant="ghost" confirmLabel="Press again to delete" onConfirm={() => void clear()}>Delete</ConfirmButton>
       </SettingRow>
       {note && <NoteRow tone={note.tone} role={note.tone === "bad" ? "alert" : "status"}>{note.text}</NoteRow>}
     </Inset>

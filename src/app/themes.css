@@ -1,0 +1,83 @@
+/* Themes and accents. Each one only re-points the colour tokens from globals.css, so every screen follows. */
+
+html[data-theme="graphite"] {
+  --color-night-canvas: #141416;
+  --color-sidebar-night: #1a1a1d;
+  --color-surface: #202024;
+  --color-elevated: #2a2a2f;
+  --color-elevated-deep: #313137;
+  --color-frost-100: rgba(255, 255, 255, 0.06);
+  --color-frost-200: rgba(255, 255, 255, 0.1);
+  --color-frost-300: rgba(255, 255, 255, 0.15);
+}
+
+html[data-theme="midnight"] {
+  --color-night-canvas: #05070f;
+  --color-sidebar-night: #0a0e1c;
+  --color-surface: #0f1426;
+  --color-elevated: #182038;
+  --color-elevated-deep: #1d2742;
+  --color-ambient-slate: #10213d;
+  --color-ambient-violet: #1a1840;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+  --color-night-canvas: #f5f5f7;
+  --color-sidebar-night: #ececef;
+  --color-surface: #ffffff;
+  --color-elevated: #ffffff;
+  --color-elevated-deep: #f0f0f3;
+  --color-hairline: rgba(0, 0, 0, 0.08);
+  --color-hairline-strong: rgba(0, 0, 0, 0.14);
+  --color-ink-bright: #000000;
+  --color-primary-text: #1d1d1f;
+  --color-secondary-text: #5c6068;
+  --color-tertiary-text: #6e737b;
+  --color-disabled-text: #a9adb4;
+  --color-on-ink: #ffffff;
+  --color-frost-100: rgba(0, 0, 0, 0.04);
+  --color-frost-200: rgba(0, 0, 0, 0.07);
+  --color-frost-300: rgba(0, 0, 0, 0.11);
+  --color-frost-dark: rgba(255, 255, 255, 0.7);
+  --color-scrim: rgba(255, 255, 255, 0.7);
+  --color-ambient-slate: #dfe7f1;
+  --color-ambient-violet: #e7e2f5;
+}
+/* On a light canvas the accent needs more ink to keep text contrast. */
+html[data-theme="light"] { --color-lumen-lavender: #6a4fd8; --color-lumen-wash: rgba(106, 79, 216, 0.12); --color-lumen-edge: rgba(106, 79, 216, 0.4); --color-on-lumen: #ffffff; }
+
+html[data-accent="blue"] { --color-lumen-lavender: #8db8f2; --color-lumen-wash: rgba(141, 184, 242, 0.14); --color-lumen-edge: rgba(141, 184, 242, 0.4); --color-on-lumen: #0b1a2e; }
+html[data-accent="mint"] { --color-lumen-lavender: #8fe3c4; --color-lumen-wash: rgba(143, 227, 196, 0.14); --color-lumen-edge: rgba(143, 227, 196, 0.4); --color-on-lumen: #062118; }
+html[data-accent="rose"] { --color-lumen-lavender: #f4a6c6; --color-lumen-wash: rgba(244, 166, 198, 0.14); --color-lumen-edge: rgba(244, 166, 198, 0.4); --color-on-lumen: #2b0a17; }
+html[data-accent="amber"] { --color-lumen-lavender: #f2c77e; --color-lumen-wash: rgba(242, 199, 126, 0.14); --color-lumen-edge: rgba(242, 199, 126, 0.4); --color-on-lumen: #2a1a02; }
+html[data-theme="light"][data-accent="blue"] { --color-lumen-lavender: #1f6fd1; }
+html[data-theme="light"][data-accent="mint"] { --color-lumen-lavender: #11845e; }
+html[data-theme="light"][data-accent="rose"] { --color-lumen-lavender: #c2366f; }
+html[data-theme="light"][data-accent="amber"] { --color-lumen-lavender: #9a5b00; }
+
+/* Accent swatches in Settings: fixed colours, not the live accent. */
+.lx-swatch[data-swatch="lavender"] { background: #c5b4ff; }
+.lx-swatch[data-swatch="blue"] { background: #8db8f2; }
+.lx-swatch[data-swatch="mint"] { background: #8fe3c4; }
+.lx-swatch[data-swatch="rose"] { background: #f4a6c6; }
+.lx-swatch[data-swatch="amber"] { background: #f2c77e; }
+
+/* Light: the shell glass and the ambient scrim were tuned for dark. */
+html[data-theme="light"] .glass { background-color: rgba(250, 250, 252, 0.55); }
+html[data-theme="light"] .glass-bar { background-color: rgba(248, 248, 250, 0.78); }
+html[data-theme="light"] .glass-pane { background-color: rgba(255, 255, 255, 0.55); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06); }
+html[data-theme="light"] .lx-app-ambient-scrim { background-color: rgba(255, 255, 255, var(--lx-bg-dim, 0.6)); }
+
+/* Backdrop behind the glass. The dim slider drives the scrim in every theme. */
+.lx-app-ambient-scrim { background-color: rgba(0, 0, 0, var(--lx-bg-dim, 0.6)); }
+html[data-backdrop="image"] .lx-app-ambient > :not(.lx-app-ambient-scrim) { display: none; }
+html[data-backdrop="image"] .lx-app-ambient::before {
+  content: "";
+  position: absolute;
+  inset: calc(var(--lx-bg-blur, 0px) * -2);
+  background: var(--lx-user-bg) center / cover no-repeat;
+  filter: blur(var(--lx-bg-blur, 0px));
+}
+html[data-backdrop="plain"] .lx-app-ambient > :not(.lx-app-ambient-scrim) { display: none; }
+html[data-backdrop="plain"] .lx-app-ambient { background: var(--color-night-canvas); }

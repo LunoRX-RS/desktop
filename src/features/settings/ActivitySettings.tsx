@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Switch } from "../../components/Lyrics";
-import { Button } from "../../components/ui";
+import { Button, ConfirmButton } from "../../components/ui";
 import { activityDelete, activityFlush, activityView, activitySetEnabled, type ActivityViewDto } from "../../services/tauri/reports";
 import { Inset, NoteRow, SettingRow } from "./rows";
 
@@ -55,7 +55,7 @@ export function ActivitySettings() {
       {view.enabled && (
         <SettingRow label="Upload and delete">
           <Button disabled={busy || view.unsent === 0} onClick={() => void sendNow()}>Send now</Button>
-          <Button disabled={busy} onClick={() => void remove()}>Delete my activity log</Button>
+          <ConfirmButton disabled={busy} confirmLabel="Press again to delete" onConfirm={() => void remove()}>Delete my activity log</ConfirmButton>
         </SettingRow>
       )}
       {note && <NoteRow tone={note.tone} role={note.tone === "bad" ? "alert" : "status"}>{note.text}</NoteRow>}

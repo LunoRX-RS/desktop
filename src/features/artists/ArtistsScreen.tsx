@@ -11,7 +11,8 @@ import type { Tone } from "../../lib/media";
 import { ResultRow, providerName } from "../search/SourceGroup";
 import { AddToPlaylist } from "../search/AddToPlaylist";
 import { playTrack, usePlayback } from "../../lib/playback";
-import { Play, Shuffle } from "lucide-react";
+import { Heart, Play, Shuffle } from "lucide-react";
+import { useIsLikedArtist, useLikedArtists } from "../../lib/likedArtists";
 
 
 const TONES: Tone[] = ["slate", "violet", "amber", "rose", "moss", "ink"];
@@ -49,19 +50,22 @@ export function SavedLibraryScreen({ artists = false }: { artists?: boolean }) {
   const ready = useLibrary(s => s.ready);
   const error = useLibrary(s => s.error);
   const [limit, setLimit] = useState(50);
+  const followed = useLikedArtists(s => s.artists);
   const refs = new Map<string, ArtistRef>();
   const counts = new Map<string, number>();
+  // Followed artists come first, in the order they were followed; then artists from liked songs.
+  for (const a of followed) refs.set(`${a.provider}:${a.id ?? a.name}`, { provider: a.provider, id: a.id, name: a.name });
   for (const track of tracks) for (const name of track.artists) {
     const artist = track.artistRefs?.find(a => a.provider === track.provider && a.name === name) ?? { provider: track.provider, id: null, name };
     const key = `${artist.provider}:${artist.id ?? artist.name}`;
     refs.set(key, artist);
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
-  return <Screen id="saved-library" title={artists ? "Artists" : "Liked Songs"} caption={artists ? "Artists from your liked songs, grouped by their provider identity." : "Saved on this device. Provider libraries are unchanged."}>
+  return <Screen id="saved-library" title={artists ? "Artists" : "Liked Songs"} caption={artists ? "Artists you follow, then artists from your liked songs." : "Saved on this device. Provider libraries are unchanged."}>
     <LibraryNav />
     {!ready && !error && <p role="status">Loading liked songs…</p>}
     {ready && (artists ? <ul className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">{Array.from(refs.entries()).map(([key, artist]) => <li key={key}><ArtistCard artist={artist} songs={counts.get(key) ?? 0} /></li>)}</ul> : <><ul>{tracks.slice(0, limit).map((hit, i, shown) => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} following={shown.slice(i + 1)} />)}</ul>{tracks.length > limit && <Button onClick={() => setLimit(n => n + 50)}>Show more</Button>}</>)}
-    {ready && (artists ? refs.size === 0 : tracks.length === 0) && <StatusNote>Like songs from Search to build your library.<Button onClick={() => useUi.getState().navigate("search")}>Search music</Button></StatusNote>}
+    {ready && (artists ? refs.size === 0 : tracks.length === 0) && <StatusNote>{artists ? "Follow an artist from their page, or like their songs, to see them here." : "Like songs from Search to build your library."}<Button onClick={() => useUi.getState().navigate("search")}>Search music</Button></StatusNote>}
   </Screen>;
 }
 /** Full-bleed header: the photo fills the width and the top, then fades into the page; the name and actions sit on the fade. */
@@ -107,7 +111,7 @@ export default function ArtistScreen() {
   const tracks = profile?.tracks ?? saved.filter(t => t.provider === artist.provider && (artist.id ? t.artistRefs?.some(a => a.id === artist.id) : t.artists.includes(artist.name)));
   const meta = [profile?.subscribers != null ? `${profile.subscribers.toLocaleString()} subscribers` : "", providerName(artist.provider)].filter(Boolean).join(" · ");
   return <section aria-labelledby="artist" className="flex flex-col gap-6">
-    <ArtistHero id="artist" name={profile?.name ?? artist.name} art={profile?.artworkUrl} meta={meta} actions={tracks.length > 0 ? <AlbumActions tracks={tracks} /> : null} />
+    <ArtistHero id="artist" name={profile?.name ?? artist.name} art={profile?.artworkUrl} meta={meta} actions={<div className="flex flex-wrap items-center gap-3">{tracks.length > 0 && <AlbumActions tracks={tracks} />}<FollowButton artist={profile ? { provider: artist.provider, id: artist.id, name: profile.name } : artist} artworkUrl={profile?.artworkUrl ?? null} /></div>} />
     <div className="mx-auto flex w-full max-w-content flex-col gap-7 px-8">
     {status && <StatusNote role="status">{status}{artist.id && status !== "Loading artist…" && <Button onClick={() => setRetry(n => n + 1)}>Retry</Button>}</StatusNote>}
     {profile?.description && <p className="line-clamp-4 max-w-[72ch] whitespace-pre-line text-[14px] leading-5 text-secondary-text">{profile.description}</p>}
@@ -115,6 +119,18 @@ export default function ArtistScreen() {
     {profile && profile.albums.length > 0 && <Section id="artist-albums" title="Albums"><ul className="grid grid-cols-2 gap-4 md:grid-cols-4">{profile.albums.map(album => <li key={album.id}><button type="button" aria-label={`Open album ${album.name}`} onClick={() => useUi.getState().openAlbum({ provider: profile.provider, ...album })} className="group block w-full text-left">{album.artworkUrl && <img src={album.artworkUrl} alt="" loading="lazy" className="mb-2 aspect-square w-full rounded-lg object-cover transition-transform duration-200 group-hover:scale-[1.02]" />}<p className="text-primary-text">{album.name}</p><p className="text-[12px] text-secondary-text">{album.year} · {providerName(profile.provider)}</p></button></li>)}</ul></Section>}
     </div>
   </section>;
+}
+
+/** Follow or unfollow an artist. Followed artists head the Artists list in the library and the sidebar. */
+function FollowButton({ artist, artworkUrl }: { artist: ArtistRef; artworkUrl: string | null }) {
+  const liked = useIsLikedArtist(artist);
+  const toggle = useLikedArtists((s) => s.toggle);
+  return (
+    <button type="button" aria-pressed={liked} onClick={() => toggle(artist, artworkUrl)} className={cx(pill, liked ? "bg-frost-300 text-primary-text hover:bg-frost-200" : "bg-frost-200 text-primary-text hover:bg-frost-300")}>
+      <Heart size={16} aria-hidden="true" className={liked ? "fill-lumen-lavender text-lumen-lavender" : undefined} />
+      {liked ? "Following" : "Follow"}
+    </button>
+  );
 }
 
 export function AlbumScreen() {

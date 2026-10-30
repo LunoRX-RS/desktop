@@ -26,10 +26,10 @@ use tokio::sync::{Notify, mpsc::UnboundedSender};
 
 const WINDOW: &str = "youtube-player";
 const PREFIX: &str = "LUNORX_ST|";
-const SCRIPT: &str = include_str!("page_player.js");
+pub(crate) const SCRIPT: &str = include_str!("page_player.js");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum PageState {
+pub(crate) enum PageState {
     Playing,
     Paused,
     Waiting,
@@ -38,7 +38,7 @@ enum PageState {
 }
 
 /// `LUNORX_ST|<video id>|<position ms>|<duration ms>|<state>` from the page title.
-fn parse_title(title: &str) -> Option<(&str, u64, u64, PageState)> {
+pub(crate) fn parse_title(title: &str) -> Option<(&str, u64, u64, PageState)> {
     let mut p = title.strip_prefix(PREFIX)?.split('|');
     let id = p.next()?;
     let pos = p.next()?.parse().ok()?;
@@ -61,6 +61,10 @@ struct Shared {
     loading: bool,
     seen: Option<PageState>,
     ready: bool,
+    /// True only after the engine asked to play. Until then the page's own autoplay is paused again and never reported
+    /// as playing: reporting it moved the engine to Playing before its own Play, which then failed as an invalid
+    /// transition ("Could not load this track").
+    wanted: bool,
 }
 
 pub struct PageHost {
@@ -121,6 +125,7 @@ impl PageHost {
             self.shared.clone(),
             self.ready.clone(),
         );
+        let app_for_pause = self.app.clone();
         WebviewWindowBuilder::new(&self.app, WINDOW, WebviewUrl::External(first_url.clone()))
             .title("LunoRX: YouTube player")
             .inner_size(480.0, 300.0)
@@ -129,25 +134,22 @@ impl PageHost {
             // A hidden WebView is otherwise suspended by the OS after a few minutes, which would stop the music.
             .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
             .initialization_script(SCRIPT)
-            .on_navigation(|u| {
-                u.scheme() == "https"
-                    && matches!(
-                        u.host_str(),
-                        Some(
-                            "www.youtube.com"
-                                | "youtube.com"
-                                | "consent.youtube.com"
-                                | "accounts.google.com"
-                                | "www.google.com"
-                        )
-                    )
-            })
+            .on_navigation(allowed_page_url)
             .on_new_window(|_, _| NewWindowResponse::Deny)
             .on_document_title_changed(move |_, title| {
                 let Some((id, pos, dur, state)) = parse_title(&title) else {
                     return;
                 };
                 let mut s = lock(&shared);
+                #[cfg(debug_assertions)]
+                if s.seen != Some(state) {
+                    eprintln!(
+                        "[page] {state:?} loading={} wanted={} expected_match={}",
+                        s.loading,
+                        s.wanted,
+                        id == s.expected
+                    );
+                }
                 if id != s.expected {
                     return;
                 }
@@ -157,6 +159,14 @@ impl PageHost {
                     s.ready = true;
                     drop(s);
                     ready.notify_waiters();
+                    return;
+                }
+                if state == PageState::Playing && !s.wanted {
+                    s.seen = None;
+                    drop(s);
+                    if let Some(w) = app_for_pause.get_webview_window(WINDOW) {
+                        let _ = w.eval("window.__lunorx&&window.__lunorx.pause()");
+                    }
                     return;
                 }
                 drop(s);
@@ -183,6 +193,7 @@ impl PageHost {
                 loading: true,
                 seen: None,
                 ready: false,
+                wanted: false,
             };
         }
         let existed = self.app.get_webview_window(WINDOW).is_some();
@@ -215,13 +226,29 @@ impl PageHost {
         w.eval(js).map_err(|_| failed())
     }
 
+    /// Pauses the page and keeps the window for the next track. Tearing it down and building a window with the same
+    /// label straight after (Next, repeat) can fail while the old one is still closing, which left Next and loop dead.
     fn stop(&self) {
         if let Some(w) = self.app.get_webview_window(WINDOW) {
             let _ = w.eval("window.__lunorx&&window.__lunorx.pause()");
-            // Destroyed at once, not asked to close: a later load reuses the label straight away.
-            let _ = w.destroy();
         }
+        lock(&self.shared).expected.clear();
     }
+}
+
+/// Where a player page may go: YouTube itself and the sign-in and consent hops it can send you through.
+pub(crate) fn allowed_page_url(u: &tauri::Url) -> bool {
+    u.scheme() == "https"
+        && matches!(
+            u.host_str(),
+            Some(
+                "www.youtube.com"
+                    | "youtube.com"
+                    | "consent.youtube.com"
+                    | "accounts.google.com"
+                    | "www.google.com"
+            )
+        )
 }
 
 /// A poisoned lock still holds consistent data here (plain flags and numbers), so keep going with it.
@@ -253,9 +280,13 @@ impl PlayerHost for PageHost {
             let result = match &req.command {
                 PlaybackCommand::Load(track) => self.load(&track.provider_track_id).await,
                 PlaybackCommand::Play | PlaybackCommand::Resume => {
+                    lock(&self.shared).wanted = true;
                     self.script("window.__lunorx&&window.__lunorx.play()")
                 }
-                PlaybackCommand::Pause => self.script("window.__lunorx&&window.__lunorx.pause()"),
+                PlaybackCommand::Pause => {
+                    lock(&self.shared).wanted = false;
+                    self.script("window.__lunorx&&window.__lunorx.pause()")
+                }
                 PlaybackCommand::Seek { position_ms } => self.script(&format!(
                     "window.__lunorx&&window.__lunorx.seek({position_ms})"
                 )),
@@ -311,7 +342,7 @@ impl PlayerHost for RoutingHost {
             let on_page = *lock(&self.on_page);
             match &req.command {
                 PlaybackCommand::Load(_) => {
-                    // A new load always starts from the direct player; leave the page paused and closed.
+                    // A new load always starts from the direct player; the page is paused and kept for reuse.
                     if on_page {
                         self.page.stop();
                     }

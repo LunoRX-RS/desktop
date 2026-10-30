@@ -6,7 +6,7 @@ import { playTrack } from "../../lib/playback";
 import { useUi } from "../../lib/store";
 import { TrackCover } from "../../components/TrackCover";
 import Analytics from "./Analytics";
-import { Button, EmptyState, Screen, Segmented, StatusNote } from "../../components/ui";
+import { Button, ConfirmButton, EmptyState, Screen, Segmented, StatusNote } from "../../components/ui";
 import { statsClearLocal, statsCloudClear, statsCloudSync, statsLocal, statsSetCloud, type PlayCountDto, type StatsViewDto } from "../../services/tauri/stats";
 
 type Scope = "device" | "cloud";
@@ -121,8 +121,8 @@ export default function StatsScreen() {
         </p>
         <div className="flex flex-wrap gap-2">
           <Button variant={local?.cloud ? "secondary" : "primary"} disabled={busy || !local} onClick={() => void toggleCloud(!local?.cloud)}>{local?.cloud ? "Turn off cloud sync" : "Turn on cloud sync"}</Button>
-          {local?.cloud && <Button variant="secondary" disabled={busy} onClick={() => void deleteCloud()}><Trash2 size={14} aria-hidden="true" />Delete cloud stats</Button>}
-          <Button variant="ghost" disabled={busy || !local || local.tracks.length === 0} onClick={() => void clearLocal()}>Clear this device</Button>
+          {local?.cloud && <ConfirmButton variant="secondary" disabled={busy} confirmLabel="Press again to delete" onConfirm={() => void deleteCloud()}><Trash2 size={14} aria-hidden="true" />Delete cloud stats</ConfirmButton>}
+          <ConfirmButton variant="ghost" disabled={busy || !local || local.tracks.length === 0} confirmLabel="Press again to clear" onConfirm={() => void clearLocal()}>Clear this device</ConfirmButton>
         </div>
       </section>
     </Screen>

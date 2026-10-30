@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-artists-cloud-follow"
+description = "Enables the artists_cloud_follow command without any pre-configured scope."
+commands.allow = ["artists_cloud_follow"]
+
+[[permission]]
+identifier = "deny-artists-cloud-follow"
+description = "Denies the artists_cloud_follow command without any pre-configured scope."
+commands.deny = ["artists_cloud_follow"]

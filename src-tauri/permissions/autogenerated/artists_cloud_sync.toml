@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-artists-cloud-sync"
+description = "Enables the artists_cloud_sync command without any pre-configured scope."
+commands.allow = ["artists_cloud_sync"]
+
+[[permission]]
+identifier = "deny-artists-cloud-sync"
+description = "Denies the artists_cloud_sync command without any pre-configured scope."
+commands.deny = ["artists_cloud_sync"]

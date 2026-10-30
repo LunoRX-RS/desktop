@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-dj-set-mix"
+description = "Enables the dj_set_mix command without any pre-configured scope."
+commands.allow = ["dj_set_mix"]
+
+[[permission]]
+identifier = "deny-dj-set-mix"
+description = "Denies the dj_set_mix command without any pre-configured scope."
+commands.deny = ["dj_set_mix"]

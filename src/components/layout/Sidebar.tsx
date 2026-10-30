@@ -1,4 +1,6 @@
 "use client";
+import { useSettingsStore } from "../../lib/settingsStore";
+import { hydrateLikedArtists, useLikedArtists } from "../../lib/likedArtists";
 import { SyncAllButton } from "../SyncAllButton";
 import { useLibrary } from "../../lib/library";
 import { playTrack as playSavedTrack } from "../../lib/playback";
@@ -8,6 +10,7 @@ import {
   CirclePlay,
   Cloud,
   Compass,
+  Disc3,
   Heart,
   Moon,
   PanelLeftClose,
@@ -96,6 +99,7 @@ const NAV: NavDef[] = [
   { view: "search", label: "Search", Icon: Search },
   { view: "explore", label: "Explore", Icon: Compass },
   { view: "replay", label: "Unified Replay", Icon: Sparkles },
+  { view: "dj", label: "DJ", Icon: Disc3 },
 ];
 
 function NavRow({
@@ -283,6 +287,9 @@ const linkBtn =
 /* ---------- Sidebar ---------- */
 
 export default function Sidebar() {
+  const followedArtists = useLikedArtists((st) => st.artists);
+  const followedKeys = useMemo(() => new Set(followedArtists.map((a) => `${a.provider}:${a.name}`)), [followedArtists]);
+  const djMode = useSettingsStore((st) => st.djMode);
   const view = useUi((s) => s.view);
   const navigate = useUi((s) => s.navigate);
   const collapsed = useUi((s) => s.sidebarCollapsed);
@@ -308,7 +315,9 @@ export default function Sidebar() {
 
   // Per-viewer state: collapsed flag and playlist order. Read once after mount, written on change.
   useEffect(() => {
-    if (readStore(COLLAPSED_KEY) === "1" && !useUi.getState().sidebarCollapsed) useUi.getState().toggleSidebar();
+    hydrateLikedArtists();
+    // The icon rail is the default; only an explicit "expanded" (0) saved by the viewer opens it.
+    if (readStore(COLLAPSED_KEY) === "0" && useUi.getState().sidebarCollapsed) useUi.getState().toggleSidebar();
     try {
       const raw = readStore(ORDER_KEY);
       const parsed: unknown = raw ? JSON.parse(raw) : [];
@@ -389,11 +398,12 @@ export default function Sidebar() {
       }
     }
     if (filter === "all" || filter === "artists") {
-      const artists = new Map(savedTracks.flatMap(t => t.artists.map(name => [`${t.provider}:${name}`, { name, provider: t.provider, id: t.artistRefs?.find(a => a.name === name)?.id ?? null }] as const)));
-      for (const [key, artist] of artists) out.push({ key: `artist:${key}`, kind: "artist", title: artist.name, subtitle: artist.provider === "YouTube" ? "YouTube Music" : artist.provider, tone: "violet", seed: key, active: false, playing: false, open: () => useUi.getState().openArtist(artist), play: () => useUi.getState().openArtist(artist) });
+      const artists = new Map<string, { name: string; provider: string; id: string | null }>(followedArtists.map((a) => [`${a.provider}:${a.name}`, { name: a.name, provider: a.provider, id: a.id }] as const));
+      for (const [k, v] of new Map(savedTracks.flatMap(t => t.artists.map(name => [`${t.provider}:${name}`, { name, provider: t.provider, id: t.artistRefs?.find(a => a.name === name)?.id ?? null }] as const)))) if (!artists.has(k)) artists.set(k, v);
+      for (const [key, artist] of artists) out.push({ key: `artist:${key}`, kind: "artist", title: artist.name, subtitle: `${followedKeys.has(key) ? "Following · " : ""}${artist.provider === "YouTube" ? "YouTube Music" : artist.provider}`, tone: "violet", seed: key, active: false, playing: false, open: () => useUi.getState().openArtist(artist), play: () => useUi.getState().openArtist(artist) });
     }
     return out;
-  }, [savedTracks, filter, ordered, likedCount, view, selectedPlaylistId, openLibrary, setSelectedPlaylist, navigate]);
+  }, [savedTracks, followedArtists, followedKeys, filter, ordered, likedCount, view, selectedPlaylistId, openLibrary, setSelectedPlaylist, navigate]);
 
   const tabKey = items.some((i) => i.key === focusKey) ? focusKey : (items[0]?.key ?? null);
 
@@ -513,7 +523,7 @@ export default function Sidebar() {
       </div>
 
       <div className="flex flex-col gap-0.5">
-        {NAV.map((def) => (
+        {NAV.filter((def) => def.view !== "dj" || djMode).map((def) => (
           <NavRow key={def.view} def={def} active={view === def.view} collapsed={collapsed} onSelect={() => navigate(def.view)} bind={tips.bind} />
         ))}
       </div>

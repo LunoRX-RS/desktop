@@ -5,9 +5,14 @@ import { usePlayback } from "../../../lib/playback";
 import { Switch } from "../../../components/Lyrics";
 import { autostartGet, autostartSet } from "../../../services/tauri/autostart";
 import { Inset, NoteRow, SettingRow, StatusRow } from "../rows";
+import { useSettingsStore } from "../../../lib/settingsStore";
+import { useDj } from "../../dj/djStore";
+import { djStop } from "../../../services/tauri/dj";
 
 export function Playback({ mac = false }: { mac?: boolean }) {
   const nativeAvailable = usePlayback((s) => s.available);
+  const djMode = useSettingsStore((s) => s.djMode);
+  const setDjMode = useSettingsStore((s) => s.setDjMode);
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [autostartError, setAutostartError] = useState("");
   useEffect(() => {
@@ -40,6 +45,18 @@ export function Playback({ mac = false }: { mac?: boolean }) {
           status="Unsupported"
           hint="Spotify’s third-party playback SDK requires Premium. Spotify Free playback in LunoRX is unavailable."
         />
+      </Inset>
+      <Inset id="settings-dj" title="DJ mode">
+        <SettingRow label="Show DJ mode" hint="Adds the DJ screen to the sidebar and a DJ button to the player bar: two YouTube decks with loops, cues, tempo, effects and lyrics. Turning it off stops both decks.">
+          <Switch on={djMode} name="Show DJ mode" onChange={(on) => {
+            setDjMode(on);
+            if (!on) {
+              void djStop("a").catch(() => {});
+              void djStop("b").catch(() => {});
+              useDj.setState((s) => ({ decks: { a: { ...s.decks.a, videoId: null }, b: { ...s.decks.b, videoId: null } }, reports: { a: null, b: null } }));
+            }
+          }}>{djMode ? "On" : "Off"}</Switch>
+        </SettingRow>
       </Inset>
       <Inset id="settings-startup" title="Startup">
         <SettingRow label="Restore last track" hint="Read-only. A restored track waits for you to press Play.">Resumes paused</SettingRow>
