@@ -203,12 +203,13 @@ impl PageHost {
         w.eval(js).map_err(|_| failed())
     }
 
+    /// Pauses the page and keeps the window for the next track. Tearing it down and building a window with the same
+    /// label straight after (Next, repeat) can fail while the old one is still closing, which left Next and loop dead.
     fn stop(&self) {
         if let Some(w) = self.app.get_webview_window(WINDOW) {
             let _ = w.eval("window.__lunorx&&window.__lunorx.pause()");
-            // Destroyed at once, not asked to close: a later load reuses the label straight away.
-            let _ = w.destroy();
         }
+        lock(&self.shared).expected.clear();
     }
 }
 
@@ -314,7 +315,7 @@ impl PlayerHost for RoutingHost {
             let on_page = *lock(&self.on_page);
             match &req.command {
                 PlaybackCommand::Load(_) => {
-                    // A new load always starts from the direct player; leave the page paused and closed.
+                    // A new load always starts from the direct player; the page is paused and kept for reuse.
                     if on_page {
                         self.page.stop();
                     }
