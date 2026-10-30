@@ -129,14 +129,35 @@ button:disabled {
 @supports (backdrop-filter: blur(1px)) {
   .glass,
   .glass-bar,
-  .glass-card {
+  .glass-card,
+  .glass-solid {
     backdrop-filter: var(--lx-glass);
   }
 }
 
-/* Sidebar vibrancy. Glass is only for the sidebar and the player bar. No rim, no border. */
+/* App ambient (AmbientBackdrop): the blurred current artwork over a slate/violet base, under a scrim, behind all
+   chrome. Every glass surface blurs this layer. The scrim keeps a white cover dark enough for Secondary Text. */
+.lx-app-ambient {
+  background:
+    radial-gradient(60% 55% at 12% 8%, rgba(197, 180, 255, 0.32) 0%, transparent 70%),
+    radial-gradient(55% 50% at 92% 95%, rgba(141, 184, 242, 0.26) 0%, transparent 70%),
+    radial-gradient(45% 40% at 70% 30%, rgba(36, 31, 54, 0.9) 0%, transparent 70%),
+    var(--color-night-canvas);
+}
+.lx-app-ambient-scrim { background-color: rgba(0, 0, 0, 0.6); background-image: var(--lx-grain); background-size: 160px 160px; }
+
+/* Main content pane: a dark tint over the shell glass. No blur of its own: the shell (.glass) already blurs the
+   ambient layer, and a nested backdrop-filter would double the cost. */
+.glass-pane {
+  background-color: rgba(0, 0, 0, 0.34);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+/* Shell vibrancy: top bar, sidebar and the frame around the content pane, over the app ambient. No rim, no border. */
 .glass {
-  background-color: rgba(24, 24, 27, 0.62);
+  background-color: rgba(18, 18, 22, 0.5);
   /* Via a custom property: the CSS minifier otherwise drops the unprefixed declaration, and Chromium webviews need it. */
   --lx-glass: blur(40px) saturate(1.8);
   backdrop-filter: var(--lx-glass);
@@ -159,8 +180,28 @@ button:disabled {
   backdrop-filter: var(--lx-glass);
   -webkit-backdrop-filter: var(--lx-glass);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    inset 0 0 0 1px rgba(255, 255, 255, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+/* Popovers (queue, add-to-playlist, palette, menus): frosted Elevated, denser than the shell so text over a busy
+   page stays readable. */
+.glass-solid {
+  background-color: rgba(29, 29, 32, 0.78);
+  --lx-glass: blur(40px) saturate(1.6);
+  backdrop-filter: var(--lx-glass);
+  -webkit-backdrop-filter: var(--lx-glass);
+}
+
+/* A backdrop-filter inside another backdrop-filter cannot see the page behind its parent, so a popover opened from the player
+   island or a glass card would only be a 78% tint with the page showing through, unblurred. There it is solid Elevated instead. */
+.lx-player-dock .glass-solid,
+.glass-card .glass-solid,
+.glass-bar .glass-solid {
+  background-color: var(--color-elevated);
+  --lx-glass: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 @media (prefers-reduced-transparency: reduce) {
@@ -172,10 +213,16 @@ button:disabled {
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
   }
-}
-
-.glass-solid {
-  background-color: var(--color-elevated);
+  .glass-solid {
+    background-color: var(--color-elevated);
+    --lx-glass: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  .glass-pane { background-color: var(--color-night-canvas); }
+  .lx-player-dock > footer { background-color: var(--color-surface); }
+  .lx-hero-glow { display: none; }
+  .lx-app-ambient { display: none; }
 }
 
 /* One stroke weight for every line icon. */
@@ -654,6 +701,60 @@ dialog.lx-np[open]::backdrop { animation: lx-fade 360ms var(--ease-lumen) both; 
   transform: none;
 }
 
+/* Tiles (track rail, media card, featured card): on hover the tile rises 4px and its artwork zooms 5% inside the
+   cover's own overflow clip. Individual translate/scale properties on elements that carry no Tailwind translate or
+   scale utility, so nothing is overridden. Rails pad their top by 12px so the lift is not clipped. (x3) */
+.lx-lift.lx-lift.lx-lift { transition: translate 260ms var(--ease-lumen); }
+.lx-lift.lx-lift.lx-lift img { transition: scale 500ms var(--ease-lumen); }
+.lx-lift.lx-lift.lx-lift:not(.lx-hero):is(:hover, :has(:focus-visible)) { translate: 0 -4px; }
+.lx-lift.lx-lift.lx-lift:is(:hover, :has(:focus-visible)) img { scale: 1.05; }
+/* The featured card's glow image sits under a 72px blur; zooming it would re-rasterise the blur every frame. */
+.lx-lift.lx-lift.lx-lift .lx-hero-glow img { scale: none; }
+
+/* Buttons grow a little on hover (icon buttons more), on top of the 0.97 press. .lx-press transitions scale. */
+[data-ln-icon].lx-press:hover:not(:disabled) { scale: 1.08; }
+[data-ln-btn].lx-press:hover:not(:disabled) { scale: 1.02; }
+
+/* Sidebar: the nav glyph nudges right and library art zooms on hover. */
+nav[aria-label="Primary"] button:not([data-ln-icon]):not([data-lib-row]) svg { transition: translate 180ms var(--ease-lumen); }
+nav[aria-label="Primary"] button:not([data-ln-icon]):not([data-lib-row]):hover svg { translate: 2px 0; }
+[data-lib-row] img { transition: scale 260ms var(--ease-lumen); }
+[data-lib-row]:hover img { scale: 1.08; }
+
+/* Condensed page bar (Screen): hidden until the big title has scrolled away, then a glass strip with the title and the page actions.
+   Opacity and transform only. The strip is the page's top edge, so it spans the pane and carries a hairline underneath. */
+.lx-page-bar {
+  opacity: 0;
+  transform: translateY(-6px);
+  pointer-events: none;
+  background: rgba(8, 8, 12, 0.72);
+  --lx-glass: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: var(--lx-glass);
+  backdrop-filter: var(--lx-glass);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: opacity 200ms var(--ease-lumen), transform 200ms var(--ease-lumen);
+}
+.lx-page-bar[data-stuck="true"] { opacity: 1; transform: none; pointer-events: auto; }
+@media (prefers-reduced-motion: reduce) { .lx-page-bar { transition: none; transform: none; } }
+@media (prefers-reduced-transparency: reduce) { .lx-page-bar { background: var(--color-surface); -webkit-backdrop-filter: none; backdrop-filter: none; } }
+
+/* Sections below the fold rise in once when they scroll into view (Section, useRevealOnView sets data-view). Not a
+   CSS view timeline: a scroll-driven animation never finishes, so every section would stay the containing block for
+   its fixed children (tips, popovers). This one ends, and the backwards fill leaves nothing behind. (x3) */
+.lx-view.lx-view.lx-view[data-view="wait"] { opacity: 0; }
+.lx-view.lx-view.lx-view[data-view="in"] { animation: lx-rise 420ms var(--ease-lumen) backwards; }
+
+/* Floating player: the bar sits inside the shell glass as a rounded, rimmed island with a soft shadow. The footer's
+   own .glass tint is replaced; it still blurs, which separates it from the shell. */
+.lx-player-dock > footer {
+  border-radius: 16px;
+  background-color: rgba(255, 255, 255, 0.06);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 12px 32px rgba(0, 0, 0, 0.35);
+}
+
 /* Scrubber: progress eases linearly between ticks; while the pointer is held there is no transition at all. */
 .lx-fill { transition: width 250ms linear; }
 .lx-knob { transition: opacity 180ms var(--ease-lumen), left 250ms linear; }
@@ -710,6 +811,13 @@ dialog.lx-np[open]::backdrop { animation: lx-fade 360ms var(--ease-lumen) both; 
   .lx-reveal.lx-reveal-pop { transform: none; }
   .lx-eq i { animation: none !important; transform: scaleY(0.6); }
   .lx-check.lx-check.lx-check path:last-child { stroke-dasharray: none; stroke-dashoffset: 0; animation: none !important; }
+  .lx-view.lx-view.lx-view[data-view] { opacity: 1; animation: none !important; }
+  .lx-lift.lx-lift.lx-lift,
+  .lx-lift.lx-lift.lx-lift img,
+  [data-ln-icon].lx-press,
+  [data-ln-btn].lx-press,
+  nav[aria-label="Primary"] button svg,
+  [data-lib-row] img { translate: none !important; scale: none !important; }
 }
 
 /* settings-categories */
@@ -754,7 +862,7 @@ dialog.lx-np[open]::backdrop { animation: lx-fade 360ms var(--ease-lumen) both; 
   margin-inline: auto;
   font-family: var(--font-display);
   font-size: var(--lyr-size);
-  line-height: 1.3;
+  line-height: 1.38;
   font-weight: 700;
   letter-spacing: -0.02em;
   white-space: pre-line;
@@ -777,18 +885,28 @@ dialog.lx-np[open]::backdrop { animation: lx-fade 360ms var(--ease-lumen) both; 
 .ln-lyr-region[data-layout="split"] .ln-lyr-list { margin-inline: 0; }
 /* Distance falloff, CSS only so a line change re-renders just the active row. It sits on the line, not the item, so the gap dots keep their own
    brightness. Neighbours 55%, then 38%, 30%, 22%, far lines 16%; a light blur from three away (1px, 2px beyond four). */
-.ln-lyr-item { padding-block: 0.1em; }
+.ln-lyr-item { padding-block: 0.2em; }
 .ln-lyr-item > .ln-lyr-line {
   opacity: 0.16;
   filter: blur(2px);
-  transition: opacity 300ms var(--ease-lumen), filter 300ms var(--ease-lumen), color 300ms var(--ease-lumen), transform 300ms var(--ease-lumen);
+  /* Lines shrink toward their left edge and the active one grows to full size, so the hierarchy reads as depth, not only as fade. */
+  transform: scale(0.88);
+  transform-origin: 0 55%;
+  transition: opacity 300ms var(--ease-lumen), filter 300ms var(--ease-lumen), color 300ms var(--ease-lumen), transform 420ms var(--ease-lumen);
 }
+.ln-lyr-item:where([data-active="true"] + *, :has(+ [data-active="true"])) > .ln-lyr-line { transform: scale(0.94); }
 .ln-lyr-item:where([data-active="true"] + *, :has(+ [data-active="true"])) > .ln-lyr-line { opacity: 0.55; filter: none; }
 .ln-lyr-item:where([data-active="true"] + * + *, :has(+ * + [data-active="true"])) > .ln-lyr-line { opacity: 0.38; filter: none; }
 .ln-lyr-item:where([data-active="true"] + * + * + *, :has(+ * + * + [data-active="true"])) > .ln-lyr-line { opacity: 0.3; filter: blur(1px); }
 .ln-lyr-item:where([data-active="true"] + * + * + * + *, :has(+ * + * + * + [data-active="true"])) > .ln-lyr-line { opacity: 0.22; filter: blur(1px); }
 .ln-lyr-list[data-intro] .ln-lyr-item > .ln-lyr-line { opacity: 0.4; filter: none; }
-.ln-lyr-item[data-active="true"] > .ln-lyr-line { opacity: 1; filter: none; }
+.ln-lyr-item[data-active="true"] > .ln-lyr-line {
+  opacity: 1;
+  filter: none;
+  transform: scale(1);
+  /* The glow rides the line's opacity transition, so it fades in with the line and costs no extra animation. */
+  text-shadow: 0 0 36px rgba(255, 255, 255, 0.3), 0 2px 18px rgba(0, 0, 0, 0.35);
+}
 .ln-lyr-list .ln-lyr-item:hover:not([data-active="true"]) > .ln-lyr-line:not(:disabled) { opacity: 0.8; filter: none; }
 /* Instrumental gap (timed lyrics only): above the line that comes next, three dots fill with the real clock and breathe while live.
    The row is closed until the gap is live, grows once (300ms) and stays as a break once the line has started. Past rows open instantly. */
@@ -825,7 +943,8 @@ dialog.lx-np[open]::backdrop { animation: lx-fade 360ms var(--ease-lumen) both; 
   text-align: left;
   font-family: var(--font-display);
   font-size: 1em;
-  line-height: 1.25;
+  /* 1.34 clears Thai tone marks and vowels above and below the line, which collide at 1.25. */
+  line-height: 1.34;
   font-weight: 700;
   letter-spacing: -0.02em;
   overflow-wrap: break-word;
@@ -833,7 +952,7 @@ dialog.lx-np[open]::backdrop { animation: lx-fade 360ms var(--ease-lumen) both; 
   border-radius: 12px;
   color: var(--color-primary-text);
 }
-.ln-lyr-line[aria-current="true"] { color: var(--color-ink-bright); transform: translateY(-2px); }
+.ln-lyr-line[aria-current="true"] { color: var(--color-ink-bright); }
 /* Word highlight (real word timings only): sung words Primary Text, the current word Ink Bright with a small lift, upcoming words 55% (4.5:1 on the darkest and the brightest scrim). Colour and opacity only, no gradient text. */
 .ln-lyr-line[data-words] { color: var(--color-primary-text); }
 .ln-lyr-w {
@@ -842,7 +961,7 @@ dialog.lx-np[open]::backdrop { animation: lx-fade 360ms var(--ease-lumen) both; 
   transition: color 200ms var(--ease-lumen), opacity 200ms var(--ease-lumen), transform 160ms ease-out;
 }
 .ln-lyr-w[data-w="next"] { opacity: 0.55; }
-.ln-lyr-w[data-w="cur"] { color: var(--color-ink-bright); transform: translateY(-1px) scale(1.03); }
+.ln-lyr-w[data-w="cur"] { color: var(--color-ink-bright); transform: translateY(-2px) scale(1.05); text-shadow: 0 0 22px rgba(255, 255, 255, 0.55); }
 .ln-lyr-line:disabled { cursor: default; }
 .ln-lyr-back {
   position: absolute;
@@ -1052,11 +1171,15 @@ dialog.lx-np[open]::backdrop { animation: lx-fade 360ms var(--ease-lumen) both; 
 /* now-playing-chrome */
 /* Native Now Playing chrome: the floating controls pill and the notes under the artist line. In Full window the pill and the close
    button fade after 3s without input while playing (data-idle); the notes (honesty labels) never hide. */
-.ln-np-ambient-scrim { background: rgba(0, 0, 0, var(--np-scrim, 0.65)); }
+/* Grain: a huge blur over a dark scrim has so few levels that it bands (visible contour rings). 4% fine noise dithers it. */
+:root {
+  --lx-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 .04'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.ln-np-ambient-scrim { background-color: rgba(0, 0, 0, var(--np-scrim, 0.65)); background-image: var(--lx-grain); background-size: 160px 160px; }
 /* Scrim per layout: Full has text over the art (darkest), Split pairs a cover with lyrics, Page lets the art glow. */
-dialog.lx-np[data-np-layout="full"] { --np-scrim: 0.78; }
-dialog.lx-np[data-np-layout="split"] { --np-scrim: 0.66; }
-dialog.lx-np[data-np-layout="page"] { --np-scrim: 0.5; }
+dialog.lx-np[data-np-layout="full"] { --np-scrim: 0.76; }
+dialog.lx-np[data-np-layout="split"] { --np-scrim: 0.7; }
+dialog.lx-np[data-np-layout="page"] { --np-scrim: 0.62; }
 .ln-np-chrome { transition: opacity 200ms var(--ease-lumen); }
 .ln-np-stage[data-idle="true"] .ln-np-chrome:not(:has(:focus-visible)) { opacity: 0; pointer-events: none; }
 .ln-np-stage[data-idle="true"][data-layout="full"] { cursor: none; }
@@ -1067,15 +1190,33 @@ html[data-platform="linux"] .ln-np-stage[data-idle="true"][data-layout="full"] *
 .ln-np-pill {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  width: min(680px, calc(100% - 48px));
-  padding: 12px 16px;
-  border-radius: 24px;
-  background: rgba(20, 20, 28, 0.84);
-  -webkit-backdrop-filter: blur(32px) saturate(1.5);
-  backdrop-filter: blur(32px) saturate(1.5);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  gap: 6px;
+  width: min(920px, calc(100% - 48px));
+  padding: 12px 20px 14px;
+  border-radius: 28px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02)),
+    rgba(18, 18, 26, 0.66);
+  /* Via a custom property: the CSS minifier otherwise drops the unprefixed declaration, and Chromium webviews need it. */
+  --lx-glass: blur(40px) saturate(1.8);
+  -webkit-backdrop-filter: var(--lx-glass);
+  backdrop-filter: var(--lx-glass);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 24px 64px rgba(0, 0, 0, 0.5);
 }
+/* Play: one solid off-white disc, the only filled control. Unlayered, so it beats the IconButton utilities. */
+.ln-np-play.ln-np-play {
+  width: 48px;
+  height: 48px;
+  border-radius: 9999px;
+  background: var(--color-primary-text);
+  color: var(--color-on-ink);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+.ln-np-play.ln-np-play:hover:not(:disabled) { background: var(--color-ink-bright); }
+.ln-np-sep { width: 1px; height: 20px; margin-inline: 4px; background: rgba(255, 255, 255, 0.14); }
 @media (prefers-reduced-transparency: reduce) {
   .ln-np-pill { background: var(--color-elevated-deep); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
@@ -1084,9 +1225,36 @@ html[data-platform="linux"] .ln-np-stage[data-idle="true"][data-layout="full"] *
 .ln-np-pill .ln-lyr-seg-btn { height: 32px; }
 .ln-np-pill .ln-lyr-seg { padding: 2px; }
 .ln-np-pill .ln-lyr-menu .ln-lyr-switch { min-height: 36px; }
-.ln-np-notes { text-shadow: 0 0 10px rgba(0, 0, 0, 0.7); display: flex; flex-direction: column; gap: 2px; max-width: 360px; margin-top: 2px; }
-.ln-np-note { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; color: var(--color-secondary-text); }
-.ln-np-meta { display: block; }
+.ln-np-notes { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-width: 360px; margin-top: 12px; }
+/* The fallback sentence is one quiet pill; the full text is in its title. The source line under it reads as a credit. */
+.ln-np-note {
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 4px 11px;
+  border-radius: 9999px;
+  background: var(--color-frost-200);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+  font-size: 11.5px;
+  line-height: 16px;
+  color: var(--color-secondary-text);
+}
+.ln-np-note.ln-np-meta {
+  /* MetaLine also carries .ln-np-note: undo the pill so the source credit is plain text. */
+  display: block;
+  padding: 0 2px;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+  white-space: normal;
+  font-size: 11px;
+  line-height: 14px;
+  letter-spacing: 0.03em;
+  color: var(--color-tertiary-text);
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.6);
+}
 .ln-np-meta::first-letter { text-transform: uppercase; }
 .ln-np-flag { color: var(--color-primary-text); cursor: help; }
 .ln-np-flag svg { display: inline; margin-left: 4px; vertical-align: -2px; }

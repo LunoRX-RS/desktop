@@ -107,7 +107,7 @@ export const useUi = create<UiState>()((set, get) => ({
   view: "home",
   back: [],
   forward: [],
-  sidebarCollapsed: false,
+  sidebarCollapsed: true,
   paletteOpen: false,
   nowPlayingOpen: false,
   lyricsOpen: false,

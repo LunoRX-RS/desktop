@@ -2,13 +2,14 @@
 import type { View } from "../../lib/store";
 import { useLibrary } from "../../lib/library";
 import { useHistory, clearHistory, refreshHistory } from "../../lib/history";
-import { Button, Screen, Section, StatusNote } from "../../components/ui";
+import { Button, ConfirmButton, Screen, Section, StatusNote } from "../../components/ui";
 import { TrackRail } from "../../components/TrackRail";
 import { statsLocal } from "../../services/tauri/stats";
 import { topPlayed } from "../../lib/topPlayed";
 import type { SearchHitDto } from "../../services/tauri/search";
 import { useEffect, useState } from "react";
 import LiveFeed from "../discovery/LiveFeed";
+import { QuickPicks } from "./QuickPicks";
 type Props = { onNavigate: (view: View) => void; onOpenPlaylist: (id: string) => void };
 export default function HomeScreen(_props: Props) {
   const history = useHistory(s => s.tracks);
@@ -30,10 +31,17 @@ export default function HomeScreen(_props: Props) {
   return <Screen id="home-title" title="Listen Now" caption="Real music from YouTube Music, your likes and listening on this device.">
     <div className="flex flex-col gap-8">
       {historyError && <StatusNote role="alert">{historyError}<Button onClick={() => void refreshHistory()}>Retry history</Button></StatusNote>}
-      {history.length > 0 && <Section id="recently-played" title="Recently played" action={<Button variant="ghost" onClick={() => void clearHistory()}>Clear history</Button>}><TrackRail label="Recently played" hits={history.slice(0, 24)} /><p className="mt-2 text-[12px] text-secondary-text">Saved on this device. Recorded after playback starts.</p></Section>}
+      <div className={history.length > 0 ? "grid items-stretch gap-6 @3xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]" : ""}>
+        <LiveFeed kind="home" featured part="hero" />
+        {history.length > 0 && <div className="flex flex-col gap-2">
+          <QuickPicks id="recently-played" title="Jump back in" hits={history.slice(0, 5)} action={<ConfirmButton variant="ghost" confirmLabel="Press again to clear" onConfirm={() => void clearHistory()}>Clear history</ConfirmButton>} />
+          <p className="text-[12px] text-secondary-text">Saved on this device. Recorded after playback starts.</p>
+        </div>}
+      </div>
+      {history.length > 5 && <Section id="earlier-played" title="Earlier"><TrackRail label="Earlier" hits={history.slice(5, 29)} /></Section>}
       {oftenFailed && <StatusNote role="alert">Could not read your play counts, so Most played may be out of date.<Button onClick={() => setAttempt((n) => n + 1)}>Retry Most played</Button></StatusNote>}
       {often.length >= 3 && <Section id="home-most-played" title="Most played"><TrackRail label="Most played" hits={often} /></Section>}
-      <LiveFeed kind="home" featured rail />
+      <LiveFeed kind="home" featured part="rails" rail />
       {likes.length > 0 && <Section id="home-liked" title="Your liked songs"><TrackRail label="Your liked songs" hits={likes.slice(0, 24)} /></Section>}
     </div>
   </Screen>;

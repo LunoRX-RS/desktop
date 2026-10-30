@@ -1,6 +1,6 @@
 "use client";
 import { useSettingsStore } from "../../lib/settingsStore";
-import { useLikedArtists } from "../../lib/likedArtists";
+import { hydrateLikedArtists, useLikedArtists } from "../../lib/likedArtists";
 import { SyncAllButton } from "../SyncAllButton";
 import { useLibrary } from "../../lib/library";
 import { playTrack as playSavedTrack } from "../../lib/playback";
@@ -315,7 +315,9 @@ export default function Sidebar() {
 
   // Per-viewer state: collapsed flag and playlist order. Read once after mount, written on change.
   useEffect(() => {
-    if (readStore(COLLAPSED_KEY) === "1" && !useUi.getState().sidebarCollapsed) useUi.getState().toggleSidebar();
+    hydrateLikedArtists();
+    // The icon rail is the default; only an explicit "expanded" (0) saved by the viewer opens it.
+    if (readStore(COLLAPSED_KEY) === "0" && useUi.getState().sidebarCollapsed) useUi.getState().toggleSidebar();
     try {
       const raw = readStore(ORDER_KEY);
       const parsed: unknown = raw ? JSON.parse(raw) : [];

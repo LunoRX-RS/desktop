@@ -402,6 +402,7 @@ pub fn install(app: &AppHandle, menu: Option<PlaybackMenu>) {
         let mut throttle = Throttle::default();
         let mut last_controls = None;
         let mut last_menu = None;
+        let mut shared_lyrics = super::shared_state::lyrics_version();
         loop {
             CHANGED.notified().await;
             let dto = progress(&app.state::<PlayerState>()).await;
@@ -411,6 +412,11 @@ pub fn install(app: &AppHandle, menu: Option<PlaybackMenu>) {
             let cover = artwork_slot().1.clone().filter(|_| info.is_some());
             let ctl = controls(dto.player.state);
             let send_info = throttle.accept(&info, Instant::now());
+            let lyrics_now = super::shared_state::lyrics_version();
+            if send_info || lyrics_now != shared_lyrics {
+                shared_lyrics = lyrics_now;
+                super::shared_state::publish(&info, cover.as_deref());
+            }
             let send_ctl = last_controls != Some(ctl);
             last_controls = Some(ctl);
             if send_info || send_ctl {

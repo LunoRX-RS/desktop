@@ -23,6 +23,8 @@ import { playerTrackInfo } from "../../services/tauri/player";
 import NativeQueue from "../queue/NativeQueue";
 
 const GENERIC_ERROR = "Something went wrong. Try again.";
+/** The same search without its last word: a real next step when a long query finds nothing. Empty when there is nothing to drop. */
+const shorterQuery = (text: string) => text.trim().split(/\s+/).slice(0, -1).join(" ");
 
 // Plain words for what each provider can do for search right now.
 const SEARCH_WORDS: Record<string, string> = {
@@ -262,7 +264,8 @@ export default function SearchScreen() {
         {!loading && noticeGroups.map(group => <SourceGroup key={group.provider} group={group} onRetry={() => void runSearch(view.text)} />)}
 
         {!loading && noHits && noticeGroups.length === 0 && (
-          <EmptyState icon={<SearchIcon size={24} />} title={`No results for “${view.text}”`}>
+          <EmptyState icon={<SearchIcon size={24} />} title={`No results for “${view.text}”`}
+            action={shorterQuery(view.text) ? <Button variant="secondary" className="mt-1" onClick={() => void runSearch(shorterQuery(view.text))}>Search “{shorterQuery(view.text)}”</Button> : undefined}>
             Try another spelling, or search for the artist or song name only.
           </EmptyState>
         )}

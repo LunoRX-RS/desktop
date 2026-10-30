@@ -275,7 +275,7 @@ export function NativeNowPlaying() {
       }}
       className="lx-np outline-none fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none overflow-hidden border-0 bg-night-canvas p-0 text-primary-text backdrop:bg-black/80">
       <div key={track.providerTrackId} aria-hidden="true" className="lx-ambient-in pointer-events-none absolute inset-0 overflow-hidden">
-        <div data-playing={playing} className="ln-native-ambient absolute -inset-24 scale-125 opacity-45 blur-[90px] saturate-150 motion-reduce:animate-none">
+        <div data-playing={playing} className="ln-native-ambient absolute -inset-24 scale-125 opacity-60 blur-[90px] saturate-[2] motion-reduce:animate-none">
           <TrackCover url={artwork} videoId={track.providerTrackId} className="size-full rounded-none" />
         </div>
         <div className="ln-np-ambient-scrim absolute inset-0" />
@@ -286,43 +286,43 @@ export function NativeNowPlaying() {
         <div className={cx(full ? "pointer-events-none absolute inset-x-0 bottom-6 z-10 flex justify-center" : "mt-5 flex justify-center")}>
           <div ref={pill} className="ln-np-pill ln-np-chrome pointer-events-auto" role="group" aria-label="Playback controls">
             <div className="flex items-center gap-3 text-[11px] tabular-nums text-secondary-text">
-              <span>{formatDuration(s.positionMs / 1000)}</span>
+              <span className="w-9 text-right">{formatDuration(s.positionMs / 1000)}</span>
               <Scrubber label="Seek YouTube" max={Math.max(1, s.durationMs / 1000)} value={s.positionMs / 1000}
                 disabled={!seekable} onCommit={(value) => void seekPlayback(value)} className="flex-1" />
-              <span>{formatDuration(s.durationMs / 1000)}</span>
-              <span className="ml-2 inline-flex items-center gap-1.5">
+              <span className="w-9">{formatDuration(s.durationMs / 1000)}</span>
+              <span className="ml-3 inline-flex shrink-0 items-center gap-1.5">
                 {s.volume === 0 ? <VolumeX size={16} aria-hidden="true" /> : s.volume < 50 ? <Volume1 size={16} aria-hidden="true" /> : <Volume2 size={16} aria-hidden="true" />}
                 <Scrubber label="Volume" max={100} value={s.volume} disabled={!seekable} onChange={(value) => void setPlaybackVolume(value)} className="w-24" />
               </span>
             </div>
-            <div className="flex items-center justify-center">
-              <div className="flex items-center gap-1">
-                <RepeatButton className="size-9" />
-                <IconButton label="Previous track" disabled={s.busy || !seekable} onClick={() => void playerSkip(false)} className="size-10"><SkipBack size={22} fill="currentColor" /></IconButton>
-                <IconButton label={playing ? "Pause YouTube" : "Play YouTube"} disabled={s.busy} onClick={() => void togglePlayback()} className="size-11">
-                  {playing ? <Pause size={28} fill="currentColor" /> : <Play size={28} fill="currentColor" />}
-                </IconButton>
-                <IconButton label="Next track" disabled={s.busy || !seekable} onClick={() => void playerSkip(true)} className="size-10"><SkipForward size={22} fill="currentColor" /></IconButton>
-                <AutoplayButton className="size-9" />
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center justify-start">
+            <div className="ln-np-pill-row">
+              <div className="flex min-w-0 items-center gap-3">
                 {lyricsOpen && (
                   <LyricsSourceControl track={{ providerTrackId: track.providerTrackId, title, artists, durationMs: s.durationMs }} sources={sources} pref={pref} choice={choice}
                     info={s.infoState === "error" ? "error" : info ? "ready" : "loading"} onPick={setPref} onEntry={(entry) => useLyricsStore.getState().setOverride(track.providerTrackId, entry)}
                     offsetApplies={!!offKey} offsetMs={offsetMs} onOffset={changeOffset} onOpenSettings={openLyricsSettings} />)}
               </div>
-              <div className="flex items-center justify-end gap-1">
+              <div className="flex items-center gap-1.5">
+                <RepeatButton className="size-9" />
+                <IconButton label="Previous track" disabled={s.busy || !seekable} onClick={() => void playerSkip(false)} className="size-10"><SkipBack size={22} fill="currentColor" /></IconButton>
+                <IconButton label={playing ? "Pause YouTube" : "Play YouTube"} disabled={s.busy} onClick={() => void togglePlayback()} className="ln-np-play">
+                  {playing ? <Pause size={22} fill="currentColor" /> : <Play size={22} fill="currentColor" className="translate-x-[1px]" />}
+                </IconButton>
+                <IconButton label="Next track" disabled={s.busy || !seekable} onClick={() => void playerSkip(true)} className="size-10"><SkipForward size={22} fill="currentColor" /></IconButton>
+                <AutoplayButton className="size-9" />
+              </div>
+              <div className="ln-np-tools flex items-center justify-end gap-1">
                 {lyricsOpen && <span ref={setChrome} className="inline-flex items-center gap-1" />}
                 {lyricsOpen && <LayoutToggle value={layout} onChange={setLayout} />}
+                {lyricsOpen && <span aria-hidden="true" className="ln-np-sep" />}
                 {fullscreen.supported && (
                   <IconButton label={fullscreen.active ? "Exit full screen" : "Enter full screen"} onClick={fullscreen.toggle} className="size-9">
                     {fullscreen.active ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
                   </IconButton>)}
-                <IconButton label="Make lyrics file" active={maker} aria-pressed={maker} onClick={() => setMaker(true)} className="size-9"><FilePenLine size={20} /></IconButton>
+                {!lyricsOpen && <IconButton label="Make lyrics file" active={maker} aria-pressed={maker} onClick={() => setMaker(true)} className="size-9"><FilePenLine size={20} /></IconButton>}
                 <IconButton label="Queue" active={queueOpen} aria-pressed={queueOpen} onClick={() => useUi.getState().toggleQueue()} className="size-9"><ListMusic size={20} /></IconButton>
                 <IconButton label="Show lyrics" active={lyricsOpen} aria-pressed={lyricsOpen} onClick={() => useUi.getState().setLyrics(!lyricsOpen)} className="size-9"><MicVocal size={20} /></IconButton>
+                <span aria-hidden="true" className="ln-np-sep" />
                 <IconButton label="Collapse Now Playing" onClick={() => useUi.getState().setNowPlaying(false)} className="size-9"><ChevronDown size={20} /></IconButton>
               </div>
             </div>

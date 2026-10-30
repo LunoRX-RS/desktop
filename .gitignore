@@ -34,3 +34,6 @@ src-tauri/bg_snapshot.bin
 
 # Local environment: copy .env.example to .env (the default backend URL is read at build time).
 .env
+
+# macOS widget and screen saver build output (macos/build.sh)
+macos/build/

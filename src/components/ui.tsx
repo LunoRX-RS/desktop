@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
 import { ChevronRight, CircleDot } from "lucide-react";
 import { ActivePill } from "./Motion";
 
@@ -20,7 +20,7 @@ type ButtonVariant = "primary" | "secondary" | "ghost";
 
 const VARIANT: Record<ButtonVariant, string> = {
   primary: "bg-primary-text text-on-ink hover:bg-ink-bright font-semibold",
-  secondary: "bg-frost-200 text-primary-text hover:bg-frost-300",
+  secondary: "bg-frost-200 text-primary-text shadow-[inset_0_0_0_1px_rgba(255,255,255,0.07)] hover:bg-frost-300",
   ghost: "text-secondary-text hover:bg-frost-100 hover:text-primary-text",
 };
 
@@ -43,6 +43,28 @@ export function Button({
     >
       {children}
     </button>
+  );
+}
+
+/**
+ * For actions that cannot be undone. The first press only asks (the label changes, coral); a second press within 4 seconds does it,
+ * and moving focus away or waiting puts it back. Same pattern everywhere, so people learn it once. Nothing shames the other choice.
+ */
+export function ConfirmButton({ confirmLabel = "Press again to confirm", onConfirm, children, ...rest }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onClick"> & { variant?: ButtonVariant; confirmLabel?: string; onConfirm: () => void }) {
+  const [armed, setArmed] = useState(false);
+  const timer = useRef<number | null>(null);
+  const stop = () => { if (timer.current) window.clearTimeout(timer.current); timer.current = null; };
+  useEffect(() => stop, []);
+  return (
+    <Button {...rest} className={cx(rest.className, armed && "text-critical-coral")} onBlur={(e) => { rest.onBlur?.(e); stop(); setArmed(false); }}
+      onClick={() => {
+        if (!armed) { setArmed(true); timer.current = window.setTimeout(() => setArmed(false), 4000); return; }
+        stop();
+        setArmed(false);
+        onConfirm();
+      }}>
+      {armed ? confirmLabel : children}
+    </Button>
   );
 }
 
@@ -160,7 +182,8 @@ export function Scrubber({
   );
 }
 
-// Page frame: large left-aligned title, optional quiet caption, then the content.
+// Page frame: large left-aligned title, optional quiet caption, then the content. Once the big title scrolls away, a condensed bar with the
+// same title and actions stays at the top of the page, so you always know where you are and the page actions never leave reach.
 export function Screen({
   id,
   title,
@@ -174,20 +197,59 @@ export function Screen({
   actions?: ReactNode;
   children: ReactNode;
 }) {
+  const sentinel = useRef<HTMLDivElement>(null);
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    // The sentinel sits under the big title; when it leaves the scroll port the title has gone with it.
+    const io = new IntersectionObserver(([entry]) => setStuck(!!entry && !entry.isIntersecting && entry.boundingClientRect.top < 0), { threshold: 0 });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
   return (
     <section aria-labelledby={id} className="flex flex-col gap-8">
+      {/* Zero-height sticky anchor: the bar hangs from it, so it takes no room in the page. */}
+      <div className="sticky top-0 z-20 h-0">
+        <div aria-hidden={!stuck} inert={!stuck} data-stuck={stuck ? "true" : undefined} className="lx-page-bar absolute inset-x-[-32px] top-0 flex h-14 items-center justify-between gap-4 px-8">
+          <p className="font-display truncate text-[17px] leading-6 font-bold tracking-[-0.015em]">{title}</p>
+          {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
+        </div>
+      </div>
       <header className="flex flex-col gap-1">
         <div className="flex flex-wrap items-end justify-between gap-4">
-          <h1 id={id} className="font-display text-[34px] leading-[40px] font-bold tracking-[-0.022em]">
+          <h1 id={id} className="font-display text-[34px] leading-[40px] font-bold tracking-[-0.03em]">
             {title}
           </h1>
           {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
         </div>
         {caption && <p className="max-w-[72ch] text-[13px] leading-[18px] text-secondary-text">{caption}</p>}
+        <div ref={sentinel} aria-hidden="true" className="h-px" />
       </header>
       {children}
     </section>
   );
+}
+
+// Below-the-fold sections wait hidden, then rise in once on entering view (globals.css .lx-view). Anything already on
+// screen at mount is left alone, so a page never draws half faded.
+function useRevealOnView() {
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    if (el.getBoundingClientRect().top < window.innerHeight) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    el.dataset.view = "wait";
+    const io = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting) return;
+      el.dataset.view = "in";
+      io.disconnect();
+    }, { rootMargin: "0px 0px -8% 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return ref;
 }
 
 export function Section({
@@ -203,10 +265,11 @@ export function Section({
   rule?: boolean;
   children: ReactNode;
 }) {
+  const reveal = useRevealOnView();
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-3">
+    <section ref={reveal} aria-labelledby={id} className="lx-view flex flex-col gap-3">
       <div className={cx("flex items-center justify-between gap-4", rule && "border-b border-hairline pb-2")}>
-        <h2 id={id} className="font-display text-[22px] leading-7 font-semibold tracking-[-0.015em]">
+        <h2 id={id} className="font-display text-[22px] leading-7 font-bold tracking-[-0.022em]">
           {title}
         </h2>
         {action}

@@ -22,6 +22,11 @@ function read(): LikedArtist[] {
   }
 }
 
+/** Loads the followed artists from storage. Call once after mount; a follow made before that is kept. */
+export function hydrateLikedArtists() {
+  if (useLikedArtists.getState().artists.length === 0) useLikedArtists.setState({ artists: read() });
+}
+
 interface LikedArtists {
   artists: LikedArtist[];
   /** Follows or unfollows. Returns the new state; false when storage refused the write. */
@@ -29,7 +34,8 @@ interface LikedArtists {
 }
 
 export const useLikedArtists = create<LikedArtists>((set, get) => ({
-  artists: typeof window === "undefined" ? [] : read(),
+  // Empty on the first render so it matches the static HTML; the stored list comes in after mount (hydrateLikedArtists).
+  artists: [],
   toggle: (artist, artworkUrl = null) => {
     const key = artistKey(artist);
     const had = get().artists.some((a) => artistKey(a) === key);

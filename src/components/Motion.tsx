@@ -11,7 +11,7 @@ import { cx, useMounted } from "./ui";
 /** One shared highlight that slides between the active items of a group (nav, chips, tabs). */
 export function ActivePill({ layoutId, className, radius = 8 }: { layoutId: string; className: string; radius?: number }) {
   const mounted = useMounted();
-  const cls = cx("pointer-events-none absolute inset-0 -z-10", className);
+  const cls = cx("pointer-events-none absolute inset-0 -z-10 ring-1 ring-white/[0.07] ring-inset", className);
   if (!mounted) return <span aria-hidden="true" className={cls} />;
   return <motion.span layoutId={layoutId} aria-hidden="true" transition={tween(DUR.base)} style={{ borderRadius: radius }} className={cls} />;
 }

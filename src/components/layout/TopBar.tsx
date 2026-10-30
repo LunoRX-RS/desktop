@@ -15,7 +15,7 @@ export default function TopBar() {
   return (
     <header
       data-tauri-drag-region
-      className="glass relative flex h-[var(--height-topbar)] shrink-0 items-center gap-3 px-4"
+      className="relative flex h-[var(--height-topbar)] shrink-0 items-center gap-3 px-4"
     >
       <div data-tauri-drag-region className={cx("flex items-center gap-0.5", side, mac && "pl-[66px]")}>
         <IconButton label="Back" onClick={goBack} disabled={back.length === 0} className="size-8">

@@ -43,18 +43,18 @@ export function TrackRail({ label, hits }: { label: string; hits: SearchHitDto[]
 	const arrow = "absolute top-[84px] z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-black/70 text-white shadow-[0_2px_8px_rgba(0,0,0,0.5)] transition-opacity hover:bg-black/85 focus-visible:opacity-100";
 	return (
 		<div className="group/rail relative">
-			<div ref={scroller} onScroll={measure} role="list" aria-label={label} className="lx-rail flex snap-x scroll-px-1 gap-4 overflow-x-auto px-1 pb-2">
+			<div ref={scroller} onScroll={measure} role="list" aria-label={label} className="lx-rail lx-stagger -mt-3 flex snap-x scroll-px-1 gap-4 overflow-x-auto px-1 pt-3 pb-2">
 				{hits.map((hit, i) => (
-					<div key={`${hit.provider}:${hit.providerTrackId}`} role="listitem" className="lx-reveal-host flex w-[168px] shrink-0 snap-start flex-col gap-2 2xl:w-[188px]">
+					<div key={`${hit.provider}:${hit.providerTrackId}`} role="listitem" className="lx-reveal-host lx-lift flex w-[168px] shrink-0 snap-start flex-col gap-2 2xl:w-[188px]">
 						<div className="relative aspect-square w-full">
-							<TrackCover url={hit.artworkUrl} videoId={hit.providerTrackId} className="size-full rounded-[8px] shadow-[0_1px_4px_rgba(0,0,0,0.45)]" />
+							<TrackCover url={hit.artworkUrl} videoId={hit.providerTrackId} className="size-full rounded-[6px] shadow-[0_1px_3px_rgba(0,0,0,0.6),0_6px_14px_rgba(0,0,0,0.3)]" />
 							<button
 								type="button"
 								disabled={busy}
 								onClick={() => void playTrack(hit, false, hits.slice(i + 1))}
 								aria-label={`Play ${hit.title}`}
 								title="Play"
-								className="lx-reveal absolute inset-0 flex items-center justify-center rounded-[8px] bg-black/50 text-white hover:bg-black/60 disabled:opacity-60"
+								className="lx-reveal absolute inset-0 flex items-center justify-center rounded-[6px] bg-black/50 text-white hover:bg-black/60 disabled:opacity-60"
 							>
 								<span className="flex size-11 items-center justify-center rounded-full bg-white/90 text-black">
 									<Play size={18} fill="currentColor" className="translate-x-[1px]" aria-hidden="true" />

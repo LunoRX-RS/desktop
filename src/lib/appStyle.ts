@@ -1,6 +1,7 @@
 "use client";
 import { useSyncExternalStore } from "react";
 import { BUILTIN_FONTS, familyOf, onCustomFontsChanged } from "./textStyle";
+import { initTheme } from "./theme";
 
 // The app-wide font and size. The font goes into --font-sans and --font-display (every screen reads them);
 // the size is the webview's zoom, so text, spacing and icons grow together and the layout reflows to the new width.
@@ -54,8 +55,8 @@ export function setAppFont(font: string) { state = clean({ ...state, font }); sa
 export function setAppScale(scale: number) { state = clean({ ...state, scale }); save(); void applyScale(); emit(); }
 export const resetAppScale = () => setAppScale(1);
 export const stepAppScale = (direction: 1 | -1) => setAppScale(state.scale + direction * SCALE_STEP);
-/** Applies the saved font and size. Call once on startup. */
-export function initAppStyle() { applyFont(); if (state.scale !== 1) void applyScale(); }
+/** Applies the saved theme, font and size. Call once on startup. */
+export function initAppStyle() { initTheme(); applyFont(); if (state.scale !== 1) void applyScale(); }
 /** After the saved custom fonts are registered: a font that is gone falls back to the default. */
 export function refreshAppStyleFonts(available: string[]) {
   if (state.font.startsWith("custom:") && !available.includes(state.font.slice(7))) { state = { ...state, font: "default" }; save(); emit(); }

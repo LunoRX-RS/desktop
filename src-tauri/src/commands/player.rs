@@ -75,7 +75,7 @@ pub async fn player_track_info(
         .as_ref()
         .ok()
         .and_then(|m| m.cache.metadata(&provider_track_id));
-    match (result, cached) {
+    let out = match (result, cached) {
         (Ok(mut info), Some(cached)) => {
             info.artwork_url = cached.artwork_url.or(info.artwork_url);
             Ok(info)
@@ -95,7 +95,11 @@ pub async fn player_track_info(
             lyrics_sources: track_info::no_sources(),
         }),
         (result, None) => result,
+    };
+    if let Ok(info) = &out {
+        crate::platform::note_lyrics(info);
     }
+    out
 }
 
 /// The one playback session. The engine is behind a tokio Mutex because `dispatch` awaits the host.
@@ -715,7 +719,19 @@ pub(crate) async fn dispatch(state: &PlayerState, cmd: PlaybackCommand) -> Reply
     };
     let mut engine = state.engine.lock().await;
     let before = snapshot(&engine);
+    #[cfg(debug_assertions)]
+    let (name, from) = (cmd.name(), engine.state());
     let result = engine.dispatch(cmd).await.map(|_| ());
+    #[cfg(debug_assertions)]
+    eprintln!(
+        "[engine] {name}: {from:?} -> {:?} ({})",
+        engine.state(),
+        if result.is_ok() {
+            "ok".to_owned()
+        } else {
+            format!("{result:?}")
+        }
+    );
     if let (Some(v), Ok(())) = (volume, &result) {
         state.volume.store(v, std::sync::atomic::Ordering::Relaxed);
     }

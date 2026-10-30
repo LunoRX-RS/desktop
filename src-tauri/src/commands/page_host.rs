@@ -61,6 +61,10 @@ struct Shared {
     loading: bool,
     seen: Option<PageState>,
     ready: bool,
+    /// True only after the engine asked to play. Until then the page's own autoplay is paused again and never reported
+    /// as playing: reporting it moved the engine to Playing before its own Play, which then failed as an invalid
+    /// transition ("Could not load this track").
+    wanted: bool,
 }
 
 pub struct PageHost {
@@ -121,6 +125,7 @@ impl PageHost {
             self.shared.clone(),
             self.ready.clone(),
         );
+        let app_for_pause = self.app.clone();
         WebviewWindowBuilder::new(&self.app, WINDOW, WebviewUrl::External(first_url.clone()))
             .title("LunoRX: YouTube player")
             .inner_size(480.0, 300.0)
@@ -136,6 +141,15 @@ impl PageHost {
                     return;
                 };
                 let mut s = lock(&shared);
+                #[cfg(debug_assertions)]
+                if s.seen != Some(state) {
+                    eprintln!(
+                        "[page] {state:?} loading={} wanted={} expected_match={}",
+                        s.loading,
+                        s.wanted,
+                        id == s.expected
+                    );
+                }
                 if id != s.expected {
                     return;
                 }
@@ -145,6 +159,14 @@ impl PageHost {
                     s.ready = true;
                     drop(s);
                     ready.notify_waiters();
+                    return;
+                }
+                if state == PageState::Playing && !s.wanted {
+                    s.seen = None;
+                    drop(s);
+                    if let Some(w) = app_for_pause.get_webview_window(WINDOW) {
+                        let _ = w.eval("window.__lunorx&&window.__lunorx.pause()");
+                    }
                     return;
                 }
                 drop(s);
@@ -171,6 +193,7 @@ impl PageHost {
                 loading: true,
                 seen: None,
                 ready: false,
+                wanted: false,
             };
         }
         let existed = self.app.get_webview_window(WINDOW).is_some();
@@ -257,9 +280,13 @@ impl PlayerHost for PageHost {
             let result = match &req.command {
                 PlaybackCommand::Load(track) => self.load(&track.provider_track_id).await,
                 PlaybackCommand::Play | PlaybackCommand::Resume => {
+                    lock(&self.shared).wanted = true;
                     self.script("window.__lunorx&&window.__lunorx.play()")
                 }
-                PlaybackCommand::Pause => self.script("window.__lunorx&&window.__lunorx.pause()"),
+                PlaybackCommand::Pause => {
+                    lock(&self.shared).wanted = false;
+                    self.script("window.__lunorx&&window.__lunorx.pause()")
+                }
                 PlaybackCommand::Seek { position_ms } => self.script(&format!(
                     "window.__lunorx&&window.__lunorx.seek({position_ms})"
                 )),
