@@ -314,6 +314,9 @@ async fn session(
         }
         status(&state, "finding", None);
         let mut queue = state.lock().map(|s| s.queue.clone()).unwrap_or_default();
+        // What the copy above was made from: asking for related music takes seconds, and an edit made meanwhile must
+        // not be overwritten when this pass publishes its list.
+        let cloned: Vec<String> = queue.iter().map(|t| t.id.clone()).collect();
         let (list, context) = state
             .lock()
             .map(|s| (s.list, s.context.clone()))
@@ -352,6 +355,9 @@ async fn session(
                 current: offline_of(&current),
             };
             let (refilled, picks) = related(&yt, &seed, &history, queue, &ctx).await;
+            if queue_edited(&state, &cloned) {
+                continue 'outer;
+            }
             queue = refilled;
             if let Ok(mut log) = taste.lock() {
                 for (id, x) in picks {
