@@ -321,7 +321,7 @@ fn device_sample_rate() -> Option<i64> {
     const K_AUDIO_OBJECT_SYSTEM_OBJECT: u32 = 1;
     const K_AUDIO_HARDWARE_PROPERTY_DEFAULT_OUTPUT_DEVICE: u32 = 0x644F7574; // 'dOut'
     const K_AUDIO_DEVICE_PROPERTY_NOMINAL_SAMPLE_RATE: u32 = 0x6E737274; // 'nsrt'
-    const K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL: u32 = 0;
+    const K_AUDIO_OBJECT_PROPERTY_SCOPE_GLOBAL: u32 = 0x676C_6F62; // 'glob'
     const K_AUDIO_OBJECT_PROPERTY_ELEMENT_MAIN: u32 = 0;
 
     let addr = AudioObjectPropertyAddress {
@@ -400,9 +400,15 @@ impl AudioSettings {
         // so a 48 kHz built-in speaker is not forced to 96 kHz and no longer pops; an explicit choice still forces
         // that rate. Only query the device on the coreaudio backend so non-macOS/null-output tests keep 0 for Auto.
         let requested = self.sample_rate.hz();
+        // The configured backend (set at init, before any load) and the selected device: the default-device rate only
+        // describes the output when mpv is on the default device. A chosen device keeps mpv's own automatic rate.
         let on_coreaudio =
-            mpv.get_property::<String>("current-ao").ok().as_deref() == Some("coreaudio");
-        let rate = if self.sample_rate == SampleRate::Auto && on_coreaudio {
+            mpv.get_property::<String>("options/ao").ok().as_deref() == Some("coreaudio");
+        let on_default_device = mpv
+            .get_property::<String>("audio-device")
+            .ok()
+            .is_none_or(|d| d == "auto");
+        let rate = if self.sample_rate == SampleRate::Auto && on_coreaudio && on_default_device {
             device_sample_rate().unwrap_or(requested)
         } else {
             requested

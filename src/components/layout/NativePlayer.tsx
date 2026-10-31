@@ -107,7 +107,7 @@ export function NativePlayerBar() {
       <div className="flex shrink-0 items-center justify-end gap-2 text-secondary-text">
         <IconButton label="Show lyrics" onClick={() => { useUi.getState().setLyrics(true); useUi.getState().setNowPlaying(true); }}><MicVocal size={17} /></IconButton>
         <DevicesButton />
-        {djMode && <IconButton label="DJ mixer" onClick={() => { const p = usePlayback.getState(); if (p.track) setHandoff({ videoId: p.track.providerTrackId, title: p.track.title, positionMs: p.positionMs }); useUi.getState().navigate("dj"); }}><Disc3 size={17} /></IconButton>}
+        {djMode && <IconButton label="DJ mixer" onClick={() => { const p = usePlayback.getState(); if (p.track && useUi.getState().view !== "dj") setHandoff({ videoId: p.track.providerTrackId, title: p.track.title, positionMs: p.positionMs }); useUi.getState().navigate("dj"); }}><Disc3 size={17} /></IconButton>}
         <IconButton label="Queue" active={queueOpen} aria-pressed={queueOpen} onClick={() => useUi.getState().toggleQueue()}><ListMusic size={17} /></IconButton>
         <IconButton label="Open Now Playing" onClick={() => useUi.getState().setNowPlaying(true)}><Maximize2 size={17} /></IconButton>
         <IconButton

@@ -38,7 +38,8 @@ struct NowProvider: TimelineProvider {
             let refresh = Date(timeIntervalSinceNow: Double(min(horizon, s.durationMs > 0 ? s.durationMs : horizon) - nowMs) / 1000 + 1)
             completion(Timeline(entries: entries, policy: .after(max(refresh, .now + 30))))
         } else {
-            completion(Timeline(entries: entries, policy: .after(.now + 900)))
+            // Paused or idle: a short refresh, so a resume shows within a minute even without a reload from the app.
+            completion(Timeline(entries: entries, policy: .after(.now + 60)))
         }
     }
 
