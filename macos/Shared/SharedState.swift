@@ -22,6 +22,14 @@ struct NowPlayingSnapshot: Decodable {
 
     var isIdle: Bool { title.isEmpty }
 
+    /// A playing snapshot whose song should have ended long ago: the app quit or crashed without writing idle. The writer
+    /// only writes on change, so a long song that is still playing is not stale until its own end (plus a minute).
+    func isExpired(at date: Date) -> Bool {
+        guard playing, durationMs > 0 else { return false }
+        let remaining = max(0, durationMs - positionMs)
+        return date.timeIntervalSince1970 * 1000 > updatedAtMs + Double(remaining) + 60_000
+    }
+
     func position(at date: Date) -> Int {
         guard playing else { return positionMs }
         let elapsed = max(0, Int(date.timeIntervalSince1970 * 1000 - updatedAtMs))
@@ -64,7 +72,11 @@ enum SharedStore {
             guard let data = try? Data(contentsOf: dir.appendingPathComponent("now-playing.json")),
                   let snapshot = try? JSONDecoder().decode(NowPlayingSnapshot.self, from: data),
                   snapshot.version == 1 else { continue }
-            if best == nil || snapshot.updatedAtMs > best!.0.updatedAtMs { best = (snapshot, dir) }
+            // An expired playing snapshot reads as nothing playing.
+            let live = snapshot.isExpired(at: .now)
+                ? NowPlayingSnapshot(version: 1, title: "", artist: "", playing: false, positionMs: 0, durationMs: 0, updatedAtMs: snapshot.updatedAtMs, artwork: nil, lyrics: [])
+                : snapshot
+            if best == nil || live.updatedAtMs > best!.0.updatedAtMs { best = (live, dir) }
         }
         return best.map { (snapshot: $0.0, dir: $0.1) }
     }

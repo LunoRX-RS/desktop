@@ -58,6 +58,8 @@ const DRIFT_MS: u64 = 1_500;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NowPlaying {
+    /// The provider track id; lyrics are matched by it, never by title.
+    pub track_id: String,
     pub title: String,
     /// Artists joined with ", "; empty when unknown.
     pub artist: String,
@@ -86,6 +88,7 @@ pub fn map(dto: &PlayerProgressDto) -> Option<NowPlaying> {
         dto.position_ms
     };
     Some(NowPlaying {
+        track_id: track.provider_track_id.clone(),
         title: track.title.clone(),
         artist: track.artists.join(", "),
         artwork_url: track.artwork_url.clone(),
@@ -134,7 +137,8 @@ impl Throttle {
             (Some((None, _)), None) => false,
             (Some((Some(_), _)), None) | (Some((None, _)), Some(_)) => true,
             (Some((Some(old), sent_at)), Some(new)) => {
-                old.title != new.title
+                old.track_id != new.track_id
+                    || old.title != new.title
                     || old.artist != new.artist
                     || old.artwork_url != new.artwork_url
                     || old.artwork_ready != new.artwork_ready
@@ -469,6 +473,7 @@ mod tests {
 
     fn np(elapsed: u64, playing: bool) -> Option<NowPlaying> {
         Some(NowPlaying {
+            track_id: "t".into(),
             title: "Song".into(),
             artist: String::new(),
             artwork_url: None,
@@ -485,6 +490,7 @@ mod tests {
         assert_eq!(
             m,
             NowPlaying {
+                track_id: "aqz-KE-bpKQ".into(),
                 title: "Song".into(),
                 artist: String::new(),
                 artwork_url: None,

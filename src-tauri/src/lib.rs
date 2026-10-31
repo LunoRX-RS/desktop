@@ -338,6 +338,11 @@ pub fn run() {
             commands::lyric_sources::lyrics_settings_get,
             commands::lyric_sources::lyrics_settings_set
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|_app, event| {
+            if let tauri::RunEvent::Exit = event {
+                platform::shared_now_playing_clear();
+            }
+        });
 }
