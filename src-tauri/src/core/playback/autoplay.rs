@@ -411,7 +411,9 @@ async fn session(
                     failures = failures.saturating_add(1);
                     status(&state, "finding", None);
                     retry_pause(&engine, failures, || {
-                        mode(&state) != (repeat, radio) || vibe_of(&state) != vibe
+                        mode(&state) != (repeat, radio)
+                            || vibe_of(&state) != vibe
+                            || queue_edited(&state, &published)
                     })
                     .await;
                     continue 'outer;
@@ -455,7 +457,9 @@ async fn session(
                     publish(&state, &queue, &mut published);
                     failures = failures.saturating_add(1);
                     retry_pause(&engine, failures, || {
-                        mode(&state) != (repeat, radio) || vibe_of(&state) != vibe
+                        mode(&state) != (repeat, radio)
+                            || vibe_of(&state) != vibe
+                            || queue_edited(&state, &published)
                     })
                     .await;
                     continue 'outer;
@@ -471,7 +475,9 @@ async fn session(
                     publish(&state, &queue, &mut published);
                     status(&state, "finding", None);
                     retry_pause(&engine, failures, || {
-                        mode(&state) != (repeat, radio) || vibe_of(&state) != vibe
+                        mode(&state) != (repeat, radio)
+                            || vibe_of(&state) != vibe
+                            || queue_edited(&state, &published)
                     })
                     .await;
                     continue 'outer;
