@@ -47,19 +47,20 @@ export function Button({
 }
 
 /**
- * For actions that cannot be undone. The first press only asks (the label changes, coral); a second press within 4 seconds does it,
- * and moving focus away or waiting puts it back. Same pattern everywhere, so people learn it once. Nothing shames the other choice.
+ * For actions that cannot be undone. The first press only asks (the label changes, coral); a second press does it,
+ * and moving focus away puts it back. It stays armed until then, so a slow second press still works. Same pattern everywhere, so people learn it once. Nothing shames the other choice.
  */
 export function ConfirmButton({ confirmLabel = "Press again to confirm", onConfirm, children, ...rest }: Omit<ButtonHTMLAttributes<HTMLButtonElement>, "onClick"> & { variant?: ButtonVariant; confirmLabel?: string; onConfirm: () => void }) {
   const [armed, setArmed] = useState(false);
-  const timer = useRef<number | null>(null);
-  const stop = () => { if (timer.current) window.clearTimeout(timer.current); timer.current = null; };
-  useEffect(() => stop, []);
   return (
-    <Button {...rest} className={cx(rest.className, armed && "text-critical-coral")} onBlur={(e) => { rest.onBlur?.(e); stop(); setArmed(false); }}
+    <Button {...rest} className={cx(rest.className, armed && "text-critical-coral")} onBlur={(e) => { rest.onBlur?.(e); setArmed(false); }}
+      onKeyDown={(e) => {
+        rest.onKeyDown?.(e);
+        // Holding Enter or Space repeats the activation; only a fresh press may confirm.
+        if (e.repeat) e.preventDefault();
+      }}
       onClick={() => {
-        if (!armed) { setArmed(true); timer.current = window.setTimeout(() => setArmed(false), 4000); return; }
-        stop();
+        if (!armed) { setArmed(true); return; }
         setArmed(false);
         onConfirm();
       }}>
@@ -203,7 +204,12 @@ export function Screen({
     const el = sentinel.current;
     if (!el || typeof IntersectionObserver === "undefined") return;
     // The sentinel sits under the big title; when it leaves the scroll port the title has gone with it.
-    const io = new IntersectionObserver(([entry]) => setStuck(!!entry && !entry.isIntersecting && entry.boundingClientRect.top < 0), { threshold: 0 });
+    // Stuck means the sentinel has scrolled above the scroll port. Compare with the port's top edge: a clipped sentinel
+    // sits about 1px below the top of the app shell, so a test against 0 would never fire.
+    const io = new IntersectionObserver(([entry]) => {
+      const port = entry?.rootBounds;
+      setStuck(!!entry && !entry.isIntersecting && !!port && entry.boundingClientRect.bottom <= port.top + 1);
+    }, { threshold: 0 });
     io.observe(el);
     return () => io.disconnect();
   }, []);

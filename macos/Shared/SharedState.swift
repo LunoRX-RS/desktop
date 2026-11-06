@@ -43,6 +43,26 @@ struct NowPlayingSnapshot: Decodable {
     }
 }
 
+extension NowPlayingSnapshot {
+    /// A snapshot without a `lyrics` field still shows its song; only the lyric line is missing.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(Int.self, forKey: .version)
+        title = try c.decode(String.self, forKey: .title)
+        artist = try c.decode(String.self, forKey: .artist)
+        playing = try c.decode(Bool.self, forKey: .playing)
+        positionMs = try c.decode(Int.self, forKey: .positionMs)
+        durationMs = try c.decode(Int.self, forKey: .durationMs)
+        updatedAtMs = try c.decode(Double.self, forKey: .updatedAtMs)
+        artwork = try c.decodeIfPresent(String.self, forKey: .artwork)
+        lyrics = try c.decodeIfPresent([LyricLine].self, forKey: .lyrics) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version, title, artist, playing, positionMs, durationMs, updatedAtMs, artwork, lyrics
+    }
+}
+
 enum SharedStore {
     /// Set in each target's Info.plist (`LunoRXAppGroup`) by build.sh; must match the app's `LUNORX_APP_GROUP`.
     private static func group(_ bundle: Bundle) -> String {

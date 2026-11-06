@@ -1,40 +1,41 @@
+//! Manual Core Audio rate check: cargo run --example audio_rate -- <CoreAudio device UID> [sample rate]
+//! Plays a short system sound on that device and prints the output rate mpv reports. Without a rate it uses Automatic.
 use libmpv2::Mpv;
-fn main() {
-    // BlackHole 2ch
+
+fn play(device: &str, rate: Option<&str>) -> Result<Option<i64>, libmpv2::Error> {
     let mpv = Mpv::with_initializer(|init| {
         init.set_option("config", "no")?;
         init.set_option("ao", "coreaudio")?;
-        init.set_option("audio-device", "coreaudio/BlackHole2ch_UID")?;
+        init.set_option("audio-device", format!("coreaudio/{device}").as_str())?;
+        if let Some(rate) = rate {
+            init.set_option("audio-samplerate", rate)?;
+        }
         init.set_option("vid", "no")?;
         init.set_option("terminal", "no")
-    })
-    .unwrap();
-    let _ = mpv.command("loadfile", &["/System/Library/Sounds/Ping.aiff", "replace"]);
+    })?;
+    mpv.command("loadfile", &["/System/Library/Sounds/Ping.aiff", "replace"])?;
     for _ in 0..20 {
         std::thread::sleep(std::time::Duration::from_millis(200));
-        let sr: Option<i64> = mpv.get_property("audio-out-params/samplerate").ok();
-        if sr.is_some() {
-            println!("BlackHole auto out_sr={:?}", sr);
-            break;
+        if let Ok(sr) = mpv.get_property::<i64>("audio-out-params/samplerate") {
+            return Ok(Some(sr));
         }
     }
-    // now force 96k
-    let mpv2 = Mpv::with_initializer(|init| {
-        init.set_option("config", "no")?;
-        init.set_option("ao", "coreaudio")?;
-        init.set_option("audio-device", "coreaudio/BlackHole2ch_UID")?;
-        init.set_option("audio-samplerate", "96000")?;
-        init.set_option("vid", "no")?;
-        init.set_option("terminal", "no")
-    })
-    .unwrap();
-    let _ = mpv2.command("loadfile", &["/System/Library/Sounds/Ping.aiff", "replace"]);
-    for _ in 0..20 {
-        std::thread::sleep(std::time::Duration::from_millis(200));
-        let sr: Option<i64> = mpv2.get_property("audio-out-params/samplerate").ok();
-        if sr.is_some() {
-            println!("BlackHole forced96 out_sr={:?}", sr);
-            break;
+    Ok(None)
+}
+
+fn main() {
+    let mut args = std::env::args().skip(1);
+    let Some(device) = args.next() else {
+        eprintln!("usage: audio_rate <CoreAudio device UID> [sample rate]");
+        std::process::exit(2);
+    };
+    let rate = args.next();
+    match play(&device, rate.as_deref()) {
+        Ok(Some(sr)) => println!("device {device} out_sr={sr}"),
+        Ok(None) => eprintln!("device {device}: no output rate reported"),
+        Err(error) => {
+            eprintln!("device {device}: mpv failed: {error}");
+            std::process::exit(1);
         }
     }
 }

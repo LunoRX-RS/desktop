@@ -88,7 +88,7 @@ export default function SearchScreen() {
     if (pasted) {
       // The songs already queued stay queued after the pasted link, so Next keeps going through the same queue.
       const queued: LoadedTrack[] = usePlayback.getState().autoplay.queue
-        .filter((t) => t.provider === "YouTube")
+        .filter((t) => t.provider === "YouTube" && /^[A-Za-z0-9_-]{11}$/.test(t.id) && t.title.trim() !== "")
         .map((t) => ({ source: "YouTube", provider: "YouTube", providerTrackId: t.id, canonicalUrl: `https://www.youtube.com/watch?v=${t.id}`, title: t.title, artists: t.artists, artworkUrl: t.artworkUrl }));
       // Title and artwork first, so the player and history show the real song; plays anyway if they cannot be read.
       void playerTrackInfo(pasted.id).then(

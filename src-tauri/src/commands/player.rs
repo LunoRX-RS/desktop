@@ -561,30 +561,28 @@ fn validate_following(
     if tracks.len() > MAX_FOLLOWING {
         return Err(invalid());
     }
-    tracks
+    // A queued song that does not pass is left out; it must not stop the song the user picked from loading.
+    Ok(tracks
         .into_iter()
-        .map(|t| {
-            if !crate::core::playback::extract::valid_id(&t.provider_track_id)
-                || t.title.trim().is_empty()
-                || t.title.len() > MAX_TITLE_BYTES
-                || t.artists.len() > 30
-                || t.artists.iter().any(|a| a.len() > 512)
-            {
-                return Err(invalid());
-            }
-            Ok(crate::core::playback::cache::OfflineTrack {
-                provider: "YouTube".into(),
-                id: t.provider_track_id,
-                title: t.title,
-                artists: t.artists,
-                artwork_url: t
-                    .artwork_url
-                    .as_deref()
-                    .and_then(crate::core::playback::track_info::artwork_url),
-                duration_ms: t.duration_ms,
-            })
+        .filter(|t| {
+            crate::core::playback::extract::valid_id(&t.provider_track_id)
+                && !t.title.trim().is_empty()
+                && t.title.len() <= MAX_TITLE_BYTES
+                && t.artists.len() <= 30
+                && t.artists.iter().all(|a| a.len() <= 512)
         })
-        .collect()
+        .map(|t| crate::core::playback::cache::OfflineTrack {
+            provider: "YouTube".into(),
+            id: t.provider_track_id,
+            title: t.title,
+            artists: t.artists,
+            artwork_url: t
+                .artwork_url
+                .as_deref()
+                .and_then(crate::core::playback::track_info::artwork_url),
+            duration_ms: t.duration_ms,
+        })
+        .collect())
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -1275,7 +1273,16 @@ mod tests {
             validate_following(vec![ok("r-G2pKr2_n8")]).unwrap().len(),
             1
         );
-        assert!(validate_following(vec![ok("bad id")]).is_err());
+        assert_eq!(validate_following(vec![ok("bad id")]).unwrap().len(), 0);
+        assert_eq!(
+            validate_following(vec![FollowingTrack {
+                title: " ".into(),
+                ..ok("r-G2pKr2_n8")
+            }])
+            .unwrap()
+            .len(),
+            0
+        );
         let many = (0..=MAX_FOLLOWING).map(|_| ok("r-G2pKr2_n8")).collect();
         assert!(validate_following(many).is_err());
     }

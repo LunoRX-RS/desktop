@@ -13,20 +13,36 @@ final class LunoSaverView: ScreenSaverView {
     private var coverKey = ""
     private var soft: NSImage?
     private var lastRead = Date.distantPast
+    /// What the last frame showed: the lyric line and whether the song was playing. A frame is drawn only when one changes.
+    private var shownLine: Int?
+    private var shownPlaying = false
 
     override init?(frame: NSRect, isPreview: Bool) {
         super.init(frame: frame, isPreview: isPreview)
-        animationTimeInterval = 1.0 / 30.0
+        animationTimeInterval = 1.0
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        animationTimeInterval = 1.0 / 30.0
+        animationTimeInterval = 1.0
     }
 
     override func animateOneFrame() {
         if Date().timeIntervalSince(lastRead) >= 1 { reload() }
-        setNeedsDisplay(bounds)
+        guard let s = loaded?.snapshot, !s.isIdle else {
+            // Idle: the slow lap of the clock text is the only motion, so once a second is enough.
+            animationTimeInterval = 1.0
+            setNeedsDisplay(bounds)
+            return
+        }
+        // A song: four ticks a second are enough to catch a lyric change; a paused song only changes on a new snapshot.
+        animationTimeInterval = s.playing ? 0.25 : 1.0
+        let line = s.lineIndex(at: s.position(at: Date()))
+        if line != shownLine || s.playing != shownPlaying {
+            shownLine = line
+            shownPlaying = s.playing
+            setNeedsDisplay(bounds)
+        }
     }
 
     private func reload() {
@@ -36,6 +52,7 @@ final class LunoSaverView: ScreenSaverView {
         let key = "\(s.title)|\(s.artist)|\(s.artwork ?? "")|\(s.updatedAtMs)"
         guard key != coverKey || cover == nil, let dir = loaded?.dir else { return }
         coverKey = key
+        shownLine = nil
         cover = SharedStore.cover(s, in: dir)
         soft = cover.map(Self.softened)
     }

@@ -69,10 +69,15 @@ function Deck({ id, report, onReport, presets, other, onTempo, keys }: { id: Dec
   const timer = useRef<number | undefined>(undefined);
   const label = id.toUpperCase();
 
+  // Leading and trailing throttle: the first change goes at once, changes inside the window send only the latest value
+  // when it ends, so a drag keeps sounding while it moves.
+  const fxSent = useRef(0);
   const applyFx = useCallback((next: AudioEffects) => {
     setFx(next);
+    const send = () => { fxSent.current = Date.now(); void djSetEffects(id, next).catch(() => setError("The deck could not take that sound setting.")); };
     window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => { void djSetEffects(id, next).catch(() => setError("The deck could not take that sound setting.")); }, 120);
+    const wait = 120 - (Date.now() - fxSent.current);
+    if (wait <= 0) send(); else timer.current = window.setTimeout(send, wait);
   }, [id]);
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
@@ -132,10 +137,20 @@ function Deck({ id, report, onReport, presets, other, onTempo, keys }: { id: Dec
   const playing = state === "playing";
   const pos = report?.positionMs ?? 0;
   const dur = report?.durationMs ?? 0;
+  // The playhead now: the last report moved on by the time since it arrived, at the deck's speed. Cues and loops use it,
+  // so a tap lands where the sound is, not where the last report was sent.
+  const anchor = useRef({ pos, at: performance.now() });
+  useEffect(() => { anchor.current = { pos, at: performance.now() }; }, [pos]);
+  const speed = fx.enabled ? fx.speed / 100 : 1;
+  const nowMs = () => {
+    const a = anchor.current;
+    const moved = a.pos + (playing ? (performance.now() - a.at) * speed : 0);
+    return dur > 0 ? Math.min(moved, dur) : moved;
+  };
   const ready = videoId !== null && report !== null;
 
   const setLoopPoint = (which: "startMs" | "endMs") => {
-    const next = { ...loop, [which]: pos, on: false };
+    const next = { ...loop, [which]: nowMs(), on: false };
     setLoop(next);
     void djSetLoop(id, null).catch(() => {});
   };
@@ -161,8 +176,8 @@ function Deck({ id, report, onReport, presets, other, onTempo, keys }: { id: Dec
   };
   const beatLoop = (n: number) => {
     if (!bpm) return;
-    const startMs = Math.round(pos);
-    const endMs = Math.round(pos + (n * 60000) / bpm);
+    const startMs = Math.round(nowMs());
+    const endMs = Math.round(nowMs() + (n * 60000) / bpm);
     setLoop({ startMs, endMs, on: false });
     void djSetLoop(id, { startMs, endMs }).then(() => setLoop({ startMs, endMs, on: true }), () => setError("That loop is too short or too long."));
   };
@@ -199,7 +214,7 @@ function Deck({ id, report, onReport, presets, other, onTempo, keys }: { id: Dec
   };
   keys.current = {
     playPause: () => { if (ready) void (playing ? djPause(id) : djPlay(id)).catch(() => {}); },
-    cue: (i) => { if (!ready) return; const c = cues[i]; if (c === null) setCues(cues.map((x, j) => (j === i ? pos : x))); else void djSeek(id, c).catch(() => {}); },
+    cue: (i) => { if (!ready) return; const c = cues[i]; if (c === null) setCues(cues.map((x, j) => (j === i ? nowMs() : x))); else void djSeek(id, c).catch(() => {}); },
     brake: () => ctl({ kind: "brake" }),
   };
 
@@ -271,7 +286,7 @@ function Deck({ id, report, onReport, presets, other, onTempo, keys }: { id: Dec
                 type="button"
                 disabled={!ready}
                 title={c === null ? "Set a cue here" : "Jump. Shift-click or right-click to clear."}
-                onClick={(e) => { if (c !== null && e.shiftKey) { setCues(cues.map((x, j) => (j === i ? null : x))); return; } if (c === null) setCues(cues.map((x, j) => (j === i ? pos : x))); else void djSeek(id, c).catch(() => {}); }}
+                onClick={(e) => { if (c !== null && e.shiftKey) { setCues(cues.map((x, j) => (j === i ? null : x))); return; } if (c === null) setCues(cues.map((x, j) => (j === i ? nowMs() : x))); else void djSeek(id, c).catch(() => {}); }}
                 onContextMenu={(e) => { if (c === null) return; e.preventDefault(); setCues(cues.map((x, j) => (j === i ? null : x))); }}
                 className={`flex h-14 flex-col items-start justify-between rounded-[8px] px-3 py-2 text-left transition-colors duration-150 active:scale-[0.97] disabled:opacity-40 ${c === null ? "bg-frost-100 text-secondary-text hover:bg-frost-200" : "bg-frost-200 text-primary-text hover:bg-frost-300"}`}
               >
@@ -282,7 +297,7 @@ function Deck({ id, report, onReport, presets, other, onTempo, keys }: { id: Dec
           </div>
 
           <Group title="Lyrics">
-            <DeckLyrics videoId={videoId} pos={pos} ready={ready} onSeek={(ms) => void djSeek(id, ms).catch(() => {})} onMarks={setLyricMarks} />
+            <DeckLyrics videoId={videoId} pos={pos} nowMs={nowMs} ready={ready} onSeek={(ms) => void djSeek(id, ms).catch(() => {})} onMarks={setLyricMarks} />
           </Group>
 
           <Group title="Loop">
@@ -486,9 +501,13 @@ export default function DjScreen() {
       }
     }, () => {});
   }, [setReports]);
+  // Leading and trailing throttle, as for the effects: a continuous fade reaches the decks while it moves.
+  const mixSent = useRef(0);
   useEffect(() => {
+    const send = () => { mixSent.current = Date.now(); void djSetMix(cross, master).catch(() => {}); };
     window.clearTimeout(mixTimer.current);
-    mixTimer.current = window.setTimeout(() => { void djSetMix(cross, master).catch(() => {}); }, 40);
+    const wait = 40 - (Date.now() - mixSent.current);
+    if (wait <= 0) send(); else mixTimer.current = window.setTimeout(send, wait);
     return () => window.clearTimeout(mixTimer.current);
   }, [cross, master]);
 

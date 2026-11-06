@@ -31,7 +31,7 @@
   const reportLoop = () => { setTimeout(reportLoop, report()); };
   reportLoop();
   // Play, pause and seek report at once, so the slower paused rate never shows a stale state. Capture sees media events.
-  for (const type of ["play", "pause", "seeked", "ended", "error"]) document.addEventListener(type, () => report(), true);
+  for (const type of ["play", "playing", "pause", "waiting", "loadedmetadata", "seeked", "ended", "error"]) document.addEventListener(type, () => report(), true);
   // Sound shaping, the same settings the native player applies with mpv, done here with Web Audio because the sound
   // comes from this page. Built only once something is actually shaped.
   const BANDS = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
@@ -147,16 +147,20 @@
     return !!g;
   };
   let level = { trim: 100, fader: 100 };
+  let braking = false;
   const control = (c) => {
     const m = media();
     if (!m) return;
     if (c.kind === "bend") { bend = c.value; m.playbackRate = baseRate * (1 + bend / 100); return; }
     if (c.kind === "brake") {
+      // One brake at a time: a repeated press during the slow-down must not start a second frame chain.
+      if (braking) return;
+      braking = true;
       const from = m.playbackRate, start = performance.now();
       const step = () => {
         const k = Math.min(1, (performance.now() - start) / 1200);
         m.playbackRate = Math.max(0.07, from * (1 - k));
-        if (k < 1) requestAnimationFrame(step); else { m.pause(); m.playbackRate = baseRate * (1 + bend / 100); }
+        if (k < 1) requestAnimationFrame(step); else { braking = false; m.pause(); m.playbackRate = baseRate * (1 + bend / 100); }
       };
       requestAnimationFrame(step);
       return;

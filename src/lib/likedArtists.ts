@@ -4,7 +4,7 @@ import { create } from "zustand";
 import type { ArtistRef } from "../services/tauri/search";
 import { artistsCloudFollow, artistsCloudSync, type CloudArtist } from "../services/tauri/artists";
 
-/** An artist the user follows. Kept on this device; the LunoRX server has no artist list to sync to yet. */
+/** An artist the user follows. Kept on this device and synced to the LunoRX account when signed in. */
 export interface LikedArtist extends ArtistRef {
   artworkUrl: string | null;
   addedAt: number;
@@ -47,7 +47,14 @@ export const useLikedArtists = create<LikedArtists>((set, get) => ({
     // Straight to the account when signed in. An unfollow that cannot be sent now is remembered and sent on the next
     // sync, so the server cannot bring the artist back.
     const cloud = toCloud({ provider: artist.provider, id: artist.id, name: artist.name, artworkUrl, addedAt: Date.now() });
-    if (had) setRemoved([...removed().filter((r) => r[0] !== cloud.provider || r[1] !== cloud.artistKey), [cloud.provider, cloud.artistKey]]);
+    if (had) {
+      setRemoved([...removed().filter((r) => r[0] !== cloud.provider || r[1] !== cloud.artistKey), [cloud.provider, cloud.artistKey]]);
+    } else {
+      // A follow cancels an unfollow still waiting to be sent, and forgets the server's copy so a sync uploads it again if
+      // the immediate send below fails.
+      setRemoved(removed().filter((r) => r[0] !== cloud.provider || r[1] !== cloud.artistKey));
+      setKnown([...known()].filter((k) => k !== key));
+    }
     void artistsCloudFollow(cloud, !had).then(
       () => { if (had) setRemoved(removed().filter((r) => r[0] !== cloud.provider || r[1] !== cloud.artistKey)); },
       () => {},

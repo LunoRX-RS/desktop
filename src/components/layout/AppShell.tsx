@@ -133,6 +133,8 @@ export default function AppShell() {
   const queueOpen = useUi((s) => s.queueOpen);
   const nowPlayingOpen = useUi((s) => s.nowPlayingOpen);
   const navigate = useUi((s) => s.navigate);
+  // DJ mode switched off while the DJ screen is open: go home rather than leave an empty pane.
+  useEffect(() => { if (view === "dj" && !djMode) navigate("home"); }, [view, djMode, navigate]);
   const openShared = useUi((s) => s.openShared);
   // Share links open the shared-playlist view: live events, plus a link that arrived before this window listened.
   useEffect(() => {

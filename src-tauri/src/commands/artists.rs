@@ -12,7 +12,8 @@ fn main(window: &WebviewWindow) -> Result<(), ErrorCategory> {
         .ok_or(ErrorCategory::Validation)
 }
 
-fn valid(a: &FollowedArtist) -> bool {
+/// A name and id that the account can store. The artwork is not checked here: `put_followed_artist` drops an over-long one.
+fn identity_valid(a: &FollowedArtist) -> bool {
     let text = |s: &str, max: usize| {
         (1..=max).contains(&s.chars().count()) && !s.chars().any(char::is_control)
     };
@@ -23,7 +24,10 @@ fn valid(a: &FollowedArtist) -> bool {
         && a.artist_id
             .as_deref()
             .is_none_or(|id| (1..=128).contains(&id.len()))
-        && a.artwork_url.as_deref().is_none_or(|u| u.len() <= 2048)
+}
+
+fn valid(a: &FollowedArtist) -> bool {
+    identity_valid(a) && a.artwork_url.as_deref().is_none_or(|u| u.len() <= 2048)
 }
 
 /// Sends this device's unfollows and follows, then returns the account's full list.
@@ -35,9 +39,11 @@ pub async fn artists_cloud_sync(
     removed: Vec<(String, String)>,
 ) -> Result<Vec<FollowedArtist>, ErrorCategory> {
     main(&window)?;
-    if local.len() > 5_000 || removed.len() > 5_000 || !local.iter().all(valid) {
+    if local.len() > 5_000 || removed.len() > 5_000 {
         return Err(ErrorCategory::Validation);
     }
+    // One bad entry is skipped, not allowed to fail the whole batch: the rest of the list still syncs.
+    let local: Vec<FollowedArtist> = local.into_iter().filter(identity_valid).collect();
     let _net = sync.net.lock().await;
     engine::artists_sync(&mut Host::Shared(&sync), &local, &removed).await
 }

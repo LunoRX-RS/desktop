@@ -122,7 +122,14 @@ const bigUnit = "ml-2 text-[26px] font-semibold tracking-normal text-secondary-t
 const lead = "text-[14px] leading-5 text-secondary-text";
 const noData = <EmptyState icon={<Music2 size={24} />} title="Nothing to show yet"><p>Play some songs and this fills in.</p></EmptyState>;
 const loadingState = <p role="status" className="text-[13px] leading-[18px] text-secondary-text">Loading your listening…</p>;
-const failedState = <EmptyState icon={<Music2 size={24} />} title="Could not read your stats"><p>Try again in a moment.</p></EmptyState>;
+function FailedState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <EmptyState icon={<Music2 size={24} />} title="Could not read your stats">
+      <p>Try again in a moment.</p>
+      <Button variant="ghost" onClick={onRetry}>Try again</Button>
+    </EmptyState>
+  );
+}
 
 function keyOf(t: { title: string; artists: string[] }): string {
   return `${t.title.trim().toLowerCase()}::${t.artists.map((a) => a.trim().toLowerCase()).join(",")}`;
@@ -140,12 +147,17 @@ export default function ReplayScreen() {
   // Each load gets a number; only the newest one may write, so an earlier month cannot land on top of the current one.
   const latest = useRef(0);
 
+  const retry = () => void load();
+
   const now = new Date();
   const [viewYear, setViewYear] = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth());
 
   const load = useCallback(async () => {
     const id = ++latest.current;
+    // The month or year changed: its old totals do not belong under the new heading while this load runs.
+    setMonthly(null);
+    setYearly(null);
     setBusy(true);
     try {
       const lv = await statsLocal();
@@ -269,6 +281,7 @@ export default function ReplayScreen() {
             </div>
           </div>
 
+          {!monthly && (busy ? loadingState : note ? <FailedState onRetry={retry} /> : null)}
           {monthly && monthly.plays > 0 && (
             <>
               <section aria-label="This month" className="grid gap-10 @3xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
@@ -362,7 +375,7 @@ export default function ReplayScreen() {
 
       {tab === "dna" && (
         <div className="flex flex-col gap-12">
-          {!alltime || !wrapped ? (busy ? loadingState : note ? failedState : noData) : (
+          {!alltime || !wrapped ? (busy ? loadingState : note ? <FailedState onRetry={retry} /> : noData) : (
             <>
               <section aria-label="Your sound" className="grid gap-10 @3xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
                 <div className="flex flex-col gap-3">
@@ -407,7 +420,7 @@ export default function ReplayScreen() {
 
       {tab === "crossover" && (
         <div className="flex flex-col gap-12">
-          {crossover.providers.length === 0 ? noData : (
+          {crossover.providers.length === 0 ? (busy ? loadingState : note ? <FailedState onRetry={retry} /> : noData) : (
             <>
               <section aria-label="Providers" className="flex flex-col gap-4">
                 <p className={lead}>{crossover.providers.length >= 2 ? "Songs you play on more than one provider" : "All your plays are on"}</p>
@@ -460,7 +473,7 @@ export default function ReplayScreen() {
 
       {tab === "timeline" && (
         <div className="flex flex-col gap-12">
-          {!alltime || alltime.plays === 0 ? (busy ? loadingState : note ? failedState : noData) : (
+          {!alltime || alltime.plays === 0 ? (busy ? loadingState : note ? <FailedState onRetry={retry} /> : noData) : (
             <>
               <section aria-label="Streak" className="grid gap-10 @3xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] @3xl:items-end">
                 <div className="flex flex-col gap-3">
@@ -501,7 +514,7 @@ export default function ReplayScreen() {
       {tab === "alltime" && (
         <div className="flex flex-col gap-12">
           {!alltime || alltime.plays === 0 ? (
-            allTracks.length === 0 ? (
+            busy ? loadingState : note ? <FailedState onRetry={retry} /> : allTracks.length === 0 ? (
               <EmptyState icon={<Play size={24} />} title="No plays counted yet">
                 <p>Songs you play are counted here from now on.</p>
                 <Button variant="primary" onClick={() => navigate("search")}>Find songs</Button>

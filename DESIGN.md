@@ -318,7 +318,7 @@ Layers are the app ambient (`AmbientBackdrop`, `.lx-app-ambient`: artwork at blu
 **What never animates.**
 - Anything that implies audio while none plays. The equaliser runs only for a real `playing` state (or the demo "playing" state); it is not drawn when paused and is frozen while buffering. Cover art does not pulse, bounce or spin.
 - Lavender. It means live state only; no motion adds or moves it for decoration.
-- Looping decoration. The only loops are the equaliser while playing, the skeleton shimmer (1.4s) and the spinner while work is pending. The native Now Playing ambient drift (24s) runs only while playing and is the single slow exception.
+- Looping decoration. The only loops are the equaliser while playing, the skeleton shimmer (1.4s) and the spinner while work is pending.
 - Layout properties on scroll or drag: only transform and opacity animate, except the progress fill width, the shimmer and the stroke draw. Panels never animate blur or backdrop-filter.
 - The Scrubber while dragged, hover states that delay visibility, and exits longer than 120ms.
 

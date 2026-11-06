@@ -408,15 +408,33 @@ impl AudioSettings {
             .get_property::<String>("audio-device")
             .ok()
             .is_none_or(|d| d == "auto");
-        let rate = if self.sample_rate == SampleRate::Auto && on_coreaudio && on_default_device {
-            device_sample_rate().unwrap_or(requested)
-        } else {
-            requested
-        };
+        let rate = effective_rate(
+            requested,
+            self.sample_rate == SampleRate::Auto,
+            device_sample_rate(),
+            on_coreaudio,
+            on_default_device,
+        );
         mpv.set_property("audio-samplerate", rate)?;
         mpv.set_property("options/audio-samplerate", rate)
     }
 }
+/// The rate mpv is set to. Only "Automatic" on the default CoreAudio device takes the device's own rate; an explicit
+/// choice, a chosen device, or an unknown device rate keep the requested one.
+fn effective_rate(
+    requested: i64,
+    automatic: bool,
+    device: Option<i64>,
+    on_coreaudio: bool,
+    on_default_device: bool,
+) -> i64 {
+    if automatic && on_coreaudio && on_default_device {
+        device.unwrap_or(requested)
+    } else {
+        requested
+    }
+}
+
 #[derive(Clone, Debug, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioOutput {
@@ -541,6 +559,41 @@ impl AudioControl {
 }
 #[cfg(test)]
 mod tests {
+    use super::effective_rate;
+
+    #[test]
+    fn automatic_on_the_default_coreaudio_device_takes_the_device_rate() {
+        assert_eq!(
+            effective_rate(48_000, true, Some(44_100), true, true),
+            44_100
+        );
+    }
+
+    #[test]
+    fn automatic_falls_back_to_the_requested_rate_when_the_device_rate_is_unknown() {
+        assert_eq!(effective_rate(48_000, true, None, true, true), 48_000);
+    }
+
+    #[test]
+    fn an_explicit_rate_is_never_replaced() {
+        assert_eq!(
+            effective_rate(96_000, false, Some(44_100), true, true),
+            96_000
+        );
+    }
+
+    #[test]
+    fn a_chosen_device_or_another_backend_keeps_the_requested_rate() {
+        assert_eq!(
+            effective_rate(48_000, true, Some(44_100), true, false),
+            48_000
+        );
+        assert_eq!(
+            effective_rate(48_000, true, Some(44_100), false, true),
+            48_000
+        );
+    }
+
     use super::*;
     #[test]
     fn device_lists_parse_and_only_listed_devices_can_be_chosen() {

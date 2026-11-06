@@ -340,9 +340,12 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|_app, event| {
+        .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 platform::shared_now_playing_clear();
+                if let Some(activity) = app.try_state::<commands::reports::ActivityState>() {
+                    activity.flush_now();
+                }
             }
         });
 }

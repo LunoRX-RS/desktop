@@ -19,6 +19,7 @@ cd "${0:A:h}"
 SIGN_ID="${SIGN_ID:-$(security find-identity -v -p codesigning | sed -nE 's/.*"((Apple Development|Developer ID Application):[^"]+)".*/\1/p' | head -1)}"
 [[ -n "$SIGN_ID" ]] || { echo "no signing identity found; set SIGN_ID" >&2; exit 1; }
 TEAM="${TEAM:-$(security find-certificate -c "$SIGN_ID" -p | openssl x509 -noout -subject | sed -nE 's/.*OU *= *([A-Z0-9]+).*/\1/p')}"
+[[ -n "$TEAM" ]] || { echo "could not read the Team ID from the certificate for $SIGN_ID; set TEAM" >&2; exit 1; }
 # The app compiles its group in (src-tauri/src/platform/shared_state.rs). It defaults to the team VH66R8S4AU; any other
 # team must set LUNORX_APP_GROUP to the value the app was built with, or the widget cannot read the snapshot.
 DEFAULT_GROUP="VH66R8S4AU.io.lunorx.shared"
@@ -29,7 +30,7 @@ GROUP="${LUNORX_APP_GROUP:-$DEFAULT_GROUP}"
 # Developer ID distribution needs the hardened runtime for notarization; development signing does not.
 SIGN_OPTS=()
 [[ "$SIGN_ID" == "Developer ID Application:"* ]] && SIGN_OPTS=(--options runtime --timestamp)
-OUT=build; rm -rf $OUT; mkdir -p $OUT
+OUT=build; rm -rf "$OUT"; mkdir -p "$OUT"
 echo "identity: $SIGN_ID  team: $TEAM  group: $GROUP"
 
 plist() { # name id package-type extra-xml

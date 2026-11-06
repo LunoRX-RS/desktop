@@ -156,10 +156,15 @@ fn targets() -> Vec<PathBuf> {
 }
 
 /// Writes through a temp file and a rename, so a reader never sees half a file.
+/// Each write has its own temporary name, so two publishes at once cannot share one file, and a failed write leaves no
+/// temporary file behind.
 fn write_atomic(dir: &Path, name: &str, bytes: &[u8]) -> io::Result<()> {
-    let tmp = dir.join(format!(".{name}.tmp"));
-    fs::write(&tmp, bytes)?;
-    fs::rename(&tmp, dir.join(name))
+    let tmp = dir.join(format!(".{name}.{:032x}.tmp", rand::random::<u128>()));
+    let result = fs::write(&tmp, bytes).and_then(|()| fs::rename(&tmp, dir.join(name)));
+    if result.is_err() {
+        let _ = fs::remove_file(&tmp);
+    }
+    result
 }
 
 fn write_to(dir: &Path, json: &str, cover: Option<&[u8]>) -> io::Result<()> {
