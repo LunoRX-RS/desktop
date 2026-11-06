@@ -166,7 +166,7 @@ jobs:
         shell: pwsh
         run: |
           # LunarG's runtime installer is the source (the Chocolatey package was not always found). /S is a silent install.
-          Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-runtime.exe" -OutFile "$env:RUNNER_TEMP\vulkan-runtime.exe"
+          Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/1.3.296.0/windows/vulkan-runtime.exe" -OutFile "$env:RUNNER_TEMP\vulkan-runtime.exe"
           Start-Process "$env:RUNNER_TEMP\vulkan-runtime.exe" -ArgumentList "/S" -Wait
           if (-not (Test-Path "$env:SystemRoot\System32\vulkan-1.dll")) { throw "vulkan-1.dll still missing" }
 
