@@ -254,7 +254,7 @@ export default function ReplayScreen() {
       title="Unified Replay"
       caption="Built from this device's play log. Nothing leaves it unless cloud sync is on."
     >
-      {note && alltime && <StatusNote tone="amber">{note}</StatusNote>}
+      {note && alltime && <StatusNote tone="amber">{note} <Button variant="ghost" onClick={retry}>Try again</Button></StatusNote>}
 
       <div className="self-start">
       <Segmented<Tab>

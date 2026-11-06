@@ -582,6 +582,23 @@ mod tests {
     }
 
     #[test]
+    fn a_failed_immediate_write_keeps_the_entry_for_the_next_flush() {
+        let (log, p) = open();
+        // Past the window, so the next record writes at once. A directory in the file's place makes that write fail.
+        std::thread::sleep(COMMIT_INTERVAL + Duration::from_millis(100));
+        fs::create_dir_all(&p).unwrap();
+        assert!(
+            log.record(&entry("action", "action.library.like", "a track"))
+                .is_err()
+        );
+        fs::remove_dir(&p).unwrap();
+        log.flush_if_pending().unwrap();
+        let again = ActivityLog::open(p.clone()).unwrap();
+        assert_eq!(again.view().unwrap().total, 1);
+        let _ = fs::remove_file(p);
+    }
+
+    #[test]
     fn a_deferred_entry_is_written_by_flush_if_pending_and_a_clean_log_writes_nothing() {
         let (log, p) = open();
         log.flush_if_pending().unwrap();
