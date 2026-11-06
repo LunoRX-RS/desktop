@@ -289,10 +289,10 @@ impl ActivityLog {
                 record
             }
         };
+        // Dirty first: a failed write leaves the entry eligible for the next flush. write_locked clears it on success.
+        g.dirty = true;
         if g.committed.elapsed() >= COMMIT_INTERVAL {
             self.write_locked(&mut g)?;
-        } else {
-            g.dirty = true;
         }
         Ok(stored)
     }

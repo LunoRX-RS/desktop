@@ -140,7 +140,7 @@ function Deck({ id, report, onReport, presets, other, onTempo, keys }: { id: Dec
   // The playhead now: the last report moved on by the time since it arrived, at the deck's speed. Cues and loops use it,
   // so a tap lands where the sound is, not where the last report was sent.
   const anchor = useRef({ pos, at: performance.now() });
-  useEffect(() => { anchor.current = { pos, at: performance.now() }; }, [pos]);
+  useEffect(() => { anchor.current = { pos, at: performance.now() }; }, [pos, playing]);
   const speed = fx.enabled ? fx.speed / 100 : 1;
   const nowMs = () => {
     const a = anchor.current;

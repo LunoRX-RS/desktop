@@ -147,8 +147,6 @@ export default function ReplayScreen() {
   // Each load gets a number; only the newest one may write, so an earlier month cannot land on top of the current one.
   const latest = useRef(0);
 
-  const retry = () => void load();
-
   const now = new Date();
   const [viewYear, setViewYear] = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth());
@@ -158,6 +156,7 @@ export default function ReplayScreen() {
     // The month or year changed: its old totals do not belong under the new heading while this load runs.
     setMonthly(null);
     setYearly(null);
+    setNote(null);
     setBusy(true);
     try {
       const lv = await statsLocal();
@@ -180,6 +179,7 @@ export default function ReplayScreen() {
       if (id === latest.current) setBusy(false);
     }
   }, [viewYear, viewMonth]);
+  const retry = () => void load();
 
   useEffect(() => { void load(); }, [load]);
 
@@ -254,7 +254,7 @@ export default function ReplayScreen() {
       title="Unified Replay"
       caption="Built from this device's play log. Nothing leaves it unless cloud sync is on."
     >
-      {note && <StatusNote tone="amber">{note}</StatusNote>}
+      {note && alltime && <StatusNote tone="amber">{note}</StatusNote>}
 
       <div className="self-start">
       <Segmented<Tab>

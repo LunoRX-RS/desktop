@@ -206,10 +206,12 @@ export function Screen({
     // The sentinel sits under the big title; when it leaves the scroll port the title has gone with it.
     // Stuck means the sentinel has scrolled above the scroll port. Compare with the port's top edge: a clipped sentinel
     // sits about 1px below the top of the app shell, so a test against 0 would never fire.
+    // The scroll port is the app's main element; its rect is the observer's root.
+    const root = el.closest("main");
     const io = new IntersectionObserver(([entry]) => {
       const port = entry?.rootBounds;
       setStuck(!!entry && !entry.isIntersecting && !!port && entry.boundingClientRect.bottom <= port.top + 1);
-    }, { threshold: 0 });
+    }, { root, threshold: 0 });
     io.observe(el);
     return () => io.disconnect();
   }, []);

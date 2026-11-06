@@ -78,6 +78,16 @@ html[data-theme="light"] .lx-player-dock .glass-solid,
 html[data-theme="light"] .glass-card .glass-solid,
 html[data-theme="light"] .glass-bar .glass-solid { background-color: rgba(255, 255, 255, 0.94); color: #1d1d1f; }
 
+/* Reduced transparency: light surfaces go opaque, as the dark theme already does in globals.css. */
+@media (prefers-reduced-transparency: reduce) {
+  html[data-theme="light"] .lx-page-bar,
+  html[data-theme="light"] .lx-player-dock > footer,
+  html[data-theme="light"] .glass-solid,
+  html[data-theme="light"] .lx-player-dock .glass-solid,
+  html[data-theme="light"] .glass-card .glass-solid,
+  html[data-theme="light"] .glass-bar .glass-solid { background: #ffffff; -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
 /* Backdrop behind the glass. The dim slider drives the scrim in every theme. */
 .lx-app-ambient-scrim { background-color: rgba(0, 0, 0, var(--lx-bg-dim, 0.6)); }
 html[data-backdrop="image"] .lx-app-ambient > :not(.lx-app-ambient-scrim) { display: none; }

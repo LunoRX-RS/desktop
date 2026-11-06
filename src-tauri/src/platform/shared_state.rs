@@ -98,9 +98,36 @@ fn lyrics_for(track_id: &str) -> Vec<Line> {
         .unwrap_or_default()
 }
 
-/// Writes the idle snapshot. Called on app exit so readers stop showing a track that is no longer playing.
+/// Serialises the writes and closes them after the final idle snapshot. A publish still running when the app quits
+/// cannot then write a playing snapshot over the idle one.
+struct Gate(Mutex<bool>);
+
+impl Gate {
+    const fn new() -> Self {
+        Self(Mutex::new(false))
+    }
+
+    /// Runs `write` unless the gate is closed; returns None when it is.
+    fn with<T>(&self, write: impl FnOnce() -> T) -> Option<T> {
+        let closed = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        (!*closed).then(write)
+    }
+
+    /// Runs the last write and closes the gate, so nothing runs after it.
+    fn close<T>(&self, write: impl FnOnce() -> T) -> T {
+        let mut closed = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        let out = write();
+        *closed = true;
+        out
+    }
+}
+
+static GATE: Gate = Gate::new();
+
+/// Writes the idle snapshot and closes the gate. Called on app exit so readers stop showing a track that is no longer
+/// playing, and nothing written after it can bring that track back.
 pub fn clear() {
-    publish(&None, None);
+    GATE.close(|| write_snapshot(&None, None));
 }
 
 /// Pure: the JSON the readers get. `None` is the idle snapshot (nothing loaded).
@@ -177,6 +204,10 @@ fn write_to(dir: &Path, json: &str, cover: Option<&[u8]>) -> io::Result<()> {
 
 /// Publishes the snapshot to every target. A failing target is logged once per call and never stops the app.
 pub fn publish(info: &Option<NowPlaying>, cover: Option<&[u8]>) {
+    let _ = GATE.with(|| write_snapshot(info, cover));
+}
+
+fn write_snapshot(info: &Option<NowPlaying>, cover: Option<&[u8]>) {
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_millis() as u64);
@@ -197,6 +228,16 @@ pub fn publish(info: &Option<NowPlaying>, cover: Option<&[u8]>) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_closed_gate_runs_nothing_after_the_final_write() {
+        let gate = Gate::new();
+        let mut writes = Vec::new();
+        assert_eq!(gate.with(|| writes.push("playing")), Some(()));
+        gate.close(|| writes.push("idle"));
+        assert_eq!(gate.with(|| writes.push("late")), None);
+        assert_eq!(writes, ["playing", "idle"]);
+    }
+
     use super::*;
 
     fn playing() -> Option<NowPlaying> {
