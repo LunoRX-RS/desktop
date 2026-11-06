@@ -304,26 +304,20 @@ async fn session(
             // The same track again: it is already cached, so this only keeps the file alive until Load takes it.
             queue = vec![offline_of(&current)];
         }
-        let mut next = None;
-        for _ in 0..3 {
-            let Some(track) = queue.first().cloned() else {
-                break;
-            };
-            status(&state, "preparing", Some(track.title.clone()));
-            // Keep the file alive until Load acquires it, including when cache quota is tight.
-            if let Ok(Ok(file)) = tokio::time::timeout(
-                Duration::from_secs(90),
-                cache.ensure(&yt, track.clone(), audio.settings().quality),
-            )
-            .await
-            {
-                next = Some((track, file));
-                break;
-            }
-            queue.remove(0);
-            publish_queue(&state, &queue);
-        }
-        let Some((next, _file)) = next else { return };
+        // The head of the queue always plays. A song that could not be cached (the direct player refused it) stays queued
+        // and Load hands it to the YouTube page, which plays any video; dropping it here emptied the queue.
+        let Some(next) = queue.first().cloned() else {
+            return;
+        };
+        status(&state, "preparing", Some(next.title.clone()));
+        // Keep the file alive until Load acquires it, including when cache quota is tight.
+        let _file = tokio::time::timeout(
+            Duration::from_secs(90),
+            cache.ensure(&yt, next.clone(), audio.settings().quality),
+        )
+        .await
+        .ok()
+        .and_then(Result::ok);
         status(&state, "ready", Some(next.title.clone()));
         // Best effort, after readiness is published; never awaited.
         super::track_info::prefetch_lyrics(&next.id, &next.title, &next.artists, next.duration_ms);
