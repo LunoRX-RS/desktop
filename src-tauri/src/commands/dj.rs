@@ -163,6 +163,8 @@ fn apply(app: &AppHandle, state: &DjState, deck: Deck) {
         None => "window.__lunorx&&window.__lunorx.loop(null,null)".to_owned(),
     };
     let _ = run(app, deck, &loop_js);
+    // Only a DJ deck reads the waveform; the page starts sampling it here and stops when its window is destroyed.
+    let _ = run(app, deck, "window.__lunorx&&window.__lunorx.wave(true)");
 }
 
 fn open_window(

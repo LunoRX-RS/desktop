@@ -171,10 +171,16 @@ export default function AppShell() {
   useEffect(() => initUpdater(), []);
   useEffect(() => { track(`feature.view.${view}`); }, [view]);
 
-  // Demo playback clock. Only advances while the simulated state is "playing".
+  // Demo playback clock. Runs only while the simulated state is "playing"; paused, no timer wakes the app.
   useEffect(() => {
-    const id = window.setInterval(() => useUi.getState().tick(), 1000);
-    return () => window.clearInterval(id);
+    let id = 0;
+    const sync = (on: boolean) => {
+      if (on && !id) id = window.setInterval(() => useUi.getState().tick(), 1000);
+      if (!on && id) { window.clearInterval(id); id = 0; }
+    };
+    sync(useUi.getState().playing);
+    const unsubscribe = useUi.subscribe((s, prev) => { if (s.playing !== prev.playing) sync(s.playing); });
+    return () => { unsubscribe(); sync(false); };
   }, []);
 
   return (

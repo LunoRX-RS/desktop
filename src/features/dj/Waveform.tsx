@@ -24,6 +24,7 @@ export function Waveform({ deck, videoId, pos, dur, playing, rate, cues, marks =
 }) {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const anchor = useRef({ pos, at: performance.now() });
+  const redraw = useRef<(() => void) | null>(null);
   const live = useRef({ playing, rate, cues, marks, loop, bpm, dur, windowMs });
   live.current = { playing, rate, cues, marks, loop, bpm, dur, windowMs };
   useEffect(() => { anchor.current = { pos, at: performance.now() }; }, [pos]);
@@ -47,8 +48,8 @@ export function Waveform({ deck, videoId, pos, dur, playing, rate, cues, marks =
     const css = getComputedStyle(document.documentElement);
     const ink = css.getPropertyValue("--color-primary-text").trim() || "#f5f5f7";
     const lumen = css.getPropertyValue("--color-lumen-lavender").trim() || "#c5b4ff";
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let frame = 0;
+    // Redraws every frame only while playing. Paused, it draws once per change (see the effect below), not 60 times a second.
     const draw = () => {
       const { playing: p, rate: r, cues: cs, marks: mk, loop: lp, bpm: b, dur: d, windowMs: w } = live.current;
       const dpr = window.devicePixelRatio || 1;
@@ -123,11 +124,17 @@ export function Waveform({ deck, videoId, pos, dur, playing, rate, cues, marks =
       ctx.fillStyle = ink;
       ctx.fillRect(Math.round(W / 2) - 1, 0, 2, H);
       ctx.globalAlpha = 1;
-      if (!reduce || p) frame = window.requestAnimationFrame(draw);
+      if (p) frame = window.requestAnimationFrame(draw);
     };
-    frame = window.requestAnimationFrame(draw);
-    return () => window.cancelAnimationFrame(frame);
+    redraw.current = draw;
+    draw();
+    return () => { window.cancelAnimationFrame(frame); };
   }, [videoId, playing]);
+
+  // Paused: repaint once after any render (seek, cue, loop or zoom edits), so the canvas never goes stale.
+  useEffect(() => {
+    if (!live.current.playing) redraw.current?.();
+  });
 
   return (
     <canvas

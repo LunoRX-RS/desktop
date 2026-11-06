@@ -22,8 +22,9 @@ const DETAIL_CHARS: usize = 400;
 /// Repeats of the same name inside this window count instead of growing the log. `core://player/progress` has seven
 /// emit sites at about one per second, which would otherwise dominate the file.
 const COALESCE_MS: u64 = 5_000;
-/// The file is rewritten at most this often. A crash inside the window loses those entries, which the settings copy says.
-const COMMIT_INTERVAL: Duration = Duration::from_secs(2);
+/// The file is rewritten at most this often (each rewrite is the whole file, fsync'd). A crash inside the window loses
+/// those entries; the upload path flushes first, so nothing sent is lost.
+const COMMIT_INTERVAL: Duration = Duration::from_secs(30);
 /// Entries older than this are dropped at commit: a usage history is not worth keeping forever.
 const MAX_AGE_MS: u64 = 90 * 24 * 60 * 60 * 1000;
 
@@ -555,7 +556,7 @@ mod tests {
         let (log, p) = open();
         log.record(&entry("action", "action.library.like", "a track"))
             .unwrap();
-        assert!(!p.exists(), "the two second window has not passed");
+        assert!(!p.exists(), "the commit window has not passed");
         let v = log.flush().unwrap();
         assert_eq!(v.total, 1);
         assert!(p.exists());
