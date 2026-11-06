@@ -533,17 +533,7 @@ svg.lucide {
   --lx-fade-bottom: 16px;
 }
 
-/* The live artwork supplies ambient color; motion follows actual playback. */
-.ln-native-ambient[data-playing="true"] {
-  animation: ln-artwork-drift 24s ease-in-out infinite alternate;
-}
-@keyframes ln-artwork-drift {
-  from { transform: scale(1.15) translate(-2%, -1%); }
-  to { transform: scale(1.3) translate(3%, 2%); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .ln-native-ambient[data-playing="true"] { animation: none; }
-}
+/* The live artwork supplies ambient color. Static on purpose: a drifting layer under a 90px blur re-composites every frame. */
 @media (prefers-reduced-transparency: reduce) {
   .ln-native-ambient { display: none; }
   .ln-login-wall-mask { display: none; }

@@ -1,4 +1,5 @@
 import { invoke } from "./invoke";
+import { forgetFollowedArtists } from "../../lib/likedArtists";
 
 // Mirrors commands/sync.rs and sync/engine.rs. Tauri maps snake_case Rust argument names to camelCase JS keys.
 // Errors cross IPC as the bare category string; no message, token or password ever reaches the frontend.
@@ -140,6 +141,7 @@ export async function syncSignIn(email: string, password: string, antibotToken?:
 
 export async function syncSignOut(): Promise<SignOutDto> {
   const done = await invoke<SignOutDto>("sync_sign_out");
+  forgetFollowedArtists();
   accountChanged();
   // A warning ("the server did not confirm") is shown on screen, so a reload would hide it.
   if (!done.warning) reloadOnce();

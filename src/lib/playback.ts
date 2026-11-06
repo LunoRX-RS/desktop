@@ -296,10 +296,10 @@ export function clearResume() {
 }
 
 /** Load the saved track, then seek to the saved minute. Nothing plays until the user asks. */
-export async function resumeLast() {
+export async function resumeLast(following: LoadedTrack[] = []) {
   const saved = usePlayback.getState().resume;
   if (!saved || usePlayback.getState().busy) return;
-  await playTrack(saved.track);
+  await playTrack(saved.track, false, following);
   if (saved.positionMs > 1000 && usePlayback.getState().player.state === "playing") {
     await seekPlayback(saved.positionMs / 1000);
   }

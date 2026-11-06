@@ -51,6 +51,8 @@ let state: Theme = DEFAULT;
 const listeners = new Set<() => void>();
 
 let image: string | null = null;
+/** Only the JPEG/PNG/WebP data URLs this app writes may reach the CSS url(): no quotes or parentheses to break the value. */
+const DATA_IMAGE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
 let userSheet: CSSStyleSheet | null = null;
 /** Why the custom CSS could not be applied, or null when it was. */
 export let cssProblem: string | null = null;
@@ -106,7 +108,11 @@ export function setTheme(patch: Partial<Theme>) {
 /** Reads the saved theme and applies it. Call once on startup. */
 export function initTheme() {
   try { state = clean(JSON.parse(window.localStorage.getItem(KEY) ?? "{}")); } catch { state = DEFAULT; }
-  try { image = window.localStorage.getItem(IMAGE_KEY); } catch { image = null; }
+  try {
+    const stored = window.localStorage.getItem(IMAGE_KEY);
+    // A value that does not match is dropped; the backdrop then falls back to the artwork, as with no image.
+    image = stored && DATA_IMAGE.test(stored) ? stored : null;
+  } catch { image = null; }
   apply();
 }
 const subscribe = (cb: () => void) => { listeners.add(cb); return () => { listeners.delete(cb); }; };

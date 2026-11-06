@@ -41,6 +41,12 @@ fn quality(q: AudioQuality) -> Quality {
 
 /// Only a sign-in or bot challenge has its own category, so the UI can say what to do. Everything else is "failed".
 fn rejection(error: PlayerError) -> PlaybackErrorKind {
+    // Debug builds only: why the direct player refused a song, so a fall back to the YouTube page can be explained.
+    #[cfg(debug_assertions)]
+    eprintln!(
+        "[extract] refused: {}",
+        crate::core::secrets::scrub(&error.to_string(), 200).text
+    );
     match error {
         PlayerError::LoginRequired { .. } => {
             PlaybackErrorKind::HostRejected(HostRejectKind::VerificationRequired)

@@ -31,14 +31,19 @@ struct NowProvider: TimelineProvider {
             let nowMs = s.position(at: .now)
             let horizon = nowMs + 20 * 60_000
             let upcoming = s.lyrics.filter { $0.startMs > nowMs && $0.startMs <= min(horizon, s.durationMs > 0 ? s.durationMs : horizon) }
-            for line in upcoming.prefix(200) {
+            let held = upcoming.prefix(200)
+            for line in held {
                 let when = Date(timeIntervalSinceNow: Double(line.startMs - nowMs) / 1000)
                 entries.append(NowEntry(date: when, snapshot: s, cover: cover))
             }
-            let refresh = Date(timeIntervalSinceNow: Double(min(horizon, s.durationMs > 0 ? s.durationMs : horizon) - nowMs) / 1000 + 1)
+            // Refresh just after the last line held, so the lyric line never stops advancing; with nothing more to show
+            // (end of the window), refresh at the horizon.
+            let endMs = held.count < upcoming.count ? (held.last?.startMs ?? nowMs) + 1 : min(horizon, s.durationMs > 0 ? s.durationMs : horizon)
+            let refresh = Date(timeIntervalSinceNow: Double(endMs - nowMs) / 1000 + 1)
             completion(Timeline(entries: entries, policy: .after(max(refresh, .now + 30))))
         } else {
-            completion(Timeline(entries: entries, policy: .after(.now + 900)))
+            // Paused or idle: a short refresh, so a resume shows within a minute even without a reload from the app.
+            completion(Timeline(entries: entries, policy: .after(.now + 60)))
         }
     }
 

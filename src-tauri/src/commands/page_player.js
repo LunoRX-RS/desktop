@@ -10,21 +10,28 @@
   // chooses what plays next, and the track that was asked for is over.
   const first = id();
   let left = false;
-  setInterval(() => {
+  // Reports every 500 ms while playing and every 1.5 s while paused (position only moves on a seek then), so a paused
+  // page does not wake the process twice a second.
+  const report = () => {
     const m = media();
-    if (!m || !id()) return;
+    if (!m || !id()) return 1500;
     if (first && id() !== first) {
       m.pause();
       m.muted = true;
       if (!left) { left = true; last = ""; }
       const line = P + first + "|" + Math.round(m.currentTime * 1000) + "|0|ended";
       if (line !== last) { last = line; document.title = line; }
-      return;
+      return 1500;
     }
     const dur = Number.isFinite(m.duration) ? m.duration : 0;
     const line = P + id() + "|" + Math.round(m.currentTime * 1000) + "|" + Math.round(dur * 1000) + "|" + state(m);
     if (line !== last) { last = line; document.title = line; }
-  }, 500);
+    return m.paused ? 1500 : 500;
+  };
+  const reportLoop = () => { setTimeout(reportLoop, report()); };
+  reportLoop();
+  // Play, pause and seek report at once, so the slower paused rate never shows a stale state. Capture sees media events.
+  for (const type of ["play", "playing", "pause", "waiting", "loadedmetadata", "seeked", "ended", "error"]) document.addEventListener(type, () => report(), true);
   // Sound shaping, the same settings the native player applies with mpv, done here with Web Audio because the sound
   // comes from this page. Built only once something is actually shaped.
   const BANDS = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
@@ -121,11 +128,17 @@
     g.comp.attack.value = lv ? lv[2] / 1000 : 0.003; g.comp.release.value = lv ? lv[3] / 1000 : 0.25;
   };
   // A loop the page keeps itself, so the jump back is tight rather than a round trip to the app.
-  let loop = null;
-  setInterval(() => {
+  let loop = null, loopTimer = 0;
+  const loopTick = () => {
     const m = media();
     if (loop && m && !m.paused && m.currentTime * 1000 >= loop[1]) m.currentTime = loop[0] / 1000;
-  }, 25);
+  };
+  // The 25 ms timer runs only while a loop is set, so an idle page does not wake 40 times a second.
+  const setLoop = (next) => {
+    loop = next;
+    if (loop && !loopTimer) loopTimer = setInterval(loopTick, 25);
+    if (!loop && loopTimer) { clearInterval(loopTimer); loopTimer = 0; }
+  };
   // Live DJ controls. They need the audio graph, so the first one builds it even when no shaping is set.
   const ready = () => {
     if (g) return true;
@@ -134,16 +147,20 @@
     return !!g;
   };
   let level = { trim: 100, fader: 100 };
+  let braking = false;
   const control = (c) => {
     const m = media();
     if (!m) return;
     if (c.kind === "bend") { bend = c.value; m.playbackRate = baseRate * (1 + bend / 100); return; }
     if (c.kind === "brake") {
+      // One brake at a time: a repeated press during the slow-down must not start a second frame chain.
+      if (braking) return;
+      braking = true;
       const from = m.playbackRate, start = performance.now();
       const step = () => {
         const k = Math.min(1, (performance.now() - start) / 1200);
         m.playbackRate = Math.max(0.07, from * (1 - k));
-        if (k < 1) requestAnimationFrame(step); else { m.pause(); m.playbackRate = baseRate * (1 + bend / 100); }
+        if (k < 1) requestAnimationFrame(step); else { braking = false; m.pause(); m.playbackRate = baseRate * (1 + bend / 100); }
       };
       requestAnimationFrame(step);
       return;
@@ -172,9 +189,10 @@
     }
   };
   // Waveform: every 50 ms, the energy of the lows, mids and highs (0 to 255) at the playhead, sent in batches of four.
-  let wave = [], waveAt = 0;
+  // Only a DJ deck asks for it (`wave(true)`); a plain player page never samples or builds the audio graph for it.
+  let wave = [], waveAt = 0, waveTimer = 0;
   const bins = new Uint8Array(512);
-  setInterval(() => {
+  const sampleWave = () => {
     const m = media();
     if (!m || m.paused || !id() || (first && id() !== first)) return;
     if (!g) ready();
@@ -189,11 +207,16 @@
     if (!wave.length) waveAt = Math.round(m.currentTime * 1000);
     wave.push(band(20, 250) + "." + band(250, 4000) + "." + band(4000, 16000));
     if (wave.length >= 4) { document.title = "LUNORX_WF|" + id() + "|" + waveAt + "|" + wave.join(","); wave = []; }
-  }, 50);
+  };
+  const setWave = (on) => {
+    if (on && !waveTimer) waveTimer = setInterval(sampleWave, 50);
+    if (!on && waveTimer) { clearInterval(waveTimer); waveTimer = 0; wave = []; }
+  };
   window.__lunorx = {
     effects,
     control,
-    loop: (a, b) => { loop = Number.isFinite(a) && Number.isFinite(b) && b > a ? [a, b] : null; },
+    wave: setWave,
+    loop: (a, b) => { setLoop(Number.isFinite(a) && Number.isFinite(b) && b > a ? [a, b] : null); },
     play: () => { const m = media(); if (m) m.play().catch(() => {}); },
     pause: () => { const m = media(); if (m) m.pause(); },
     seek: (ms) => { const m = media(); if (m) m.currentTime = ms / 1000; },

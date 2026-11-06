@@ -26,10 +26,21 @@ pub fn emit_main<T: Serialize>(
     result
 }
 
-/// `core://player/progress` becomes `event.player-progress` and `remote://status` becomes `event.remote-status`,
+/// `core://player/state` becomes `event.player-state` and `remote://message` becomes `event.remote-message`,
 /// so the two hubs cannot collide on one slug. A name outside that shape is not logged at all rather than logged
 /// under a slug the backend would refuse.
 fn slug_for(event: &str) -> Option<String> {
+    // Sent several times a second while audio plays or a deck runs. Logging them rewrote the activity file (up to 8 MB,
+    // fsync'd) every few seconds, which was most of the app's disk writes. They are not user actions, so they are not logged.
+    const HIGH_RATE: &[&str] = &[
+        "core://player/progress",
+        "core://dj/wave",
+        "core://dj/deck",
+        "remote://status",
+    ];
+    if HIGH_RATE.contains(&event) {
+        return None;
+    }
     let (scheme, tail) = event.split_once("://")?;
     if !matches!(scheme, "core" | "remote") {
         return None;
@@ -50,7 +61,6 @@ mod tests {
     #[test]
     fn every_event_the_app_emits_becomes_a_logged_slug() {
         for event in [
-            "core://player/progress",
             "core://player/state",
             "core://history/changed",
             "core://history/error",
@@ -62,19 +72,14 @@ mod tests {
             "core://share/open",
             "core://sync/auto",
             "remote://message",
-            "remote://status",
         ] {
             let name = slug_for(event).unwrap_or_else(|| panic!("{event} has no slug"));
             assert!(name.starts_with("event."), "{event} became {name}");
         }
-        assert_eq!(
-            slug_for("core://player/progress").as_deref(),
-            Some("event.player-progress")
-        );
-        assert_eq!(
-            slug_for("remote://status").as_deref(),
-            Some("event.remote-status")
-        );
+        assert_eq!(slug_for("core://player/progress"), None);
+        assert_eq!(slug_for("remote://status"), None);
+        assert_eq!(slug_for("core://dj/wave"), None);
+        assert_eq!(slug_for("core://dj/deck"), None);
     }
 
     #[test]

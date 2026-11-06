@@ -93,6 +93,44 @@ mod tests {
     use super::*;
 
     #[test]
+    fn video_ids_are_eleven_url_safe_characters() {
+        assert!(valid_video_id("dQw4w9WgXcQ"));
+        assert!(!valid_video_id("short"));
+        assert!(!valid_video_id("dQw4w9WgXc!"));
+        assert!(!valid_video_id("dQw4w9WgXcQ0"));
+    }
+
+    #[test]
+    fn wave_batches_parse_and_reject_junk() {
+        let w = parse_wave(Deck::A, "LUNORX_WF|dQw4w9WgXcQ|1500|10.20.30,255.0.7").unwrap();
+        assert_eq!(
+            (w.at_ms, w.bands.clone()),
+            (1500, vec![[10, 20, 30], [255, 0, 7]])
+        );
+        assert!(
+            parse_wave(Deck::A, "LUNORX_WF|dQw4w9WgXcQ|1500|10.20").is_none(),
+            "missing band"
+        );
+        assert!(
+            parse_wave(Deck::A, "LUNORX_WF|dQw4w9WgXcQ|1500|300.0.0").is_none(),
+            "out of range"
+        );
+        assert!(
+            parse_wave(Deck::A, "LUNORX_WF|bad|1500|1.2.3").is_none(),
+            "bad id"
+        );
+        assert!(
+            parse_wave(
+                Deck::A,
+                &format!("LUNORX_WF|dQw4w9WgXcQ|0|{}", vec!["1.2.3"; 17].join(","))
+            )
+            .is_none(),
+            "too many"
+        );
+        assert!(parse_wave(Deck::A, "LUNORX_ST|dQw4w9WgXcQ|0|0|playing").is_none());
+    }
+
+    #[test]
     fn crossfader_ends_and_middle() {
         assert_eq!(deck_volumes(0, 100), (100, 0));
         assert_eq!(deck_volumes(100, 100), (0, 100));
@@ -201,4 +239,41 @@ mod tests {
         assert!(position_ok(0));
         assert!(!position_ok(MAX_POSITION_MS + 1));
     }
+}
+
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Wave {
+    pub deck: Deck,
+    pub video_id: String,
+    pub at_ms: u64,
+    pub bands: Vec<[u8; 3]>,
+}
+
+/// `LUNORX_WF|<id>|<at ms>|l.m.h,l.m.h,...`. At most 16 samples; anything malformed is dropped whole.
+pub fn parse_wave(deck: Deck, title: &str) -> Option<Wave> {
+    let mut p = title.strip_prefix("LUNORX_WF|")?.splitn(3, '|');
+    let video_id = p.next()?.to_owned();
+    let at_ms = p.next()?.parse().ok()?;
+    let bands = p
+        .next()?
+        .split(',')
+        .map(|s| {
+            let mut v = s.split('.').map(|x| x.parse::<u8>().ok());
+            Some([v.next()??, v.next()??, v.next()??])
+        })
+        .collect::<Option<Vec<_>>>()?;
+    (!bands.is_empty() && bands.len() <= 16 && valid_video_id(&video_id)).then_some(Wave {
+        deck,
+        video_id,
+        at_ms,
+        bands,
+    })
+}
+
+pub fn valid_video_id(id: &str) -> bool {
+    id.len() == 11
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }

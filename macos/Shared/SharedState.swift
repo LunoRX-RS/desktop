@@ -22,6 +22,14 @@ struct NowPlayingSnapshot: Decodable {
 
     var isIdle: Bool { title.isEmpty }
 
+    /// A playing snapshot whose song should have ended long ago: the app quit or crashed without writing idle. The writer
+    /// only writes on change, so a long song that is still playing is not stale until its own end (plus a minute).
+    func isExpired(at date: Date) -> Bool {
+        guard playing, durationMs > 0 else { return false }
+        let remaining = max(0, durationMs - positionMs)
+        return date.timeIntervalSince1970 * 1000 > updatedAtMs + Double(remaining) + 60_000
+    }
+
     func position(at date: Date) -> Int {
         guard playing else { return positionMs }
         let elapsed = max(0, Int(date.timeIntervalSince1970 * 1000 - updatedAtMs))
@@ -32,6 +40,26 @@ struct NowPlayingSnapshot: Decodable {
     /// Index of the line being sung at `ms`, or nil before the first line.
     func lineIndex(at ms: Int) -> Int? {
         lyrics.lastIndex { $0.startMs <= ms }
+    }
+}
+
+extension NowPlayingSnapshot {
+    /// A snapshot without a `lyrics` field still shows its song; only the lyric line is missing.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(Int.self, forKey: .version)
+        title = try c.decode(String.self, forKey: .title)
+        artist = try c.decode(String.self, forKey: .artist)
+        playing = try c.decode(Bool.self, forKey: .playing)
+        positionMs = try c.decode(Int.self, forKey: .positionMs)
+        durationMs = try c.decode(Int.self, forKey: .durationMs)
+        updatedAtMs = try c.decode(Double.self, forKey: .updatedAtMs)
+        artwork = try c.decodeIfPresent(String.self, forKey: .artwork)
+        lyrics = try c.decodeIfPresent([LyricLine].self, forKey: .lyrics) ?? []
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version, title, artist, playing, positionMs, durationMs, updatedAtMs, artwork, lyrics
     }
 }
 
@@ -64,7 +92,11 @@ enum SharedStore {
             guard let data = try? Data(contentsOf: dir.appendingPathComponent("now-playing.json")),
                   let snapshot = try? JSONDecoder().decode(NowPlayingSnapshot.self, from: data),
                   snapshot.version == 1 else { continue }
-            if best == nil || snapshot.updatedAtMs > best!.0.updatedAtMs { best = (snapshot, dir) }
+            // An expired playing snapshot reads as nothing playing.
+            let live = snapshot.isExpired(at: .now)
+                ? NowPlayingSnapshot(version: 1, title: "", artist: "", playing: false, positionMs: 0, durationMs: 0, updatedAtMs: snapshot.updatedAtMs, artwork: nil, lyrics: [])
+                : snapshot
+            if best == nil || live.updatedAtMs > best!.0.updatedAtMs { best = (live, dir) }
         }
         return best.map { (snapshot: $0.0, dir: $0.1) }
     }

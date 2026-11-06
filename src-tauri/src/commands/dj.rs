@@ -7,7 +7,7 @@ use crate::{
         page_host::{PageState, SCRIPT, allowed_page_url, parse_title},
     },
     core::{
-        dj::{Deck, DeckControl, Loop, deck_volumes, position_ok},
+        dj::{Deck, DeckControl, Loop, deck_volumes, parse_wave, position_ok, valid_video_id},
         playback::audio::Effects,
     },
 };
@@ -25,36 +25,6 @@ const EVENT: &str = "core://dj/deck";
 const WAVE_EVENT: &str = "core://dj/wave";
 
 /// A batch of waveform samples from a deck page: low, mid and high energy (0 to 255), one every 50 ms from `at_ms`.
-#[derive(Serialize, Debug, PartialEq)]
-#[serde(rename_all = "camelCase")]
-struct Wave {
-    deck: Deck,
-    video_id: String,
-    at_ms: u64,
-    bands: Vec<[u8; 3]>,
-}
-
-/// `LUNORX_WF|<id>|<at ms>|l.m.h,l.m.h,...`. At most 16 samples; anything malformed is dropped whole.
-fn parse_wave(deck: Deck, title: &str) -> Option<Wave> {
-    let mut p = title.strip_prefix("LUNORX_WF|")?.splitn(3, '|');
-    let video_id = p.next()?.to_owned();
-    let at_ms = p.next()?.parse().ok()?;
-    let bands = p
-        .next()?
-        .split(',')
-        .map(|s| {
-            let mut v = s.split('.').map(|x| x.parse::<u8>().ok());
-            Some([v.next()??, v.next()??, v.next()??])
-        })
-        .collect::<Option<Vec<_>>>()?;
-    (!bands.is_empty() && bands.len() <= 16 && valid_video_id(&video_id)).then_some(Wave {
-        deck,
-        video_id,
-        at_ms,
-        bands,
-    })
-}
-
 #[derive(Serialize)]
 #[serde(tag = "category", rename_all = "camelCase")]
 pub enum DjError {
@@ -131,7 +101,8 @@ fn run(app: &AppHandle, deck: Deck, js: &str) -> Result<(), DjError> {
 }
 
 /// Sends a deck everything it should be holding: its share of the volume, its effects and its loop.
-fn apply(app: &AppHandle, state: &DjState, deck: Deck) {
+/// Sends one deck its share of the crossfader and master level. Nothing else: the mix moves often.
+fn apply_volume(app: &AppHandle, state: &DjState, deck: Deck) {
     let (cross, master) = *lock(&state.mix);
     let (a, b) = deck_volumes(cross, master);
     let volume = if deck == Deck::A { a } else { b };
@@ -140,6 +111,10 @@ fn apply(app: &AppHandle, state: &DjState, deck: Deck) {
         deck,
         &format!("window.__lunorx&&window.__lunorx.volume({volume})"),
     );
+}
+
+fn apply(app: &AppHandle, state: &DjState, deck: Deck) {
+    apply_volume(app, state, deck);
     let (effects, looping) = {
         let d = lock(&state.decks);
         d.get(&deck)
@@ -163,6 +138,8 @@ fn apply(app: &AppHandle, state: &DjState, deck: Deck) {
         None => "window.__lunorx&&window.__lunorx.loop(null,null)".to_owned(),
     };
     let _ = run(app, deck, &loop_js);
+    // Only a DJ deck reads the waveform; the page starts sampling it here and stops when its window is destroyed.
+    let _ = run(app, deck, "window.__lunorx&&window.__lunorx.wave(true)");
 }
 
 fn open_window(
@@ -231,13 +208,6 @@ fn open_window(
         .map_err(|_| DjError::WindowFailed)
 }
 
-fn valid_video_id(id: &str) -> bool {
-    id.len() == 11
-        && id
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
-}
-
 #[tauri::command]
 pub fn dj_load(
     app: AppHandle,
@@ -260,6 +230,8 @@ pub fn dj_load(
         slot.fresh = true;
         slot.looping = None;
         slot.last = None;
+        // The new track starts flat; the frontend sends its own saved effects after this, if it has any.
+        slot.effects = None;
     }
     open_window(&app, &state, deck, url).map(|_| ())
 }
@@ -343,7 +315,7 @@ pub fn dj_set_mix(
     *lock(&state.mix) = (crossfader, master);
     for deck in [Deck::A, Deck::B] {
         if app.get_webview_window(deck.label()).is_some() {
-            apply(&app, &state, deck);
+            apply_volume(&app, &state, deck);
         }
     }
     Ok(())
@@ -421,44 +393,6 @@ pub fn dj_stop(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn video_ids_are_eleven_url_safe_characters() {
-        assert!(valid_video_id("dQw4w9WgXcQ"));
-        assert!(!valid_video_id("short"));
-        assert!(!valid_video_id("dQw4w9WgXc!"));
-        assert!(!valid_video_id("dQw4w9WgXcQ0"));
-    }
-
-    #[test]
-    fn wave_batches_parse_and_reject_junk() {
-        let w = parse_wave(Deck::A, "LUNORX_WF|dQw4w9WgXcQ|1500|10.20.30,255.0.7").unwrap();
-        assert_eq!(
-            (w.at_ms, w.bands.clone()),
-            (1500, vec![[10, 20, 30], [255, 0, 7]])
-        );
-        assert!(
-            parse_wave(Deck::A, "LUNORX_WF|dQw4w9WgXcQ|1500|10.20").is_none(),
-            "missing band"
-        );
-        assert!(
-            parse_wave(Deck::A, "LUNORX_WF|dQw4w9WgXcQ|1500|300.0.0").is_none(),
-            "out of range"
-        );
-        assert!(
-            parse_wave(Deck::A, "LUNORX_WF|bad|1500|1.2.3").is_none(),
-            "bad id"
-        );
-        assert!(
-            parse_wave(
-                Deck::A,
-                &format!("LUNORX_WF|dQw4w9WgXcQ|0|{}", vec!["1.2.3"; 17].join(","))
-            )
-            .is_none(),
-            "too many"
-        );
-        assert!(parse_wave(Deck::A, "LUNORX_ST|dQw4w9WgXcQ|0|0|playing").is_none());
-    }
 
     #[test]
     fn state_names_match_what_the_screen_expects() {

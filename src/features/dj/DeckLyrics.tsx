@@ -29,7 +29,7 @@ function pick(info: Awaited<ReturnType<typeof playerTrackInfo>>): Lyrics | null 
  * The deck's lyrics, following the deck. Click a timed line to jump to it. Mark a line to pin it to a moment: a timed
  * line keeps its own time, an untimed one takes the deck's current position, so plain lyrics can be timed by hand.
  */
-export function DeckLyrics({ videoId, pos, ready, onSeek, onMarks }: { videoId: string; pos: number; ready: boolean; onSeek: (ms: number) => void; onMarks: (ms: number[]) => void }) {
+export function DeckLyrics({ videoId, pos, nowMs, ready, onSeek, onMarks }: { videoId: string; pos: number; nowMs: () => number; ready: boolean; onSeek: (ms: number) => void; onMarks: (ms: number[]) => void }) {
   const [lyrics, setLyrics] = useState<Lyrics | null>(null);
   const [state, setState] = useState<"loading" | "ready" | "none" | "failed">("loading");
   const [marks, setMarks] = useState<LyricMark[]>([]);
@@ -75,7 +75,7 @@ export function DeckLyrics({ videoId, pos, ready, onSeek, onMarks }: { videoId: 
     if (!lyrics) return;
     const has = marks.some((m) => m.line === i);
     if (has) { setMarks(marks.filter((m) => m.line !== i)); return; }
-    const ms = lyrics.lines[i].startMs ?? Math.round(pos);
+    const ms = lyrics.lines[i].startMs ?? Math.round(nowMs());
     setMarks([...marks, { line: i, ms, text: lyrics.lines[i].text }].sort((a, b) => a.ms - b.ms));
   };
   const save = () => {
@@ -103,7 +103,7 @@ export function DeckLyrics({ videoId, pos, ready, onSeek, onMarks }: { videoId: 
                 {l.text}
               </button>
               <span className="w-9 shrink-0 text-right text-[10px] tabular-nums text-tertiary-text">{mark ? fmt(mark.ms) : l.startMs !== null ? fmt(l.startMs) : ""}</span>
-              <button type="button" disabled={!ready} aria-pressed={!!mark} aria-label={mark ? `Remove mark from line: ${l.text}` : `Mark line: ${l.text}`} onClick={() => toggle(i)} className={`grid size-7 shrink-0 place-items-center rounded-[6px] transition-colors duration-150 ${mark ? "text-lumen-lavender" : "text-tertiary-text opacity-0 hover:text-primary-text group-hover:opacity-100 focus-visible:opacity-100"}`}>
+              <button type="button" disabled={!ready} aria-pressed={!!mark} aria-label={mark ? `Remove mark from line: ${l.text}` : `Mark line: ${l.text}`} onClick={() => toggle(i)} className={`grid size-7 shrink-0 place-items-center rounded-[6px] transition-colors duration-150 ${mark ? "text-primary-text" : "text-tertiary-text opacity-0 hover:text-primary-text group-hover:opacity-100 focus-visible:opacity-100"}`}>
                 {mark ? <BookmarkCheck size={15} aria-hidden /> : <Bookmark size={15} aria-hidden />}
               </button>
             </li>

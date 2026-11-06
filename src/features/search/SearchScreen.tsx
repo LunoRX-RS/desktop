@@ -19,7 +19,7 @@ import { ResultRow, SourceGroup, providerName } from "./SourceGroup";
 import { LinkPlay, linkTrack } from "./LinkPlay";
 import { parseYouTubeLink } from "../../lib/ytLink";
 import { playTrack, usePlayback } from "../../lib/playback";
-import { playerTrackInfo } from "../../services/tauri/player";
+import { playerTrackInfo, type LoadedTrack } from "../../services/tauri/player";
 import NativeQueue from "../queue/NativeQueue";
 
 const GENERIC_ERROR = "Something went wrong. Try again.";
@@ -86,10 +86,14 @@ export default function SearchScreen() {
     // A pasted YouTube or YouTube Music link plays at once; it is not a search.
     const pasted = parseYouTubeLink(text);
     if (pasted) {
+      // The songs already queued stay queued after the pasted link, so Next keeps going through the same queue.
+      const queued: LoadedTrack[] = usePlayback.getState().autoplay.queue
+        .filter((t) => t.provider === "YouTube" && /^[A-Za-z0-9_-]{11}$/.test(t.id) && t.title.trim() !== "")
+        .map((t) => ({ source: "YouTube", provider: "YouTube", providerTrackId: t.id, canonicalUrl: `https://www.youtube.com/watch?v=${t.id}`, title: t.title, artists: t.artists, artworkUrl: t.artworkUrl }));
       // Title and artwork first, so the player and history show the real song; plays anyway if they cannot be read.
       void playerTrackInfo(pasted.id).then(
-        (t) => playTrack(linkTrack(pasted, t)),
-        () => playTrack(linkTrack(pasted)),
+        (t) => playTrack(linkTrack(pasted, t), false, queued),
+        () => playTrack(linkTrack(pasted), false, queued),
       );
       return;
     }
@@ -265,7 +269,7 @@ export default function SearchScreen() {
 
         {!loading && noHits && noticeGroups.length === 0 && (
           <EmptyState icon={<SearchIcon size={24} />} title={`No results for “${view.text}”`}
-            action={shorterQuery(view.text) ? <Button variant="secondary" className="mt-1" onClick={() => void runSearch(shorterQuery(view.text))}>Search “{shorterQuery(view.text)}”</Button> : undefined}>
+            action={shorterQuery(view.text) ? <Button variant="secondary" className="mt-1" onClick={() => { const t = shorterQuery(view.text); setQuery(t); void runSearch(t); }}>Search “{shorterQuery(view.text)}”</Button> : undefined}>
             Try another spelling, or search for the artist or song name only.
           </EmptyState>
         )}

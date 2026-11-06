@@ -38,12 +38,12 @@ export function QueuePanel({ inDialog = false, docked = false }: { inDialog?: bo
 				!inDialog && !docked && "fixed top-[calc(var(--height-topbar)+12px)] right-6 bottom-[calc(var(--height-player)+24px)] z-[45]",
 			)}
 		>
-			{docked && (
+			{docked && native && (
 				<div className="mb-4">
 					<Segmented label="Dock" value={tab} onChange={setTab} options={[{ key: "now", label: "Now playing" }, { key: "queue", label: "Queue" }]} />
 				</div>
 			)}
-			{docked && tab === "now" ? <NowPanel /> : native ? <NativeQueue /> : <QueueScreen />}
+			{docked && native && tab === "now" ? <NowPanel /> : native ? <NativeQueue /> : <QueueScreen />}
 		</motion.aside>
 	);
 }

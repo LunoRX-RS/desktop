@@ -1,7 +1,7 @@
 //! Consent-gated diagnostics: error reports and the action/event log. Thin commands over `core::errorlog` and
 //! `core::activity`. Recording works with uploading off, so the local log and the Dev Mode screen are useful either way;
 //! an upload refuses unless the store itself says it is enabled, which is the one place consent is decided.
-use crate::core::activity::{ActivityLog, ActivityView, NewActivity};
+use crate::core::activity::{ActivityLog, ActivityView, COMMIT_INTERVAL, NewActivity};
 use crate::core::errorlog::{ErrorLog, ErrorLogView, NewError};
 use crate::core::library::LibraryError;
 use crate::sync::api::{ActivityBatch, ActivityItem, ApiClient, ReportBatch, ReportItem};
@@ -51,8 +51,10 @@ impl ReportsState {
 }
 
 pub struct ActivityState {
-    log: std::sync::Mutex<Result<ActivityLog, LibraryError>>,
+    log: std::sync::Arc<std::sync::Mutex<Result<ActivityLog, LibraryError>>>,
     path: Result<std::path::PathBuf, LibraryError>,
+    /// Wakes the one-shot flush thread after an entry; the thread sleeps while the log is idle.
+    wake: std::sync::mpsc::Sender<()>,
 }
 
 impl ActivityState {
@@ -64,10 +66,27 @@ impl ActivityState {
         if let Err(kind) = &log {
             eprintln!("activity log unavailable: {kind:?}");
         }
-        Self {
-            log: std::sync::Mutex::new(log),
-            path,
-        }
+        let log = std::sync::Arc::new(std::sync::Mutex::new(log));
+        let (wake, signal) = std::sync::mpsc::channel::<()>();
+        let worker = log.clone();
+        std::thread::spawn(move || {
+            while signal.recv().is_ok() {
+                // Entries recorded inside the window are written when it ends, even if nothing comes after them.
+                while signal.try_recv().is_ok() {}
+                std::thread::sleep(COMMIT_INTERVAL);
+                if let Ok(guard) = worker.lock()
+                    && let Ok(log) = guard.as_ref()
+                {
+                    let _ = log.flush_if_pending();
+                }
+            }
+        });
+        Self { log, path, wake }
+    }
+
+    /// Writes entries still waiting in memory. Called on normal exit so the last entries are not lost.
+    pub fn flush_now(&self) {
+        let _ = self.with(|log| log.flush_if_pending());
     }
 
     pub(crate) fn with<T>(
@@ -88,6 +107,7 @@ impl ActivityState {
     /// For Core-side events and command bookkeeping. Never fails the caller: an entry is dropped, the action is not.
     pub fn record(&self, entry: &NewActivity) {
         let _ = self.with(|log| log.record(entry));
+        let _ = self.wake.send(());
     }
 }
 
@@ -173,7 +193,9 @@ pub fn activity_record(
     entry: NewActivity,
 ) -> Result<(), LibraryError> {
     main(&window)?;
-    state.with(|log| log.record(&entry)).map(|_| ())
+    let stored = state.with(|log| log.record(&entry)).map(|_| ());
+    let _ = state.wake.send(());
+    stored
 }
 
 /// Uploads the records error reports hold. Nothing is sent while consent is off or nothing is unsent. `once` is the

@@ -22,8 +22,9 @@ const DETAIL_CHARS: usize = 400;
 /// Repeats of the same name inside this window count instead of growing the log. `core://player/progress` has seven
 /// emit sites at about one per second, which would otherwise dominate the file.
 const COALESCE_MS: u64 = 5_000;
-/// The file is rewritten at most this often. A crash inside the window loses those entries, which the settings copy says.
-const COMMIT_INTERVAL: Duration = Duration::from_secs(2);
+/// The file is rewritten at most this often. Entries inside the window are written by a one-shot flush when it ends (see
+/// `ActivityState`), and on normal exit, so none wait for a later event to be saved.
+pub(crate) const COMMIT_INTERVAL: Duration = Duration::from_secs(2);
 /// Entries older than this are dropped at commit: a usage history is not worth keeping forever.
 const MAX_AGE_MS: u64 = 90 * 24 * 60 * 60 * 1000;
 
@@ -117,6 +118,8 @@ struct Inner {
     saved: Saved,
     /// When the file was last rewritten, so a busy log is not written on every entry.
     committed: Instant,
+    /// True while entries exist in memory that the file does not hold yet.
+    dirty: bool,
 }
 
 pub struct ActivityLog {
@@ -196,6 +199,7 @@ impl ActivityLog {
             inner: Mutex::new(Inner {
                 saved,
                 committed: Instant::now(),
+                dirty: false,
             }),
         })
     }
@@ -287,6 +291,8 @@ impl ActivityLog {
         };
         if g.committed.elapsed() >= COMMIT_INTERVAL {
             self.write_locked(&mut g)?;
+        } else {
+            g.dirty = true;
         }
         Ok(stored)
     }
@@ -331,6 +337,15 @@ impl ActivityLog {
             s.records.clear();
             s.log_id = new_log_id();
         })
+    }
+
+    /// Writes entries still waiting in memory, if any. Called by the one-shot flush and on exit; a clean log costs nothing.
+    pub fn flush_if_pending(&self) -> Result<(), LibraryError> {
+        let mut g = self.inner.lock().map_err(|_| LibraryError::Storage)?;
+        if g.dirty {
+            self.write_locked(&mut g)?;
+        }
+        Ok(())
     }
 
     /// Writes what is held in memory whether or not the throttle window has passed. The upload path calls it first, so
@@ -382,6 +397,7 @@ impl ActivityLog {
         let _ = fs::remove_file(part);
         result?;
         g.committed = Instant::now();
+        g.dirty = false;
         Ok(view_of(&g.saved))
     }
 }
@@ -555,13 +571,28 @@ mod tests {
         let (log, p) = open();
         log.record(&entry("action", "action.library.like", "a track"))
             .unwrap();
-        assert!(!p.exists(), "the two second window has not passed");
+        assert!(!p.exists(), "the commit window has not passed");
         let v = log.flush().unwrap();
         assert_eq!(v.total, 1);
         assert!(p.exists());
         let again = ActivityLog::open(p.clone()).unwrap();
         assert_eq!(again.view().unwrap().records[0].name, "action.library.like");
         assert_eq!(again.log_id().unwrap(), v.log_id);
+        let _ = fs::remove_file(p);
+    }
+
+    #[test]
+    fn a_deferred_entry_is_written_by_flush_if_pending_and_a_clean_log_writes_nothing() {
+        let (log, p) = open();
+        log.flush_if_pending().unwrap();
+        assert!(!p.exists(), "nothing recorded, nothing written");
+        log.record(&entry("action", "action.library.like", "a track"))
+            .unwrap();
+        assert!(!p.exists(), "inside the commit window");
+        log.flush_if_pending().unwrap();
+        assert!(p.exists(), "the one-shot flush writes the deferred entry");
+        let again = ActivityLog::open(p.clone()).unwrap();
+        assert_eq!(again.view().unwrap().total, 1);
         let _ = fs::remove_file(p);
     }
 
