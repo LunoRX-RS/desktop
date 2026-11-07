@@ -1,4 +1,6 @@
-//! One bounded radio session. The host's confirmed EOF is the only advance trigger.
+//! One radio session. The host's confirmed EOF (or a failed track) is the only advance trigger. A session does not give up
+//! on a failure that can pass: a network error, a refused stream, a track that cannot be loaded. It waits, tries the
+//! next candidate and asks again, so music keeps playing for as long as the listener lets it.
 use super::{
     audio::AudioControl,
     cache::{DiskCache, OfflineTrack},
@@ -13,7 +15,11 @@ use crate::core::{
     domain::{ProviderId, TrackReference},
     yt::Yt,
 };
-use std::{collections::VecDeque, sync::Arc, time::Duration};
+use std::{
+    collections::VecDeque,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use tokio::sync::{Mutex, watch};
 
 /// How the end of the current track is handled. `repeat` is "off", "all" (play the list again once it is used up)
@@ -212,6 +218,61 @@ fn remember(history: &mut VecDeque<String>, id: String) {
 fn eligible(id: &str, history: &VecDeque<String>) -> bool {
     valid_id(id) && !history.iter().any(|old| old == id)
 }
+/// Preparing the next song (downloading it ahead) is only a head start: the player can still load a song that was not
+/// prepared, through the page player when the direct stream is refused. So preparing never takes longer than this in all.
+const PREPARE_BUDGET: Duration = Duration::from_secs(60);
+const PREPARE_TIMEOUT: Duration = Duration::from_secs(45);
+/// The longest wait between two attempts after failures in a row.
+const RETRY_CAP_SECS: u64 = 30;
+
+/// 1 s after the first failure in a row, then 2, 4, 8, 16 and at most 30 s.
+fn backoff(failures: u32) -> Duration {
+    Duration::from_secs((1u64 << failures.saturating_sub(1).min(5)).min(RETRY_CAP_SECS))
+}
+
+/// Waits before the next attempt after `failures` in a row. While the song is still playing there is time to spare, so the
+/// wait grows to the cap. If the song ends meanwhile the listener is waiting for sound, so what is left of the wait is
+/// cut to [`OVER_RETRY_CAP`] from that moment. A change the caller must plan again for (`interrupted`) ends the wait
+/// at once. The state is looked at every [`RETRY_POLL`], so progress reports cannot shorten the pacing.
+async fn retry_pause(
+    engine: &Mutex<PlaybackEngine>,
+    failures: u32,
+    interrupted: impl Fn() -> bool,
+) {
+    let mut until = Instant::now() + backoff(failures);
+    let mut over_seen = false;
+    loop {
+        let now = Instant::now();
+        if now >= until || interrupted() {
+            return;
+        }
+        if !over_seen
+            && matches!(
+                engine.lock().await.state(),
+                PlaybackState::Ended | PlaybackState::Error
+            )
+        {
+            over_seen = true;
+            until = until.min(now + OVER_RETRY_CAP);
+        }
+        tokio::time::sleep(RETRY_POLL.min(until.saturating_duration_since(now))).await;
+    }
+}
+const RETRY_POLL: Duration = Duration::from_millis(250);
+#[cfg(not(test))]
+const OVER_RETRY_CAP: Duration = Duration::from_secs(4);
+#[cfg(test)]
+const OVER_RETRY_CAP: Duration = Duration::from_millis(400);
+
+/// How a session ended. Neither is a failure of autoplay: the listener stopped, changed or ended the list.
+#[derive(Debug, PartialEq, Eq)]
+enum Ended {
+    /// What was playing is gone (stopped, replaced, blocked) or the player went away.
+    Gone,
+    /// Autoplay is off and the list is used up: the normal end.
+    Finished,
+}
+
 async fn session(
     engine: Arc<Mutex<PlaybackEngine>>,
     yt: Yt,
@@ -220,10 +281,12 @@ async fn session(
     taste: Taste,
     mut reports: watch::Receiver<u64>,
     state: Status,
-) {
+) -> Ended {
     let mut history = state.lock().map(|s| s.history.clone()).unwrap_or_default();
     let mut profile = Profile::default();
     let mut observed: Option<String> = None;
+    // Failures in a row (a candidate that would not load, nothing found to play); it paces the retries.
+    let mut failures: u32 = 0;
     let mut planned_vibe: Option<&'static str> = None;
     let vibe_of = |state: &Status| state.lock().map(|s| s.vibe).unwrap_or("balanced");
     let mode = |state: &Status| {
@@ -234,7 +297,9 @@ async fn session(
     };
     'outer: loop {
         let current = engine.lock().await.active_track().cloned();
-        let Some(current) = current else { return };
+        let Some(current) = current else {
+            return Ended::Gone;
+        };
         let (repeat, radio) = mode(&state);
         let seed = current.provider_track_id.clone();
         // What is playing joins the session's taste (once, even if the ending is planned again after a mode change).
@@ -249,6 +314,9 @@ async fn session(
         }
         status(&state, "finding", None);
         let mut queue = state.lock().map(|s| s.queue.clone()).unwrap_or_default();
+        // What the copy above was made from: asking for related music takes seconds, and an edit made meanwhile must
+        // not be overwritten when this pass publishes its list.
+        let cloned: Vec<OfflineTrack> = queue.clone();
         let (list, context) = state
             .lock()
             .map(|s| (s.list, s.context.clone()))
@@ -287,6 +355,9 @@ async fn session(
                 current: offline_of(&current),
             };
             let (refilled, picks) = related(&yt, &seed, &history, queue, &ctx).await;
+            if queue_edited(&state, &cloned) {
+                continue 'outer;
+            }
             queue = refilled;
             if let Ok(mut log) = taste.lock() {
                 for (id, x) in picks {
@@ -298,32 +369,63 @@ async fn session(
             queue = context.iter().skip(1).cloned().collect();
             queue.insert(0, context[0].clone());
         }
-        publish_queue(&state, &queue);
+        let mut published: Vec<OfflineTrack> = Vec::new();
+        publish(&state, &queue, &mut published);
         let repeat_one = repeat == "one";
         if repeat_one {
             // The same track again: it is already cached, so this only keeps the file alive until Load takes it.
             queue = vec![offline_of(&current)];
         }
-        let mut next = None;
-        for _ in 0..3 {
-            let Some(track) = queue.first().cloned() else {
+        // Prefer a song that could be prepared among the first few; if none could, the first one is tried as it is.
+        let deadline = Instant::now() + PREPARE_BUDGET;
+        let mut prepared = None;
+        for (index, track) in queue.iter().take(3).cloned().enumerate() {
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
                 break;
-            };
+            }
             status(&state, "preparing", Some(track.title.clone()));
             // Keep the file alive until Load acquires it, including when cache quota is tight.
             if let Ok(Ok(file)) = tokio::time::timeout(
-                Duration::from_secs(90),
+                left.min(PREPARE_TIMEOUT),
                 cache.ensure(&yt, track.clone(), audio.settings().quality),
             )
             .await
             {
-                next = Some((track, file));
+                prepared = Some((index, track, Some(file)));
                 break;
             }
-            queue.remove(0);
-            publish_queue(&state, &queue);
         }
-        let Some((next, _file)) = next else { return };
+        // The list may have been edited while songs were being prepared (an edit wakes the session): plan again from it.
+        if queue_edited(&state, &published) {
+            continue 'outer;
+        }
+        let (next, _file) = match prepared {
+            Some((skipped, track, file)) => {
+                // The ones passed over could not be prepared and are dropped from the list.
+                queue.drain(..skipped);
+                if skipped > 0 {
+                    publish(&state, &queue, &mut published);
+                }
+                (track, file)
+            }
+            None => match queue.first().cloned() {
+                Some(track) => (track, None),
+                None if !radio => return Ended::Finished,
+                None => {
+                    // Related music is on but nothing came back (the service or the network failed): ask again.
+                    failures = failures.saturating_add(1);
+                    status(&state, "finding", None);
+                    retry_pause(&engine, failures, || {
+                        mode(&state) != (repeat, radio)
+                            || vibe_of(&state) != vibe
+                            || queue_edited(&state, &published)
+                    })
+                    .await;
+                    continue 'outer;
+                }
+            },
+        };
         status(&state, "ready", Some(next.title.clone()));
         // Best effort, after readiness is published; never awaited.
         super::track_info::prefetch_lyrics(&next.id, &next.title, &next.artists, next.duration_ms);
@@ -333,9 +435,14 @@ async fn session(
             if mode(&state) != (repeat, radio) || vibe_of(&state) != vibe {
                 continue 'outer;
             }
+            // The listener edited the up-next list: the song prepared for the end of this one may no longer be next.
+            if queue_edited(&state, &published) {
+                continue 'outer;
+            }
             let mut player = engine.lock().await;
             match advance(&mut player, &seed, &next).await {
-                Ok(true) => {
+                Advance::Played => {
+                    failures = 0;
                     // The song ended, so it was listened to in full.
                     if let Ok(mut log) = taste.lock() {
                         log.finish(&seed, 1.0);
@@ -344,15 +451,47 @@ async fn session(
                     if !repeat_one {
                         queue.remove(0);
                     }
-                    publish_queue(&state, &queue);
+                    publish(&state, &queue, &mut published);
                     break;
                 }
-                Ok(false) => {}
-                Err(()) => return,
+                Advance::Stalled => {
+                    drop(player);
+                    push_back(&state, current.clone());
+                    if !repeat_one {
+                        queue.remove(0);
+                    }
+                    publish(&state, &queue, &mut published);
+                    failures = failures.saturating_add(1);
+                    retry_pause(&engine, failures, || {
+                        mode(&state) != (repeat, radio)
+                            || vibe_of(&state) != vibe
+                            || queue_edited(&state, &published)
+                    })
+                    .await;
+                    continue 'outer;
+                }
+                Advance::Waiting => {}
+                Advance::Gone => return Ended::Gone,
+                Advance::Failed => {
+                    drop(player);
+                    // This one cannot be loaded (even through the page player): it leaves the list and the next one
+                    // gets a turn, after a pause that grows while failures keep coming.
+                    failures = failures.saturating_add(1);
+                    queue.retain(|t| t.id != next.id);
+                    publish(&state, &queue, &mut published);
+                    status(&state, "finding", None);
+                    retry_pause(&engine, failures, || {
+                        mode(&state) != (repeat, radio)
+                            || vibe_of(&state) != vibe
+                            || queue_edited(&state, &published)
+                    })
+                    .await;
+                    continue 'outer;
+                }
             }
             drop(player);
             if reports.changed().await.is_err() {
-                return;
+                return Ended::Gone;
             }
         }
     }
@@ -362,6 +501,23 @@ fn publish_queue(state: &Status, queue: &[OfflineTrack]) {
     if let Ok(mut status) = state.lock() {
         status.queue = queue.to_vec();
     }
+}
+/// Publishes `queue` and remembers what was published, so a later edit by the listener can be told apart.
+fn publish(state: &Status, queue: &[OfflineTrack], published: &mut Vec<OfflineTrack>) {
+    publish_queue(state, queue);
+    *published = queue.to_vec();
+}
+/// True when the up-next list is no longer what the session last published: the listener edited it (or more songs
+/// were added) meanwhile. The session then plans again from the list as it is, instead of overwriting it with its own
+/// older copy.
+///
+/// Whole tracks are compared, not only their ids: an edit can put a song that is already queued back at the head with
+/// newer details (its title or artwork), and that is an edit too.
+fn queue_edited(state: &Status, published: &[OfflineTrack]) -> bool {
+    state
+        .lock()
+        .map(|s| s.queue.as_slice() != published)
+        .unwrap_or(false)
 }
 fn append(
     queue: &mut Vec<OfflineTrack>,
@@ -649,30 +805,47 @@ pub fn select(state: &Status, id: &str) -> Option<TrackReference> {
     state.state = "finding";
     Some(track)
 }
-async fn advance(player: &mut PlaybackEngine, seed: &str, next: &OfflineTrack) -> Result<bool, ()> {
+/// What [`advance`] did.
+#[derive(Debug, PartialEq, Eq)]
+enum Advance {
+    /// The track is still playing (or paused): nothing to do yet.
+    Waiting,
+    /// The next track is loaded and playing.
+    Played,
+    /// The next track is loaded but would not start. It is the active one now; being errored it is over like any
+    /// other track, so the session goes on from it, at the pace of a failure.
+    Stalled,
+    /// The listener stopped, replaced or was blocked on the track: this session has no business going on.
+    Gone,
+    /// The track ended (or failed) and the next one could not be loaded.
+    Failed,
+}
+
+/// Moves to `next` once `seed` is over: it ended, or it failed to play. Anything else is left alone, and a listener's
+/// own stop or change ends the session.
+async fn advance(player: &mut PlaybackEngine, seed: &str, next: &OfflineTrack) -> Advance {
+    let state = player.state();
     if player
         .active_track()
         .is_none_or(|t| t.provider_track_id != seed)
-        || matches!(
-            player.state(),
-            PlaybackState::Idle | PlaybackState::Error | PlaybackState::Blocked
-        )
+        || matches!(state, PlaybackState::Idle | PlaybackState::Blocked)
     {
-        return Err(());
+        return Advance::Gone;
     }
-    if player.state() != PlaybackState::Ended {
-        return Ok(false);
+    // A track that fails mid-way is as over as one that ended: the music goes on instead of stopping dead.
+    if !matches!(state, PlaybackState::Ended | PlaybackState::Error) {
+        return Advance::Waiting;
     }
-    let track = reference(next)?;
-    player
-        .dispatch(PlaybackCommand::Load(track))
-        .await
-        .map_err(|_| ())?;
-    player
-        .dispatch(PlaybackCommand::Play)
-        .await
-        .map_err(|_| ())?;
-    Ok(true)
+    let Ok(track) = reference(next) else {
+        return Advance::Failed;
+    };
+    if player.dispatch(PlaybackCommand::Load(track)).await.is_err() {
+        return Advance::Failed;
+    }
+    if player.dispatch(PlaybackCommand::Play).await.is_err() {
+        return Advance::Stalled;
+    }
+    Advance::Played
 }
 pub async fn run(
     engine: Arc<Mutex<PlaybackEngine>>,
@@ -683,10 +856,10 @@ pub async fn run(
     reports: watch::Receiver<u64>,
     state: Status,
 ) {
-    session(engine, yt, cache, audio, taste, reports, state.clone()).await;
-    let radio = state.lock().map(|s| s.radio).unwrap_or(true);
-    // With autoplay off, running out of tracks is the normal end, not a failure.
-    status(&state, if radio { "unavailable" } else { "idle" }, None);
+    // A session ends only when the listener's choice ends it (stop, a new track, autoplay off with the list used up).
+    // Failures that can pass never end it, so there is no "unavailable" outcome any more.
+    let _ended = session(engine, yt, cache, audio, taste, reports, state.clone()).await;
+    status(&state, "idle", None);
 }
 #[cfg(test)]
 mod tests {
@@ -711,6 +884,9 @@ mod tests {
         }
     }
     fn engine() -> PlaybackEngine {
+        engine_with(Host)
+    }
+    fn engine_with(host: impl PlayerHost + 'static) -> PlaybackEngine {
         let mut registry = ProviderRegistry::new();
         registry
             .register(
@@ -725,7 +901,7 @@ mod tests {
             registry,
             std::collections::HashMap::from([(
                 ProviderId::YouTube,
-                Box::new(Host) as Box<dyn PlayerHost>,
+                Box::new(host) as Box<dyn PlayerHost>,
             )]),
             Duration::from_secs(1),
         )
@@ -822,31 +998,229 @@ mod tests {
         let mut player = playing().await;
         assert_eq!(
             advance(&mut player, "r-G2pKr2_n8", &next()).await,
-            Ok(false)
+            Advance::Waiting
         );
         player.dispatch(PlaybackCommand::Pause).await.unwrap();
         assert_eq!(
             advance(&mut player, "r-G2pKr2_n8", &next()).await,
-            Ok(false)
+            Advance::Waiting
         );
         player.dispatch(PlaybackCommand::Resume).await.unwrap();
         player
             .observe(player.revision(), PlayerEvent::Ended)
             .unwrap();
-        assert_eq!(advance(&mut player, "r-G2pKr2_n8", &next()).await, Ok(true));
+        assert_eq!(
+            advance(&mut player, "r-G2pKr2_n8", &next()).await,
+            Advance::Played
+        );
         assert_eq!(player.state(), PlaybackState::Playing);
         assert_eq!(
             player.active_track().unwrap().provider_track_id,
             "aqz-KE-bpKQ"
         );
-        assert_eq!(advance(&mut player, "r-G2pKr2_n8", &next()).await, Err(()));
+        assert_eq!(
+            advance(&mut player, "r-G2pKr2_n8", &next()).await,
+            Advance::Gone
+        );
     }
     #[tokio::test]
     async fn stopped_and_stale_sessions_cannot_restart_playback() {
         let mut player = playing().await;
-        assert_eq!(advance(&mut player, "other-seed", &next()).await, Err(()));
+        assert_eq!(
+            advance(&mut player, "other-seed", &next()).await,
+            Advance::Gone
+        );
         player.dispatch(PlaybackCommand::Stop).await.unwrap();
-        assert_eq!(advance(&mut player, "r-G2pKr2_n8", &next()).await, Err(()));
+        assert_eq!(
+            advance(&mut player, "r-G2pKr2_n8", &next()).await,
+            Advance::Gone
+        );
+    }
+    #[tokio::test]
+    async fn a_track_that_fails_midway_is_over_and_the_music_goes_on() {
+        let mut player = playing().await;
+        player
+            .observe(player.revision(), PlayerEvent::Failed)
+            .unwrap();
+        assert_eq!(player.state(), PlaybackState::Error);
+        assert_eq!(
+            advance(&mut player, "r-G2pKr2_n8", &next()).await,
+            Advance::Played
+        );
+        assert_eq!(player.state(), PlaybackState::Playing);
+    }
+    /// Refuses to load one track, and to start another, the way a host does when a stream is refused.
+    struct Picky {
+        unloadable: &'static str,
+        unstartable: bool,
+        loaded: std::sync::Mutex<String>,
+    }
+    impl PlayerHost for Picky {
+        fn provider(&self) -> ProviderId {
+            ProviderId::YouTube
+        }
+        fn prepare<'a>(&'a self, r: HostRequest) -> HostFuture<'a> {
+            Box::pin(async move {
+                let refuse = match &r.command {
+                    PlaybackCommand::Load(t) => {
+                        *self.loaded.lock().unwrap() = t.provider_track_id.clone();
+                        t.provider_track_id == self.unloadable
+                    }
+                    PlaybackCommand::Play => {
+                        self.unstartable && *self.loaded.lock().unwrap() == "aqz-KE-bpKQ"
+                    }
+                    _ => false,
+                };
+                if refuse {
+                    HostOutcome::Rejected {
+                        request_id: r.request_id,
+                        revision: r.revision,
+                        kind: crate::core::errors::PlaybackErrorKind::HostRejected(
+                            crate::core::errors::HostRejectKind::Failed,
+                        ),
+                    }
+                } else {
+                    HostOutcome::Confirmed {
+                        request_id: r.request_id,
+                        revision: r.revision,
+                    }
+                }
+            })
+        }
+    }
+    fn picky(unloadable: &'static str, unstartable: bool) -> Picky {
+        Picky {
+            unloadable,
+            unstartable,
+            loaded: std::sync::Mutex::new(String::new()),
+        }
+    }
+    async fn ended_with(host: Picky) -> PlaybackEngine {
+        let mut player = engine_with(host);
+        let seed = TrackReference::new(
+            ProviderId::YouTube,
+            "r-G2pKr2_n8".into(),
+            "https://www.youtube.com/watch?v=r-G2pKr2_n8".into(),
+            "Seed".into(),
+        )
+        .unwrap();
+        player.dispatch(PlaybackCommand::Load(seed)).await.unwrap();
+        player.dispatch(PlaybackCommand::Play).await.unwrap();
+        player
+            .observe(player.revision(), PlayerEvent::Ended)
+            .unwrap();
+        player
+    }
+    #[tokio::test]
+    async fn a_next_track_that_cannot_load_fails_and_another_can_still_follow() {
+        let mut player = ended_with(picky("aqz-KE-bpKQ", false)).await;
+        assert_eq!(
+            advance(&mut player, "r-G2pKr2_n8", &next()).await,
+            Advance::Failed
+        );
+        // The failed load left the player in Error with the seed still active: the session tries the next candidate.
+        assert_eq!(player.state(), PlaybackState::Error);
+        let other = OfflineTrack {
+            id: "abcdefghijk".into(),
+            ..next()
+        };
+        assert_eq!(
+            advance(&mut player, "r-G2pKr2_n8", &other).await,
+            Advance::Played
+        );
+        assert_eq!(player.state(), PlaybackState::Playing);
+    }
+    #[tokio::test]
+    async fn a_track_that_loads_but_will_not_start_is_reported_as_stalled() {
+        let mut player = ended_with(picky("none", true)).await;
+        assert_eq!(
+            advance(&mut player, "r-G2pKr2_n8", &next()).await,
+            Advance::Stalled
+        );
+        assert_eq!(player.state(), PlaybackState::Error);
+        assert_eq!(
+            player.active_track().unwrap().provider_track_id,
+            "aqz-KE-bpKQ"
+        );
+        // From there the session carries on with the next candidate.
+        let other = OfflineTrack {
+            id: "abcdefghijk".into(),
+            ..next()
+        };
+        assert_eq!(
+            advance(&mut player, "aqz-KE-bpKQ", &other).await,
+            Advance::Played
+        );
+    }
+    #[tokio::test]
+    async fn a_retry_wait_ends_at_once_when_the_plan_changes() {
+        let engine = Mutex::new(playing().await);
+        let started = Instant::now();
+        retry_pause(&engine, 6, || true).await;
+        assert!(started.elapsed() < Duration::from_millis(100));
+    }
+    #[tokio::test]
+    async fn a_retry_wait_is_cut_short_when_the_song_ends_during_it() {
+        let engine = Mutex::new(playing().await);
+        let ending = async {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            let mut player = engine.lock().await;
+            let revision = player.revision();
+            player.observe(revision, PlayerEvent::Ended).unwrap();
+        };
+        let started = Instant::now();
+        // A 30 s wait that would otherwise leave silence after the song ends.
+        tokio::join!(retry_pause(&engine, 6, || false), ending);
+        let waited = started.elapsed();
+        assert!(waited >= Duration::from_millis(600), "{waited:?}");
+        assert!(waited < Duration::from_secs(3), "{waited:?}");
+    }
+    #[tokio::test]
+    async fn a_retry_wait_keeps_its_pacing_while_the_song_plays() {
+        let engine = Mutex::new(playing().await);
+        let started = Instant::now();
+        retry_pause(&engine, 1, || false).await;
+        assert!(started.elapsed() >= Duration::from_millis(950));
+    }
+    #[test]
+    fn an_edit_of_the_up_next_list_is_told_from_what_the_session_published() {
+        let state: Status = Default::default();
+        let mut published = Vec::new();
+        let queue = vec![track("aaaaaaaaaaa"), track("bbbbbbbbbbb")];
+        publish(&state, &queue, &mut published);
+        assert!(!queue_edited(&state, &published));
+        assert!(edit_queue(&state, QueueEdit::Next(track("ccccccccccc"))));
+        assert!(queue_edited(&state, &published));
+        // Planning again publishes the list as it is, and that is the new baseline.
+        let now = state.lock().unwrap().queue.clone();
+        publish(&state, &now, &mut published);
+        assert!(!queue_edited(&state, &published));
+        assert!(edit_queue(&state, QueueEdit::Remove("ccccccccccc".into())));
+        assert!(queue_edited(&state, &published));
+    }
+    #[test]
+    fn a_song_put_back_at_the_head_with_new_details_counts_as_an_edit() {
+        let state: Status = Default::default();
+        let mut published = Vec::new();
+        publish(
+            &state,
+            &[track("aaaaaaaaaaa"), track("bbbbbbbbbbb")],
+            &mut published,
+        );
+        let renamed = OfflineTrack {
+            title: "Renamed".into(),
+            ..track("aaaaaaaaaaa")
+        };
+        // Same id, same place, new details: the ids alone would not show it.
+        assert!(edit_queue(&state, QueueEdit::Next(renamed)));
+        assert!(queue_edited(&state, &published));
+    }
+    #[test]
+    fn retries_slow_down_and_stop_at_the_cap() {
+        let waits: Vec<u64> = (1..=8).map(|n| backoff(n).as_secs()).collect();
+        assert_eq!(waits, [1, 2, 4, 8, 16, 30, 30, 30]);
+        assert_eq!(backoff(0).as_secs(), 1);
+        assert_eq!(backoff(u32::MAX).as_secs(), 30);
     }
     #[test]
     fn queue_is_unique_bounded_and_excludes_history() {
