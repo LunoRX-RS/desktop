@@ -162,12 +162,20 @@ jobs:
       # libmpv-2.dll imports vulkan-1.dll (the Vulkan loader). The runner has no GPU driver and so no loader, and the test
       # binary then stops with STATUS_DLL_NOT_FOUND although libmpv-2.dll itself is found. The runtime only supplies
       # the loader; no GPU is needed for the tests.
+      # The installer is large; it is kept between runs. Bump the key to pick up a newer LunarG release.
+      - name: Cache the Vulkan installer (Windows)
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/vulkan-runtime.exe
+          key: vulkan-runtime-v1
+
       - name: Install the Vulkan loader (Windows)
         shell: pwsh
         run: |
           # LunarG's runtime installer is the source (the Chocolatey package was not always found). /S is a silent install.
-          Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-runtime.exe" -OutFile "$env:RUNNER_TEMP\vulkan-runtime.exe"
-          Start-Process "$env:RUNNER_TEMP\vulkan-runtime.exe" -ArgumentList "/S" -Wait
+          $exe = "$env:RUNNER_TEMP\vulkan-runtime.exe"
+          if (-not (Test-Path $exe)) { Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-runtime.exe" -OutFile $exe }
+          Start-Process $exe -ArgumentList "/S" -Wait
           if (-not (Test-Path "$env:SystemRoot\System32\vulkan-1.dll")) { throw "vulkan-1.dll still missing" }
 
       - uses: Swatinem/rust-cache@v2

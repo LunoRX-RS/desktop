@@ -79,9 +79,10 @@ jobs:
         working-directory: src-tauri
         run: cargo test --locked
 
+  # Builds run next to verify, not after it: publish waits for both, so a failing gate still blocks the release.
   build:
     name: Build ${{ matrix.name }}
-    needs: [version, verify]
+    needs: [version]
     runs-on: ${{ matrix.os }}
     # Linux and Windows installers have not been run on real machines yet. A failure there must not block the macOS release.
     continue-on-error: ${{ matrix.experimental }}
@@ -216,7 +217,7 @@ jobs:
 
   publish:
     name: Publish release
-    needs: [version, build]
+    needs: [version, verify, build]
     # Only for a pushed tag; a manual run keeps the installers as artifacts.
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
