@@ -30,6 +30,7 @@ export function Appearance() {
           <select id="theme-backdrop" className={FIELD} value={t.backdrop === "image" && !hasBackdropImage() ? "artwork" : t.backdrop} onChange={(e) => { const v = e.target.value as BackdropId; if (v === "image" && !hasBackdropImage()) { document.getElementById("theme-image")?.click(); return; } setTheme({ backdrop: v }); }}>
             <option value="artwork">Playing artwork</option>
             <option value="image">My image</option>
+            <option value="video">Music video</option>
             <option value="plain">Plain</option>
           </select>
         </SettingRow>

@@ -17,7 +17,7 @@ export const ACCENTS = [
 ] as const;
 export type ThemeId = (typeof THEMES)[number]["id"];
 export type AccentId = (typeof ACCENTS)[number]["id"];
-export type BackdropId = "artwork" | "image" | "plain";
+export type BackdropId = "artwork" | "image" | "plain" | "video";
 export interface Theme {
   theme: ThemeId;
   accent: AccentId;
@@ -41,7 +41,7 @@ const clean = (v: unknown): Theme => {
   return {
     theme: THEMES.some((t) => t.id === o.theme) ? (o.theme as ThemeId) : DEFAULT.theme,
     accent: ACCENTS.some((a) => a.id === o.accent) ? (o.accent as AccentId) : DEFAULT.accent,
-    backdrop: o.backdrop === "image" || o.backdrop === "plain" ? o.backdrop : "artwork",
+    backdrop: o.backdrop === "image" || o.backdrop === "plain" || o.backdrop === "video" ? o.backdrop : "artwork",
     dim: num(o.dim, 0, 90, DEFAULT.dim),
     blur: num(o.blur, 0, 60, DEFAULT.blur),
     customCss: typeof o.customCss === "string" ? o.customCss.slice(0, MAX_CSS) : "",
