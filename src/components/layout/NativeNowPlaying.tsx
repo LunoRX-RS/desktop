@@ -8,6 +8,7 @@ import { playerSkip } from "../../services/tauri/player";
 import { RepeatButton, AutoplayButton } from "../PlayModeButtons";
 import { useMotion } from "../../lib/motion";
 import { TrackCover } from "../TrackCover";
+import { MvFrame, useMvId } from "./MvBackground";
 import { IconButton, Scrubber, cx } from "../ui";
 import { formatDuration } from "../../lib/media";
 import { SyncedLyrics, UntimedLyrics, type LyricsSlots } from "../Lyrics";
@@ -201,6 +202,7 @@ export function NativeNowPlaying() {
   }, [open]);
   if (!track) return null;
   const artwork = info?.artworkUrl ?? track.artworkUrl;
+  const mv = useMvId(track);
   const artists = info?.artists ?? track.artists ?? [];
   const cover = (className: string) => (
     <TrackCover key={track.providerTrackId} url={artwork} videoId={track.providerTrackId} title={title} className={className} />
@@ -275,9 +277,13 @@ export function NativeNowPlaying() {
       }}
       className="lx-np outline-none fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none overflow-hidden border-0 bg-night-canvas p-0 text-primary-text backdrop:bg-black/80">
       <div key={track.providerTrackId} aria-hidden="true" className="lx-ambient-in pointer-events-none absolute inset-0 overflow-hidden">
-        <div data-playing={playing} className="ln-native-ambient absolute -inset-24 scale-125 opacity-60 blur-[90px] saturate-[2] motion-reduce:animate-none">
-          <TrackCover url={artwork} videoId={track.providerTrackId} className="size-full rounded-none" />
-        </div>
+        {mv ? (
+          <MvFrame id={mv} className="absolute top-1/2 left-1/2 h-[120vh] w-[213vh] -translate-x-1/2 -translate-y-1/2 opacity-60 blur-[24px]" />
+        ) : (
+          <div data-playing={playing} className="ln-native-ambient absolute -inset-24 scale-125 opacity-60 blur-[90px] saturate-[2] motion-reduce:animate-none">
+            <TrackCover url={artwork} videoId={track.providerTrackId} className="size-full rounded-none" />
+          </div>
+        )}
         <div className="ln-np-ambient-scrim absolute inset-0" />
       </div>
       <div ref={stage} inert={maker} data-layout={full ? "full" : "page"} data-idle={idle}
