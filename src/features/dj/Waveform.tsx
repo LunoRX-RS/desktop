@@ -27,7 +27,8 @@ export function Waveform({ deck, videoId, pos, dur, playing, rate, cues, marks =
   const redraw = useRef<(() => void) | null>(null);
   const live = useRef({ playing, rate, cues, marks, loop, bpm, dur, windowMs });
   live.current = { playing, rate, cues, marks, loop, bpm, dur, windowMs };
-  useEffect(() => { anchor.current = { pos, at: performance.now() }; }, [pos]);
+  // Re-anchor on resume too: a paused deck that resumes at the same position would otherwise extrapolate from the pause.
+  useEffect(() => { anchor.current = { pos, at: performance.now() }; }, [pos, playing]);
 
   useEffect(() => {
     let off: (() => void) | undefined;

@@ -168,9 +168,12 @@ jobs:
         run: |
           # LunarG's runtime installer is the first source, pinned because 'latest' now returns 404. A silent install that
           # does not finish in ten minutes is stopped; Chocolatey is the fallback.
-          Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/1.3.296.0/windows/vulkan-runtime.exe" -OutFile "$env:RUNNER_TEMP\vulkan-runtime.exe"
-          $installer = Start-Process "$env:RUNNER_TEMP\vulkan-runtime.exe" -ArgumentList "/S" -PassThru
-          if (-not $installer.WaitForExit(600000)) { $installer.Kill(); Write-Host "LunarG installer did not finish" }
+          # A failed download must not stop the step: it falls through to Chocolatey below.
+          try { Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/1.3.296.0/windows/vulkan-runtime.exe" -OutFile "$env:RUNNER_TEMP\vulkan-runtime.exe" -ErrorAction Stop } catch { Write-Host "LunarG download failed: $($_.Exception.Message)" }
+          if (Test-Path "$env:RUNNER_TEMP\vulkan-runtime.exe") {
+            $installer = Start-Process "$env:RUNNER_TEMP\vulkan-runtime.exe" -ArgumentList "/S" -PassThru
+            if (-not $installer.WaitForExit(600000)) { $installer.Kill(); Write-Host "LunarG installer did not finish" }
+          }
           if (-not (Test-Path "$env:SystemRoot\System32\vulkan-1.dll")) { choco install vulkan-runtime -y --no-progress }
           if (-not (Test-Path "$env:SystemRoot\System32\vulkan-1.dll")) { throw "vulkan-1.dll still missing" }
 

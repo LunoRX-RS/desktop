@@ -130,7 +130,7 @@ export function ContextMenuHost() {
             className={cx(
               "flex h-8 w-full items-center gap-2.5 rounded-[6px] px-2.5 text-left transition-colors duration-100 disabled:opacity-40",
               it.danger ? "text-critical-coral" : "text-primary-text",
-              active === i && "bg-white/10",
+              active === i && "bg-frost-300",
             )}
           >
             <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center">{it.icon}</span>
