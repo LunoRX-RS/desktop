@@ -232,6 +232,7 @@ pub fn run() {
             commands::youtube::youtube_like_push_get,
             commands::youtube::youtube_like_push_set,
             commands::youtube::youtube_po_token_set,
+            commands::mv::mv_find,
             commands::dj::dj_load,
             commands::dj::dj_play,
             commands::dj::dj_pause,
