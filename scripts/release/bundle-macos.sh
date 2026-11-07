@@ -36,7 +36,14 @@ STAGE="$(mktemp -d)"
 cp -R "$APP" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 rm -f "$DMG"
-hdiutil create -volname "LunoRX" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+# hdiutil fails with "Resource busy" when a volume or Spotlight still holds the image (seen on the Intel runner), so a
+# short wait and retry, with the volume name checked for a stale mount first.
+for attempt in 1 2 3 4; do
+  if hdiutil create -volname "LunoRX" -srcfolder "$STAGE" -ov -format UDZO "$DMG"; then break; fi
+  if [ "$attempt" = 4 ]; then echo "hdiutil still busy after 4 tries" >&2; exit 1; fi
+  for v in /Volumes/LunoRX*; do [ -d "$v" ] && hdiutil detach "$v" -force >/dev/null 2>&1 || true; done
+  sleep $((attempt * 10))
+done
 rm -rf "$STAGE"
 
 echo "Created $DMG"
