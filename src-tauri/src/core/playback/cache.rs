@@ -43,7 +43,7 @@ pub enum CacheError {
 }
 type Result<T> = std::result::Result<T, CacheError>;
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OfflineTrack {
     pub provider: String,
