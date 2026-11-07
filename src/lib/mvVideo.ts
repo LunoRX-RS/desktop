@@ -3,19 +3,21 @@
 import { searchQuery } from "../services/tauri/search";
 import { isVideoId, pickMvId } from "./mvMatch";
 
-// The music video behind the ambient backdrop. A YouTube track's own id is its video; without one, the same title is
-// searched on YouTube and the first hit with the same title is used. Results are cached for the session.
+// The music video behind the backgrounds: a YouTube video with the same title (and artist), so the picture is the
+// song's own video rather than the audio upload. Falls back to the track's own id when the search finds nothing.
+// Results are cached for the session.
 const cache = new Map<string, Promise<string | null>>();
 
 export function mvVideoId(track: { provider: string; providerTrackId: string; title: string; artists?: string[] }): Promise<string | null> {
-  if (track.provider === "YouTube" && isVideoId(track.providerTrackId)) return Promise.resolve(track.providerTrackId);
-  const q = [track.title, ...(track.artists ?? []).slice(0, 1)].join(" ").trim();
-  if (!q) return Promise.resolve(null);
+  const own = track.provider === "YouTube" && isVideoId(track.providerTrackId) ? track.providerTrackId : null;
+  const q = [track.title, ...(track.artists ?? []).slice(0, 1), "official music video"].join(" ").trim();
+  if (!track.title.trim()) return Promise.resolve(own);
   let hit = cache.get(q);
   if (!hit) {
     hit = searchQuery({ query: q, providers: ["YouTube"], limit: 5, cancellationId: `mv-${Date.now()}` })
       .then((r) => pickMvId(track.title, r.hits))
-      .catch(() => null);
+      .catch(() => null)
+      .then((id) => id ?? own);
     cache.set(q, hit);
   }
   return hit;
