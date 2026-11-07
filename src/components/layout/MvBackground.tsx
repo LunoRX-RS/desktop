@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useTheme } from "../../lib/theme";
 import { mvVideoId } from "../../lib/mvVideo";
+import { usePlayback } from "../../lib/playback";
 
 /** The music video id for a track when the Background is set to Music video, else null. */
 export function useMvId(track: { provider: string; providerTrackId: string; title: string; artists?: string[] } | null | undefined): string | null {
@@ -12,7 +13,10 @@ export function useMvId(track: { provider: string; providerTrackId: string; titl
   useEffect(() => {
     let live = true;
     setMv(null);
-    if (backdrop === "video" && track) void mvVideoId(track).then((id) => { if (live) setMv(id); });
+    if (backdrop === "video" && track) {
+      const durationMs = usePlayback.getState().durationMs || null;
+      void mvVideoId({ ...track, durationMs }).then((id) => { if (live) setMv(id); });
+    }
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backdrop, key]);

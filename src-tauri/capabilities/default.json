@@ -28,6 +28,7 @@
     "allow-youtube-like-push-get",
     "allow-youtube-like-push-set",
     "allow-youtube-po-token-set",
+    "allow-mv-find",
     "allow-dj-load",
     "allow-dj-play",
     "allow-dj-pause",

@@ -2,6 +2,7 @@ pub mod capabilities;
 pub mod dj;
 pub mod domain;
 pub mod errors;
+pub mod mv;
 pub mod playback;
 pub mod playlist;
 pub mod po_token;

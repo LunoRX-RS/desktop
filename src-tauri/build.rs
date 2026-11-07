@@ -80,6 +80,7 @@ fn main() {
             "youtube_like_push_get",
             "youtube_like_push_set",
             "youtube_po_token_set",
+            "mv_find",
             "dj_load",
             "dj_play",
             "dj_pause",
