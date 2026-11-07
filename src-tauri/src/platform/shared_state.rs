@@ -51,8 +51,10 @@ struct Snapshot<'a> {
     lyrics: &'a [Line],
 }
 
-/// Lyrics of the track last shown in the app, keyed by title (the Now Playing snapshot carries no track id).
-static LYRICS: Mutex<Option<(String, Vec<Line>)>> = Mutex::new(None);
+/// Timed lyrics of the last few tracks, keyed by provider track id. A late result for a track that is no longer playing
+/// only fills its own entry, so it cannot replace the lyrics of the track now playing.
+static LYRICS: Mutex<Vec<(String, Vec<Line>)>> = Mutex::new(Vec::new());
+const LYRICS_KEPT: usize = 8;
 /// Bumps whenever `LYRICS` changes, so the publisher writes again even when Now Playing itself did not change.
 static LYRICS_VERSION: AtomicU64 = AtomicU64::new(0);
 
@@ -73,19 +75,32 @@ pub fn note_lyrics(info: &TrackInfo) {
             .collect(),
         _ => Vec::new(),
     };
-    let mut slot = LYRICS.lock().unwrap_or_else(|e| e.into_inner());
-    let next = Some((info.title.clone(), lines));
-    if *slot != next {
-        *slot = next;
-        LYRICS_VERSION.fetch_add(1, Ordering::Relaxed);
+    let mut kept = LYRICS.lock().unwrap_or_else(|e| e.into_inner());
+    let id = info.provider_track_id.clone();
+    if kept.iter().any(|(k, v)| *k == id && *v == lines) {
+        return;
     }
+    kept.retain(|(k, _)| *k != id);
+    kept.push((id, lines));
+    if kept.len() > LYRICS_KEPT {
+        kept.remove(0);
+    }
+    LYRICS_VERSION.fetch_add(1, Ordering::Relaxed);
 }
 
-fn lyrics_for(title: &str) -> Vec<Line> {
-    match &*LYRICS.lock().unwrap_or_else(|e| e.into_inner()) {
-        Some((t, lines)) if t == title => lines.clone(),
-        _ => Vec::new(),
-    }
+fn lyrics_for(track_id: &str) -> Vec<Line> {
+    LYRICS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+        .find(|(k, _)| k == track_id)
+        .map(|(_, lines)| lines.clone())
+        .unwrap_or_default()
+}
+
+/// Writes the idle snapshot. Called on app exit so readers stop showing a track that is no longer playing.
+pub fn clear() {
+    publish(&None, None);
 }
 
 /// Pure: the JSON the readers get. `None` is the idle snapshot (nothing loaded).
@@ -162,7 +177,7 @@ pub fn publish(info: &Option<NowPlaying>, cover: Option<&[u8]>) {
         .map_or(0, |d| d.as_millis() as u64);
     let lyrics = info
         .as_ref()
-        .map(|n| lyrics_for(&n.title))
+        .map(|n| lyrics_for(&n.track_id))
         .unwrap_or_default();
     let json = snapshot_json(info, cover.is_some(), &lyrics, now_ms);
     for dir in targets() {
@@ -181,6 +196,7 @@ mod tests {
 
     fn playing() -> Option<NowPlaying> {
         Some(NowPlaying {
+            track_id: "dQw4w9WgXcQ".into(),
             title: "Midnight Drive".into(),
             artist: "Artist 1".into(),
             artwork_url: None,

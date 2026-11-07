@@ -442,7 +442,7 @@ export default function DjScreen() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
-      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA" || t.isContentEditable))) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA" || t.isContentEditable || t.getAttribute("role") === "slider"))) return;
       const a = keysA.current, b = keysB.current;
       const map: Record<string, () => void> = {
         KeyQ: () => a?.playPause(), Digit1: () => a?.cue(0), Digit2: () => a?.cue(1), Digit3: () => a?.cue(2), Digit4: () => a?.cue(3), KeyZ: () => a?.brake(),

@@ -37,7 +37,7 @@ export function QuickPicks({ id, title, hits, action }: { id: string; title: str
               </span>
             )}
             {/* The row is one big button laid under the artist links, so the links stay separate focus targets. */}
-            <button type="button" disabled={busy} aria-label={left ? `Continue ${hit.title}, ${left.remaining} left` : `Play ${hit.title}`} title={left ? "Continue" : "Play"} onClick={() => void (left ? resumeLast() : playTrack(hit, false, hits.slice(i + 1)))}
+            <button type="button" disabled={busy} aria-label={left ? `Continue ${hit.title}, ${left.remaining} left` : `Play ${hit.title}`} title={left ? "Continue" : "Play"} onClick={() => void (left ? resumeLast(hits.slice(i + 1)) : playTrack(hit, false, hits.slice(i + 1)))}
               className="absolute inset-0 rounded-[10px] disabled:opacity-60" />
           </li>
           );

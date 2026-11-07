@@ -265,7 +265,7 @@ export default function SearchScreen() {
 
         {!loading && noHits && noticeGroups.length === 0 && (
           <EmptyState icon={<SearchIcon size={24} />} title={`No results for “${view.text}”`}
-            action={shorterQuery(view.text) ? <Button variant="secondary" className="mt-1" onClick={() => void runSearch(shorterQuery(view.text))}>Search “{shorterQuery(view.text)}”</Button> : undefined}>
+            action={shorterQuery(view.text) ? <Button variant="secondary" className="mt-1" onClick={() => { const t = shorterQuery(view.text); setQuery(t); void runSearch(t); }}>Search “{shorterQuery(view.text)}”</Button> : undefined}>
             Try another spelling, or search for the artist or song name only.
           </EmptyState>
         )}

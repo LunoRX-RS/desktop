@@ -41,6 +41,15 @@ pub fn note_lyrics(info: &crate::core::playback::track_info::TrackInfo) {
 #[cfg(not(target_os = "macos"))]
 pub fn note_lyrics(_info: &crate::core::playback::track_info::TrackInfo) {}
 
+/// The app is quitting: the shared now-playing snapshot goes idle, so the widget and screen saver stop showing the track.
+#[cfg(target_os = "macos")]
+pub fn shared_now_playing_clear() {
+    shared_state::clear();
+}
+
+#[cfg(not(target_os = "macos"))]
+pub fn shared_now_playing_clear() {}
+
 /// The sound settings changed (from the settings panel): refresh the Sound menu's checks.
 #[cfg(target_os = "macos")]
 pub fn sound_changed(app: &tauri::AppHandle) {

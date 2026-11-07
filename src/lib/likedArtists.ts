@@ -60,6 +60,15 @@ export const useIsLikedArtist = (artist: Pick<ArtistRef, "provider" | "id" | "na
   useLikedArtists((s) => !!artist && s.artists.some((a) => artistKey(a) === artistKey(artist)));
 
 const REMOVED = "lunorx.likedArtists.removed";
+// Keys the server returned at the last sync. Only artists missing from this set are new here and get uploaded; an artist the
+// server already had and dropped (an unfollow on another device) must not be re-added from this device's stale copy.
+const KNOWN = "lunorx.likedArtists.known";
+function known(): Set<string> {
+  try { const r = JSON.parse(window.localStorage.getItem(KNOWN) ?? "[]"); return new Set(Array.isArray(r) ? r.filter((x): x is string => typeof x === "string") : []); } catch { return new Set(); }
+}
+function setKnown(keys: string[]) {
+  try { window.localStorage.setItem(KNOWN, JSON.stringify(keys)); } catch { /* next sync treats them as new */ }
+}
 function removed(): [string, string][] {
   try { const r = JSON.parse(window.localStorage.getItem(REMOVED) ?? "[]"); return Array.isArray(r) ? r : []; } catch { return []; }
 }
@@ -72,13 +81,31 @@ const toCloud = (a: LikedArtist): CloudArtist => ({
 
 /** Brings this device and the account to the same list. Rejects (with the core error) when signed out or offline. */
 export async function syncFollowedArtists(): Promise<number> {
-  const local = useLikedArtists.getState().artists.map(toCloud).filter((a) => a.artistKey && a.name);
-  const server = await artistsCloudSync(local, removed());
-  setRemoved([]);
-  const next: LikedArtist[] = server.map((a) => ({
-    provider: a.provider, id: a.artistId, name: a.name, artworkUrl: a.artworkUrl, addedAt: a.followedAtMs || Date.now(),
-  }));
+  const sentRemoved = removed();
+  const sent = useLikedArtists.getState().artists;
+  const sentKeys = new Set(sent.map(artistKey));
+  const seen = known();
+  const upload = sent.filter((a) => !seen.has(artistKey(a))).map(toCloud).filter((a) => a.artistKey && a.name);
+  const server = await artistsCloudSync(upload, sentRemoved);
+  // Only the removals this request carried are settled; a removal made while it ran stays queued for the next sync.
+  setRemoved(removed().filter((r) => !sentRemoved.some((s) => s[0] === r[0] && s[1] === r[1])));
+  // Changes made while the request ran are kept: an artist unfollowed meanwhile stays out, one followed meanwhile stays in.
+  const now = useLikedArtists.getState().artists;
+  const nowKeys = new Set(now.map(artistKey));
+  const unfollowedMeanwhile = new Set([...sentKeys].filter((k) => !nowKeys.has(k)));
+  const followedMeanwhile = now.filter((a) => !sentKeys.has(artistKey(a)));
+  const fromServer: LikedArtist[] = server
+    .map((a) => ({ provider: a.provider, id: a.artistId, name: a.name, artworkUrl: a.artworkUrl, addedAt: a.followedAtMs || Date.now() }))
+    .filter((a) => !unfollowedMeanwhile.has(artistKey(a)));
+  const next = [...followedMeanwhile, ...fromServer.filter((a) => !followedMeanwhile.some((b) => artistKey(b) === artistKey(a)))];
   try { window.localStorage.setItem(KEY, JSON.stringify(next)); } catch { /* the in-memory list is still right */ }
+  setKnown(server.map((a) => `${a.provider}:${a.artistId ?? a.name}`));
   useLikedArtists.setState({ artists: next });
   return next.length;
+}
+
+/** Sign-out: the list on this device belongs to the account that just left. Clear it so the next account starts from its own server list. */
+export function forgetFollowedArtists() {
+  try { window.localStorage.removeItem(KEY); window.localStorage.removeItem(REMOVED); window.localStorage.removeItem(KNOWN); } catch { /* nothing stored */ }
+  useLikedArtists.setState({ artists: [] });
 }

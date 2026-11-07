@@ -260,6 +260,8 @@ pub fn dj_load(
         slot.fresh = true;
         slot.looping = None;
         slot.last = None;
+        // The new track starts flat; the frontend sends its own saved effects after this, if it has any.
+        slot.effects = None;
     }
     open_window(&app, &state, deck, url).map(|_| ())
 }

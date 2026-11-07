@@ -11,13 +11,24 @@
 # The Widget only registers from a signed .app that holds it in Contents/PlugIns. `tauri dev` runs a bare binary and
 # never shows it; use `bun tauri build --debug`, then run this script on the .app.
 set -euo pipefail
+# The app path is relative to the caller's directory; make it absolute before moving into macos/.
+APP="${1:-}"
+[[ -z "$APP" ]] || APP="${APP:A}"
 cd "${0:A:h}"
 
 SIGN_ID="${SIGN_ID:-$(security find-identity -v -p codesigning | sed -nE 's/.*"((Apple Development|Developer ID Application):[^"]+)".*/\1/p' | head -1)}"
 [[ -n "$SIGN_ID" ]] || { echo "no signing identity found; set SIGN_ID" >&2; exit 1; }
 TEAM="${TEAM:-$(security find-certificate -c "$SIGN_ID" -p | openssl x509 -noout -subject | sed -nE 's/.*OU *= *([A-Z0-9]+).*/\1/p')}"
-GROUP="${LUNORX_APP_GROUP:-$TEAM.io.lunorx.shared}"
-APP="${1:-}"
+# The app compiles its group in (src-tauri/src/platform/shared_state.rs). It defaults to the team VH66R8S4AU; any other
+# team must set LUNORX_APP_GROUP to the value the app was built with, or the widget cannot read the snapshot.
+DEFAULT_GROUP="VH66R8S4AU.io.lunorx.shared"
+if [[ -z "${LUNORX_APP_GROUP:-}" && "$TEAM" != "VH66R8S4AU" ]]; then
+  echo "team $TEAM: set LUNORX_APP_GROUP to the group the app was built with" >&2; exit 1
+fi
+GROUP="${LUNORX_APP_GROUP:-$DEFAULT_GROUP}"
+# Developer ID distribution needs the hardened runtime for notarization; development signing does not.
+SIGN_OPTS=()
+[[ "$SIGN_ID" == "Developer ID Application:"* ]] && SIGN_OPTS=(--options runtime --timestamp)
 OUT=build; rm -rf $OUT; mkdir -p $OUT
 echo "identity: $SIGN_ID  team: $TEAM  group: $GROUP"
 
@@ -58,19 +69,32 @@ swiftc -O -module-name LunoRXSaver Shared/SharedState.swift Saver/LunoSaverView.
   -framework ScreenSaver -framework AppKit -o $S/Contents/MacOS/LunoRX -Xlinker -bundle
 plist LunoRX io.lunorx.desktop.saver BNDL '<key>NSPrincipalClass</key><string>LunoSaverView</string>' > $S/Contents/Info.plist
 
-codesign --force --sign "$SIGN_ID" --entitlements $OUT/widget.entitlements $W
-codesign --force --sign "$SIGN_ID" $S
+codesign --force "${SIGN_OPTS[@]}" --sign "$SIGN_ID" --entitlements $OUT/widget.entitlements $W
+codesign --force "${SIGN_OPTS[@]}" --sign "$SIGN_ID" $S
 echo "built: $W $S"
 
 if [[ -n "$APP" ]]; then
   mkdir -p "$APP/Contents/PlugIns"
   rm -rf "$APP/Contents/PlugIns/LunoWidget.appex"; cp -R $W "$APP/Contents/PlugIns/"
   # The app needs the same group; keep its other entitlements (if any) and re-sign the whole bundle, inside out.
+  # Keep the app's own entitlements and add this group to its list; a bare app gets a new file with just the group.
   codesign -d --entitlements :- "$APP" 2>/dev/null > $OUT/app.entitlements || true
-  if ! grep -q application-groups $OUT/app.entitlements 2>/dev/null; then
-    entitlements '' > $OUT/app.entitlements
-  fi
-  codesign --force --sign "$SIGN_ID" --entitlements $OUT/app.entitlements "$APP"
+  /usr/bin/python3 - "$OUT/app.entitlements" "$GROUP" <<'PY'
+import plistlib, sys
+path, group = sys.argv[1], sys.argv[2]
+try:
+    with open(path, "rb") as f:
+        data = plistlib.load(f)
+except Exception:
+    data = {}
+groups = list(data.get("com.apple.security.application-groups", []))
+if group not in groups:
+    groups.append(group)
+data["com.apple.security.application-groups"] = groups
+with open(path, "wb") as f:
+    plistlib.dump(data, f)
+PY
+  codesign --force "${SIGN_OPTS[@]}" --sign "$SIGN_ID" --entitlements $OUT/app.entitlements "$APP"
   /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP"
   pluginkit -a "$APP/Contents/PlugIns/LunoWidget.appex"
   mkdir -p ~/Library/Screen\ Savers; rm -rf ~/Library/Screen\ Savers/LunoRX.saver; cp -R $S ~/Library/Screen\ Savers/

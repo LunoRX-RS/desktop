@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Music2, Play } from "lucide-react";
 import { useUi } from "../../lib/store";
 import { TrackCover } from "../../components/TrackCover";
@@ -121,6 +121,8 @@ const bigNumber = "font-display text-[84px] leading-none font-bold tracking-[-0.
 const bigUnit = "ml-2 text-[26px] font-semibold tracking-normal text-secondary-text";
 const lead = "text-[14px] leading-5 text-secondary-text";
 const noData = <EmptyState icon={<Music2 size={24} />} title="Nothing to show yet"><p>Play some songs and this fills in.</p></EmptyState>;
+const loadingState = <p role="status" className="text-[13px] leading-[18px] text-secondary-text">Loading your listening…</p>;
+const failedState = <EmptyState icon={<Music2 size={24} />} title="Could not read your stats"><p>Try again in a moment.</p></EmptyState>;
 
 function keyOf(t: { title: string; artists: string[] }): string {
   return `${t.title.trim().toLowerCase()}::${t.artists.map((a) => a.trim().toLowerCase()).join(",")}`;
@@ -134,32 +136,36 @@ export default function ReplayScreen() {
   const [monthly, setMonthly] = useState<ListeningReport | null>(null);
   const [yearly, setYearly] = useState<ListeningReport | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(true);
+  // Each load gets a number; only the newest one may write, so an earlier month cannot land on top of the current one.
+  const latest = useRef(0);
 
   const now = new Date();
   const [viewYear, setViewYear] = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth());
 
   const load = useCallback(async () => {
+    const id = ++latest.current;
     setBusy(true);
     try {
       const lv = await statsLocal();
-      setLocal({ tracks: lv.tracks });
       const at = await statsReport(0, Number.MAX_SAFE_INTEGER);
-      setAlltime(at);
       const mr = monthRange(viewYear, viewMonth);
       const yr = yearRange(viewYear);
       const [m, y] = await Promise.all([
         statsReport(mr.from, mr.to),
         statsReport(yr.from, yr.to),
       ]);
+      if (id !== latest.current) return;
+      setLocal({ tracks: lv.tracks });
+      setAlltime(at);
       setMonthly(m);
       setYearly(y);
       setNote(null);
     } catch {
-      setNote("Could not read listening stats. Play some songs first.");
+      if (id === latest.current) setNote("Could not read listening stats. Play some songs first.");
     } finally {
-      setBusy(false);
+      if (id === latest.current) setBusy(false);
     }
   }, [viewYear, viewMonth]);
 
@@ -216,6 +222,15 @@ export default function ReplayScreen() {
   }, [allTracks]);
 
   const isCurrentMonth = viewYear === now.getFullYear() && viewMonth === now.getMonth();
+  // Every calendar day of the viewed month, zero-filled. Report days are day numbers in the local zone (Date.UTC of the same calendar date).
+  const monthDays = useMemo(() => {
+    const count = new Date(viewYear, viewMonth + 1, 0).getDate();
+    const byIndex = new Map((monthly?.byDay ?? []).map((d) => [d.day, d.plays]));
+    return Array.from({ length: count }, (_, i) => {
+      const day = Math.round(Date.UTC(viewYear, viewMonth, i + 1) / 86_400_000);
+      return { day, plays: byIndex.get(day) ?? 0 };
+    });
+  }, [monthly, viewYear, viewMonth]);
   const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleString(undefined, { month: "long", year: "numeric" });
 
   const peakHour = alltime ? alltime.byHour.indexOf(Math.max(...alltime.byHour)) : 0;
@@ -266,13 +281,13 @@ export default function ReplayScreen() {
                   {monthly.byDay.length > 0 && (
                     <div className="mt-4">
                       <div role="img" aria-label="Plays per day this month" className="flex h-20 items-end gap-[3px]">
-                        {monthly.byDay.map((d) => {
-                          const max = Math.max(1, ...monthly.byDay.map((x) => x.plays));
+                        {monthDays.map((d) => {
+                          const max = Math.max(1, ...monthDays.map((x) => x.plays));
                           const date = new Date(d.day * 86_400_000);
                           return <div key={d.day} className={`min-w-[3px] flex-1 rounded-t-[3px] hover:bg-primary-text ${d.plays === max ? "bg-primary-text" : "bg-frost-300"}`} style={{ height: `${Math.max(6, (d.plays / max) * 100)}%` }} title={`${date.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" })}: ${d.plays} plays`} />;
                         })}
                       </div>
-                      <p className="mt-2 text-[12px] leading-4 text-secondary-text">{monthly.activeDays} days with music{monthly.currentStreak > 1 ? ` · ${monthly.currentStreak} day streak` : ""}</p>
+                      <p className="mt-2 text-[12px] leading-4 text-secondary-text">{monthly.activeDays} days with music{isCurrentMonth && monthly.currentStreak > 1 ? ` · ${monthly.currentStreak} day streak` : ""}</p>
                     </div>
                   )}
                 </div>
@@ -347,7 +362,7 @@ export default function ReplayScreen() {
 
       {tab === "dna" && (
         <div className="flex flex-col gap-12">
-          {!alltime || !wrapped ? noData : (
+          {!alltime || !wrapped ? (busy ? loadingState : note ? failedState : noData) : (
             <>
               <section aria-label="Your sound" className="grid gap-10 @3xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
                 <div className="flex flex-col gap-3">
@@ -445,7 +460,7 @@ export default function ReplayScreen() {
 
       {tab === "timeline" && (
         <div className="flex flex-col gap-12">
-          {!alltime || alltime.plays === 0 ? noData : (
+          {!alltime || alltime.plays === 0 ? (busy ? loadingState : note ? failedState : noData) : (
             <>
               <section aria-label="Streak" className="grid gap-10 @3xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] @3xl:items-end">
                 <div className="flex flex-col gap-3">
@@ -464,7 +479,7 @@ export default function ReplayScreen() {
                 const fmt = (d: number) => new Date(d * 86_400_000).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
                 if (days.length === 0) return null;
                 return (
-                  <Block title="Recent days" aside={(() => { const top = days.reduce((a, b) => (b.plays > a.plays ? b : a)); return `Busiest: ${fmt(top.day)}, ${top.plays} plays`; })()}>
+                  <Block title="Recent active days" aside={(() => { const top = days.reduce((a, b) => (b.plays > a.plays ? b : a)); return `Busiest: ${fmt(top.day)}, ${top.plays} plays`; })()}>
                     <Bars values={days.map((d) => d.plays)} labels={days.map((d) => fmt(d.day))} label="Plays per day" height={96} axis={[fmt(days[0].day), fmt(days[Math.floor(days.length / 2)].day), fmt(days[days.length - 1].day)]} />
                   </Block>
                 );

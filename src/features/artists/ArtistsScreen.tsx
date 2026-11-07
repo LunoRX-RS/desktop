@@ -64,7 +64,7 @@ export function SavedLibraryScreen({ artists = false }: { artists?: boolean }) {
   return <Screen id="saved-library" title={artists ? "Artists" : "Liked Songs"} caption={artists ? "Artists you follow, then artists from your liked songs." : "Saved on this device. Provider libraries are unchanged."}>
     <LibraryNav />
     {!ready && !error && <p role="status">Loading liked songs…</p>}
-    {ready && (artists ? <ul className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">{Array.from(refs.entries()).map(([key, artist]) => <li key={key}><ArtistCard artist={artist} songs={counts.get(key) ?? 0} /></li>)}</ul> : <><ul>{tracks.slice(0, limit).map((hit, i, shown) => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} following={shown.slice(i + 1)} />)}</ul>{tracks.length > limit && <Button onClick={() => setLimit(n => n + 50)}>Show more</Button>}</>)}
+    {(artists || ready) && (artists ? <ul className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">{Array.from(refs.entries()).map(([key, artist]) => <li key={key}><ArtistCard artist={artist} songs={counts.get(key) ?? 0} /></li>)}</ul> : <><ul>{tracks.slice(0, limit).map((hit, i, shown) => <ResultRow key={`${hit.provider}:${hit.providerTrackId}`} hit={hit} following={shown.slice(i + 1)} />)}</ul>{tracks.length > limit && <Button onClick={() => setLimit(n => n + 50)}>Show more</Button>}</>)}
     {ready && (artists ? refs.size === 0 : tracks.length === 0) && <StatusNote>{artists ? "Follow an artist from their page, or like their songs, to see them here." : "Like songs from Search to build your library."}<Button onClick={() => useUi.getState().navigate("search")}>Search music</Button></StatusNote>}
   </Screen>;
 }
