@@ -162,20 +162,21 @@ jobs:
       # libmpv-2.dll imports vulkan-1.dll (the Vulkan loader). The runner has no GPU driver and so no loader, and the test
       # binary then stops with STATUS_DLL_NOT_FOUND although libmpv-2.dll itself is found. The runtime only supplies
       # the loader; no GPU is needed for the tests.
-      # The installer is large; it is kept between runs. Bump the key to pick up a newer LunarG release.
-      - name: Cache the Vulkan installer (Windows)
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/vulkan-runtime.exe
-          key: vulkan-runtime-v1
-
+      # The Khronos Vulkan loader (vulkan-1.dll, win-x64) from the Silk.NET.Vulkan.Loader.Native NuGet package. Pinned and
+      # checked by SHA-256. LunarG's installer is not used: its 'latest' link is gone and the silent install hung.
       - name: Install the Vulkan loader (Windows)
         shell: pwsh
         run: |
-          # LunarG's runtime installer is the source (the Chocolatey package was not always found). /S is a silent install.
-          $exe = "$env:RUNNER_TEMP\vulkan-runtime.exe"
-          if (-not (Test-Path $exe)) { Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/latest/windows/vulkan-runtime.exe" -OutFile $exe }
-          Start-Process $exe -ArgumentList "/S" -Wait
+          $pkg = "$env:RUNNER_TEMP\silk.nupkg"
+          Invoke-WebRequest "https://www.nuget.org/api/v2/package/Silk.NET.Vulkan.Loader.Native/2025.9.12" -OutFile $pkg
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip = [System.IO.Compression.ZipFile]::OpenRead($pkg)
+          $entry = $zip.GetEntry("runtimes/win-x64/native/vulkan-1.dll")
+          $dll = "$env:RUNNER_TEMP\vulkan-1.dll"
+          [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $dll, $true)
+          $zip.Dispose()
+          if ((Get-FileHash $dll -Algorithm SHA256).Hash -ne "2CB843CFA9EE9586D2C863FF33454B8CE352A8A96DFE1021B492DFD237ECF8AF") { throw "vulkan-1.dll hash mismatch" }
+          Copy-Item $dll "$env:SystemRoot\System32\vulkan-1.dll" -Force
           if (-not (Test-Path "$env:SystemRoot\System32\vulkan-1.dll")) { throw "vulkan-1.dll still missing" }
 
       - uses: Swatinem/rust-cache@v2
