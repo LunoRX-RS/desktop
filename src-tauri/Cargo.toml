@@ -62,10 +62,18 @@ tokio = { version = "1", features = ["test-util"] }
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+# Dev builds: line tables only and no dependency debug info keep target/ small and linking fast.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+# Thin LTO with parallel codegen builds much faster than fat LTO + codegen-units = 1; opt-level "s" trims size.
 [profile.release]
-codegen-units = 1
-lto = true
-opt-level = 3
+codegen-units = 16
+lto = "thin"
+opt-level = "s"
 # unwind, not abort: a panicking provider adapter must become a Failed search group, not kill the app (blueprint 8.6).
 panic = "unwind"
 strip = true
