@@ -7,6 +7,7 @@ export const THEMES = [
   { id: "graphite", label: "Graphite" },
   { id: "midnight", label: "Midnight blue" },
   { id: "light", label: "Light" },
+  { id: "liquid", label: "Liquid glass" },
 ] as const;
 export const ACCENTS = [
   { id: "lavender", label: "Lumen lavender" },
