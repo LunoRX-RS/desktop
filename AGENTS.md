@@ -97,6 +97,12 @@ Behavior implemented, errors handled, security rules above hold, the relevant co
 - Re-run the Commands checks after fixing (`bun run lint`, `bun run build`, `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked`) and report the results.
 - Fixes stay in the working tree until the user asks to commit or push (Hard rule 9).
 
+## Versioning
+
+- When you create an rc or a new version, bump it in all four files in the same commit: `package.json` (`version`), `package-lock.json` (top-level `version` and `packages[""].version`), `src-tauri/Cargo.toml` (`[package] version`), and `src-tauri/Cargo.lock` (the `lunorx` package entry).
+- Use one version string everywhere, matching the tag (`1.0.2-rc.4` for `v1.0.2-rc.4`).
+- Verify: `git grep -n "<old version>" -- package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock` returns nothing, and `cd src-tauri && cargo metadata --locked --no-deps` succeeds.
+
 ## Reporting
 
 When finishing a significant task, report: what changed (files and why), what you verified (exact commands and results), what you could not verify, and remaining risks.
