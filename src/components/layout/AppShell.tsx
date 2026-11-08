@@ -33,8 +33,6 @@ import { SHARE_OPEN_EVENT, sharedLinkTake } from "../../services/tauri/share";
 import Sidebar from "./Sidebar";
 import TopBar from "./TopBar";
 import PlayerBar from "./PlayerBar";
-import { LiquidPlayer } from "./LiquidPlayer";
-import { useTheme } from "../../lib/theme";
 import { AmbientBackdrop } from "./AmbientBackdrop";
 import { PlaybackEvents } from "./NativePlayer";
 import { usePlayback, togglePlayback } from "../../lib/playback";
@@ -104,7 +102,6 @@ function ViewFrame({ mounted, children }: { mounted: boolean; children: ReactNod
 }
 
 export default function AppShell() {
-  const liquid = useTheme().theme === "liquid";
   // Everything set up syncs once when the app opens: account, YouTube, playlist uploads, stats.
   useEffect(() => { const t = window.setTimeout(() => void syncAll(), 4000); return () => window.clearTimeout(t); }, []);
   const djMode = useSettingsStore((st) => st.djMode);
@@ -231,7 +228,7 @@ export default function AppShell() {
           <AnimatePresence initial={false}>{queueOpen && !nowPlayingOpen && <QueuePanel docked />}</AnimatePresence>
         </div>
         <div className="lx-player-dock mx-3 mb-3">
-          {liquid ? <LiquidPlayer><PlayerBar /></LiquidPlayer> : <PlayerBar />}
+          <PlayerBar />
         </div>
       </div>
       <NowPlaying />
