@@ -1180,6 +1180,8 @@ nav[aria-label="Primary"] button:not([data-ln-icon]):not([data-lib-row]):hover s
 dialog.lx-np[data-np-layout="full"] { --np-scrim: 0.76; }
 dialog.lx-np[data-np-layout="split"] { --np-scrim: 0.7; }
 dialog.lx-np[data-np-layout="page"] { --np-scrim: 0.62; }
+/* Music video with no lyrics to read: the scrim lifts so the video shows through (about 95 percent). */
+dialog.lx-np[data-lyrics="none"] .ln-np-ambient-scrim { --np-scrim: 0.05; }
 .ln-np-chrome { transition: opacity 200ms var(--ease-lumen); }
 .ln-np-stage[data-idle="true"] .ln-np-chrome:not(:has(:focus-visible)) { opacity: 0; pointer-events: none; }
 .ln-np-stage[data-idle="true"][data-layout="full"] { cursor: none; }

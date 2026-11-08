@@ -209,6 +209,8 @@ export function NativeNowPlaying() {
   );
   const gap: LyricsGap | null = s.infoState === "error" ? "failed" : !info ? "loading"
     : picked ? null : info.lyricsStatus === "instrumental" ? "instrumental" : info.lyricsStatus === "failed" ? "failed" : "none";
+  // With no lyrics to read, the music video is shown almost clear (see globals.css: data-lyrics).
+  const noLyrics = gap === "none" || gap === "failed" || gap === "instrumental";
   const lyrics = (kind: "full" | "split") => (
     <section aria-label="Lyrics" className={cx("min-h-0", kind === "full" ? "absolute inset-0" : "h-full")}>
       {gap ? <LyricsGap kind={gap} cover={kind === "full" ? cover("lx-fade-in aspect-square w-[min(34vh,320px)] rounded-[18px] shadow-[0_24px_80px_rgba(0,0,0,0.6)]") : null} />
@@ -269,7 +271,7 @@ export function NativeNowPlaying() {
   );
   const seekable = !!s.durationMs && ["ready", "playing", "paused", "buffering"].includes(s.player.state);
   return (
-    <dialog ref={dialog} data-np-layout={full ? "full" : lyricsOpen ? "split" : "page"} tabIndex={-1} aria-label={`Now Playing: ${title}`} onCancel={(event) => { event.preventDefault(); if (maker) setMaker(false); else useUi.getState().setNowPlaying(false); }}
+    <dialog ref={dialog} data-np-layout={full ? "full" : lyricsOpen ? "split" : "page"} data-lyrics={mv && noLyrics ? "none" : undefined} tabIndex={-1} aria-label={`Now Playing: ${title}`} onCancel={(event) => { event.preventDefault(); if (maker) setMaker(false); else useUi.getState().setNowPlaying(false); }}
       onKeyDown={(event) => {
         if (event.key.toLowerCase() !== "f" || event.metaKey || event.ctrlKey || event.altKey || isTextTarget(event.target) || !fullscreen.supported) return;
         event.preventDefault();
@@ -278,7 +280,7 @@ export function NativeNowPlaying() {
       className="lx-np outline-none fixed inset-0 m-0 h-dvh max-h-none w-screen max-w-none overflow-hidden border-0 bg-night-canvas p-0 text-primary-text backdrop:bg-black/80">
       <div key={track.providerTrackId} aria-hidden="true" className="lx-ambient-in pointer-events-none absolute inset-0 overflow-hidden">
         {mv ? (
-          <MvFrame id={mv} className="absolute top-1/2 left-1/2 h-[120vh] w-[213vh] -translate-x-1/2 -translate-y-1/2 opacity-60 blur-[24px]" />
+          <MvFrame id={mv} className={cx("absolute top-1/2 left-1/2 h-[120vh] w-[213vh] -translate-x-1/2 -translate-y-1/2", noLyrics ? "opacity-95" : "opacity-60 blur-[24px]")} />
         ) : (
           <div data-playing={playing} className="ln-native-ambient absolute -inset-24 scale-125 opacity-60 blur-[90px] saturate-[2] motion-reduce:animate-none">
             <TrackCover url={artwork} videoId={track.providerTrackId} className="size-full rounded-none" />
