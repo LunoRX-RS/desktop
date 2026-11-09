@@ -4,6 +4,7 @@
 pub mod discord;
 pub mod fonts;
 pub mod mcp;
+pub mod mv_host;
 
 mod control;
 #[cfg(target_os = "macos")]

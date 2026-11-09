@@ -3,6 +3,7 @@ pub mod clock;
 pub mod dj;
 pub mod dto;
 pub mod mv;
+pub mod mv_host;
 pub mod page_host;
 pub mod player;
 pub mod providers;

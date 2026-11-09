@@ -122,6 +122,9 @@ pub fn run() {
             let yt = core::playback::extract::resolver().ok();
             app.manage(commands::state::SearchState::production(yt.clone()));
             app.manage(commands::youtube::YouTubeState::new(yt));
+            // Loopback host for the music-video frame (see platform/mv_host.rs). None leaves the artwork backdrop.
+            let mv_port = tauri::async_runtime::block_on(platform::mv_host::start()).ok();
+            app.manage(commands::mv_host::MvHostState(mv_port));
             app.manage(commands::dj::DjState::default());
             let offline = app
                 .path()
@@ -233,6 +236,7 @@ pub fn run() {
             commands::youtube::youtube_like_push_set,
             commands::youtube::youtube_po_token_set,
             commands::mv::mv_find,
+            commands::mv_host::mv_host_origin,
             commands::dj::dj_load,
             commands::dj::dj_play,
             commands::dj::dj_pause,
