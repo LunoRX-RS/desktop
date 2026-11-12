@@ -40,6 +40,13 @@ impl LikesState {
         }
     }
 
+    /// Queues a batch of likes and un-likes for the backend (see `sync::likes::Shared::note_batch`). Call under `gate()`.
+    pub fn note_batch(&self, likes: &[SavedTrack], unlikes: &[(ProviderId, String)]) {
+        if self.shared.note_batch(likes, unlikes) {
+            self.shared.flush.notify_one();
+        }
+    }
+
     /// A sign-in or sign-out finished: re-read the token now instead of at the next wait.
     pub fn kick(&self) {
         self.shared.kick.notify_one();

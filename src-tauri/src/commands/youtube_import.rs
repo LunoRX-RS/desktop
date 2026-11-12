@@ -11,8 +11,9 @@ use crate::{
     },
     core::youtube_import::rate,
     core::{
+        domain::ProviderId,
         library::{LibraryError, SavedTrack},
-        youtube_import::{Import, Origin, fetch},
+        youtube_import::{Import, LIKED_CAP, Origin, fetch},
     },
     sync::engine::ErrorCategory,
     sync::{api::Provider, local_store::LocalEntry},
@@ -346,6 +347,9 @@ fn write_liked_diag(app: &AppHandle, import: &Import) {
         "tracks": s.tracks,
         "kept": s.kept,
         "headerCount": s.header_count,
+        "lmStop": import.lm_stop,
+        "lmKept": import.lm_kept,
+        "likedComplete": import.liked_complete,
         "continuationKeys": s.continuation_keys,
         "at": now_secs(),
     });
@@ -431,17 +435,39 @@ async fn run_inner(app: &AppHandle, mode: Mode) -> Result<ImportReport, LibraryE
         } else {
             HashSet::new()
         };
+        // The gate keeps the local write and the queued likes on the same account, as a toggle does. Without the outbox,
+        // the next backend snapshot replaces the local list and drops these changes.
+        let likes = app.try_state::<crate::commands::likes::LikesState>();
+        let _gate = likes.as_ref().map(|likes| likes.gate());
         let outcome = library.with(|l| {
+            let before: HashSet<(ProviderId, String)> = l
+                .list()?
+                .into_iter()
+                .map(|t| (t.provider, t.provider_track_id))
+                .collect();
+            let fresh: Vec<SavedTrack> = import
+                .liked
+                .iter()
+                .filter(|t| !before.contains(&(t.provider.clone(), t.provider_track_id.clone())))
+                .cloned()
+                .collect();
             let removed_n = if removed.is_empty() {
                 0
             } else {
                 l.remove_youtube_ids(&removed)?
             };
-            let added_n = l.merge_append(import.liked.clone(), 5000)?;
-            Ok((added_n, removed_n))
+            let added_n = l.merge_append(import.liked.clone(), LIKED_CAP)?;
+            Ok((added_n, removed_n, fresh))
         });
         match outcome {
-            Ok((added, removed_n)) => {
+            Ok((added, removed_n, fresh)) => {
+                if let Some(likes) = &likes {
+                    let unlikes: Vec<(ProviderId, String)> = removed
+                        .iter()
+                        .map(|id| (ProviderId::YouTube, id.clone()))
+                        .collect();
+                    likes.note_batch(&fresh, &unlikes);
+                }
                 report.liked_added = added;
                 report.liked_removed = removed_n;
                 memory.liked_ids = if import.liked_complete {

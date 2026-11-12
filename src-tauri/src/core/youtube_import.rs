@@ -8,10 +8,11 @@ use super::{
 };
 use std::{collections::HashMap, time::Duration};
 
-const LIKED_MAX: usize = 1000;
+/// Same cap as the library and the likes sync (`core::library::LIKED_CAP`).
+pub use super::library::LIKED_CAP;
 const HISTORY_MAX: usize = 50;
-const PLAYLISTS_MAX: usize = 30;
-const PLAYLIST_TRACKS_MAX: usize = 300;
+const PLAYLISTS_MAX: usize = 100;
+const PLAYLIST_TRACKS_MAX: usize = 1000;
 const STEP_TIMEOUT: Duration = Duration::from_secs(45);
 
 /// Where an imported playlist came from. It decides the marker in the local playlist's description.
@@ -78,6 +79,9 @@ pub struct Import {
     pub playlists: Vec<ImportedPlaylist>,
     /// True when every liked song was read (the list ended before the cap), so a missing one was really unliked.
     pub liked_complete: bool,
+    /// Stop reason and song count of the `LM` playlist page read, for the diagnostic file. Counts only.
+    pub lm_stop: &'static str,
+    pub lm_kept: u64,
     /// Track counts of every saved playlist seen, for the next quick pass.
     pub counts: HashMap<String, u64>,
     /// Sections that could not be read, by name.
@@ -91,6 +95,43 @@ async fn step<T>(
         .await
         .map_err(|_| LibraryError::Unavailable)?
         .map_err(|_| LibraryError::Unavailable)
+}
+
+/// Whether a read reached the real end of its list and fits `LIKED_CAP`. Only then may a song missing from it count as unliked.
+pub fn read_complete(stop: &str, count: usize) -> bool {
+    stop == "end" && count <= LIKED_CAP
+}
+
+/// Pages through `more` until the list ends, the cap is reached, a token repeats or a page comes back empty.
+/// Returns the items and the stop reason.
+async fn read_all<T, F, Fut>(
+    mut items: Vec<T>,
+    mut next: Option<String>,
+    mut more: F,
+) -> Result<(Vec<T>, &'static str), LibraryError>
+where
+    F: FnMut(String) -> Fut,
+    Fut: std::future::Future<Output = Result<(Vec<T>, Option<String>), innerlight::Error>>,
+{
+    let mut last: Option<String> = None;
+    loop {
+        if items.len() >= LIKED_CAP {
+            return Ok((items, "limit"));
+        }
+        let Some(token) = next.take() else {
+            return Ok((items, "end"));
+        };
+        if last.as_ref() == Some(&token) {
+            return Ok((items, "repeat"));
+        }
+        let (page, after) = step(more(token.clone())).await?;
+        if page.is_empty() {
+            return Ok((items, "empty_page"));
+        }
+        last = Some(token);
+        items.extend(page);
+        next = after;
+    }
 }
 
 /// Likes or un-likes one video on the signed-in account (`like/like`, `like/removelike`), as the YouTube site does.
@@ -148,7 +189,7 @@ async fn liked(yt: &Yt) -> Result<(Vec<SavedTrack>, bool, LikedStats), LibraryEr
     let mut last: Option<String> = None;
     // Same rules as `extend`, plus the reason it stopped.
     stats.stop = loop {
-        if items.len() >= LIKED_MAX {
+        if items.len() >= LIKED_CAP {
             break "limit";
         }
         let Some(token) = next.take() else {
@@ -175,10 +216,10 @@ async fn liked(yt: &Yt) -> Result<(Vec<SavedTrack>, bool, LikedStats), LibraryEr
         items.extend(page.items);
         next = page.continuation;
     };
-    let complete = items.len() < LIKED_MAX;
+    let complete = read_complete(stats.stop, items.len());
     let kept: Vec<SavedTrack> = items
         .into_iter()
-        .take(LIKED_MAX)
+        .take(LIKED_CAP)
         .filter_map(|t| saved_track(t, None))
         .collect();
     stats.kept = kept.len() as u64;
@@ -266,26 +307,43 @@ async fn playlists(
 async fn youtube_liked(yt: &Yt) -> Result<(Vec<SavedTrack>, bool), LibraryError> {
     let youtube = yt.youtube();
     let first = step(youtube.liked_videos(None)).await?;
-    let mut videos = first.items;
-    step(extend(
-        &mut videos,
-        first.continuation,
-        LIKED_MAX,
-        |t| async move {
-            let page = youtube.liked_videos(Some(&t)).await?;
-            Ok((page.items, page.continuation))
-        },
-    ))
+    let (videos, stop) = read_all(first.items, first.continuation, |t| async move {
+        let page = youtube.liked_videos(Some(&t)).await?;
+        Ok((page.items, page.continuation))
+    })
     .await?;
-    let complete = videos.len() < LIKED_MAX;
+    let complete = read_complete(stop, videos.len());
     Ok((
         videos
             .into_iter()
-            .take(LIKED_MAX)
+            .take(LIKED_CAP)
             .filter_map(video_track)
             .collect(),
         complete,
     ))
+}
+
+/// The liked-songs playlist page (`music.youtube.com/playlist?list=LM`), read as a playlist. Its songs are merged into the likes.
+/// Returns the songs, whether the read was complete, and the stop reason.
+async fn lm_playlist(yt: &Yt) -> Result<(Vec<SavedTrack>, bool, &'static str), LibraryError> {
+    let music = yt.music();
+    let first = step(music.playlist("LM")).await?;
+    let (items, stop) = read_all(
+        first.tracks.items,
+        first.tracks.continuation,
+        |t| async move {
+            let page = music.playlist_more(&t).await?;
+            Ok((page.items, page.continuation))
+        },
+    )
+    .await?;
+    let complete = read_complete(stop, items.len());
+    let tracks = items
+        .into_iter()
+        .take(LIKED_CAP)
+        .filter_map(|t| saved_track(t, None))
+        .collect();
+    Ok((tracks, complete, stop))
 }
 
 async fn youtube_history(yt: &Yt) -> Result<Vec<SavedTrack>, LibraryError> {
@@ -412,6 +470,28 @@ pub async fn fetch(yt: &Yt, known: &HashMap<String, u64>) -> Import {
             import.liked_complete = false;
         }
     }
+    match lm_playlist(yt).await {
+        Ok((songs, complete, stop)) => {
+            let seen: std::collections::HashSet<String> = import
+                .liked
+                .iter()
+                .map(|t| t.provider_track_id.clone())
+                .collect();
+            import.lm_kept = songs.len() as u64;
+            import.lm_stop = stop;
+            import.liked.extend(
+                songs
+                    .into_iter()
+                    .filter(|t| !seen.contains(&t.provider_track_id)),
+            );
+            import.liked_complete &= complete;
+        }
+        Err(_) => {
+            import.failed.push("lmPlaylist");
+            // Same rule as the likes list: a list that did not read cannot prove an un-like.
+            import.liked_complete = false;
+        }
+    }
     let mut counts = HashMap::new();
     let result = playlists(yt, known, &mut counts).await;
     match result {
@@ -501,6 +581,17 @@ mod tests {
         yt.clear_session();
         assert!(rate(&yt, "r-G2pKr2_n8", true).await.is_err());
         assert_eq!(transport.requests().len(), 2, "no request without a cookie");
+    }
+
+    #[test]
+    fn a_read_is_complete_only_at_the_real_end_and_within_the_cap() {
+        assert!(read_complete("end", 287));
+        assert!(read_complete("end", LIKED_CAP));
+        // Above the cap a missing song could be one that was never stored, so it is not complete.
+        assert!(!read_complete("end", LIKED_CAP + 1));
+        assert!(!read_complete("limit", LIKED_CAP));
+        assert!(!read_complete("empty_page", 287));
+        assert!(!read_complete("repeat", 287));
     }
 
     #[test]

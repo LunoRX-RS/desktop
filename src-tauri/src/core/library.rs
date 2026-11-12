@@ -8,6 +8,10 @@ use super::{
 use innerlight::music::AlbumKind;
 use serde::{Deserialize, Serialize};
 use std::{fs, io::Write, path::PathBuf, sync::Mutex};
+
+/// Most liked songs the device keeps and the backend accepts per account. Shared by the library, the YouTube import and the likes sync.
+pub const LIKED_CAP: usize = 5000;
+
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum LibraryError {
@@ -117,7 +121,7 @@ impl SavedLibrary {
         } else {
             Vec::new()
         };
-        if tracks.len() > 5000 {
+        if tracks.len() > LIKED_CAP {
             return Err(LibraryError::Storage);
         }
         let mut ids = std::collections::HashSet::new();
@@ -163,7 +167,7 @@ impl SavedLibrary {
         let mut next = Vec::new();
         let mut keys = std::collections::HashSet::new();
         for mut track in incoming {
-            if next.len() >= 5000 {
+            if next.len() >= LIKED_CAP {
                 break;
             }
             if track.validate().is_err()
@@ -212,7 +216,7 @@ impl SavedLibrary {
         let mut next = tracks.clone();
         let mut added = 0;
         for mut track in incoming {
-            if next.len() >= cap.min(5000) {
+            if next.len() >= cap.min(LIKED_CAP) {
                 break;
             }
             if track.validate().is_err()
@@ -269,7 +273,7 @@ impl SavedLibrary {
         tracks: &mut Vec<SavedTrack>,
         next: Vec<SavedTrack>,
     ) -> Result<Vec<SavedTrack>, LibraryError> {
-        if next.len() > 5000 {
+        if next.len() > LIKED_CAP {
             return Err(LibraryError::Full);
         }
         let bytes = serde_json::to_vec(&next).map_err(|_| LibraryError::Storage)?;

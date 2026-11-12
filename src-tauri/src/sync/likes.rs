@@ -22,8 +22,8 @@ use crate::sync::api::{ApiClient, LikeEntry, LikeSnapshot, LikeTrack, LikeTrackB
 use crate::sync::credentials::TokenStore;
 use crate::sync::remote::{self, LinkStatus};
 
-/// The backend's cap; the local library enforces the same number.
-pub const CAP: usize = 5000;
+/// The backend's cap; the same number as the local library (`core::library::LIKED_CAP`).
+pub const CAP: usize = crate::core::library::LIKED_CAP;
 const CHUNK_TRACKS: usize = 500;
 const CHUNK_BYTES: usize = 1024 * 1024;
 const FRAME_QUEUE: usize = 256;
@@ -378,6 +378,36 @@ impl Shared {
                 at: now_ms(),
             },
         );
+        save(&account.outbox, &*outbox);
+        true
+    }
+
+    /// Queues many toggles and saves the outbox once: `likes` are upserts, `unlikes` removals by provider and id.
+    /// False when signed out. Changes made by the YouTube import go through here, so `pull` cannot overwrite them.
+    pub fn note_batch(&self, likes: &[SavedTrack], unlikes: &[(ProviderId, String)]) -> bool {
+        let Some(account) = self.account() else {
+            return false;
+        };
+        let at = now_ms();
+        let mut outbox = self.outbox.lock().unwrap_or_else(PoisonError::into_inner);
+        for track in likes {
+            let key = key_of(&track.provider, &track.provider_track_id);
+            let pending = Pending {
+                liked: true,
+                track: Some(track.clone()),
+                at,
+            };
+            outbox.pending.insert(key, pending);
+        }
+        for (provider, id) in unlikes {
+            let key = key_of(provider, id);
+            let pending = Pending {
+                liked: false,
+                track: None,
+                at,
+            };
+            outbox.pending.insert(key, pending);
+        }
         save(&account.outbox, &*outbox);
         true
     }
@@ -1187,6 +1217,37 @@ mod tests {
         );
         assert_eq!(shared.revision(), 3);
         assert!(shared.initialized());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn an_import_change_survives_a_snapshot_and_reaches_the_backend() {
+        let dir = root();
+        let shared = Arc::new(Shared::new(dir.clone()));
+        let local = Arc::new(FakeLocal::default());
+        shared.enter(account_at(&dir, "user"));
+        // The import adds "new" and un-likes "old"; the backend still holds "old".
+        assert!(shared.note_batch(&[track("new")], &[(ProviderId::YouTube, "old".into())]));
+        let backend = Arc::new(FakeBackend::default());
+        *backend.snapshot.lock().unwrap() = LikeSnapshot {
+            revision: 1,
+            tracks: vec![wire(&track("old"))],
+        };
+        let s = session(shared.clone(), local.clone(), backend.clone());
+        s.pull().await.unwrap();
+        let ids: Vec<String> = local
+            .list()
+            .iter()
+            .map(|t| t.provider_track_id.clone())
+            .collect();
+        assert_eq!(
+            ids,
+            ["new"],
+            "pull keeps the import's like and drops its un-like"
+        );
+        s.flush().await;
+        assert_eq!(*backend.put.lock().unwrap(), ["new"]);
+        assert_eq!(*backend.deleted.lock().unwrap(), ["old"]);
         std::fs::remove_dir_all(dir).unwrap();
     }
 
